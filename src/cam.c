@@ -30,7 +30,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 
 	if(!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE))
 	{
-		fprintf(stderr, "Error, '%s' lacks V4L2_CAP_VIDEO_CAPTURE capability\n");
+		fprintf(stderr, "Error, '%s' lacks V4L2_CAP_VIDEO_CAPTURE capability\n", path);
 	}
 
 	if(cam_config(fd, cfg) < 0)
@@ -142,6 +142,15 @@ int cam_config(int fd, cam_settings_t* cfg)
 		fprintf(stderr, "Error, failed applying camera settings\n");
 		return -3;
 	}
+
+	struct v4l2_streamparm parm;
+
+	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+	parm.parm.capture.timeperframe.numerator = 30;
+	parm.parm.capture.timeperframe.denominator = 1;
+
+	int ret = ioctl(fd, VIDIOC_S_PARM, &parm);
 
 	return 0;
 }
