@@ -9,33 +9,6 @@
 
 #define THROTTLE_STOPPED 0
 #define PWM_LOGGER_ADDR 0x69
-#define FRAME_W 160
-#define FRAME_H 120
-#define PIX_DEPTH 2
-
-typedef union {
-	struct {
-		uint8_t r, g, b;
-	};
-	uint8_t v[3];
-} color_t;
-
-typedef struct {
-	uint8_t throttle, steering;
-} raw_action_t;
-
-typedef struct {
-	int16_t rot_rate[3];
-	int16_t acc[3];
-	int8_t vel;
-	uint8_t view[FRAME_W * FRAME_H * PIX_DEPTH];
-} raw_state_t;
-
-typedef struct {
-	raw_state_t state;
-	raw_action_t action;
-} example_t;
-
 int I2C_BUS;
 
 int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
@@ -113,7 +86,7 @@ int main(int argc, const char* argv[])
 			break;
 		}
 
-		example_t ex = { state, action };
+		raw_example_t ex = { state, action };
 		if(write(1, &ex, sizeof(ex)) != sizeof(ex))
 		{
 			fprintf(stderr, "Error writing state-action pair\n");

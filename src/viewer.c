@@ -118,6 +118,7 @@ int main(int argc, char* argv[])
 		);
 
 		oneOK = (read(img_fd, yuvy, sizeof(yuvy)) == sizeof(yuvy));
+		yuv422_to_lum8(yuvy, lum, width, height);
 		usleep(100000);
 	}
 
