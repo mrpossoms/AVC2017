@@ -20,7 +20,7 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 	if(i2c_read(I2C_BUS, PWM_LOGGER_ADDR, 0x1, (void*)action, sizeof(raw_action_t)))
 	{
 		return 1;
-	}	
+	}
 
 	return 0;
 }
@@ -29,10 +29,18 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 int poll_vision(raw_state_t* state, cam_t* cams)
 {
 	// TODO
-	
+
 	cam_wait_frame(cams);
 
-	memcpy(state->view, cams[0].frame_buffer, cams[0].buffer_info.length);
+	// Downsample the intensity resolution to match that of
+	// the chroma
+	uint32_t* fb_pixel_pair = cams[0].frame_buffer;
+	for(unsigned int i = cams[0].buffer_info.length / sizeof(uint32_t); i--;)
+	{
+		state->view[i].y = fb_pixel_pair[i] >> 24;
+		state->view[i].cb = (fb_pixel_pair[i] >> 16) & 0xFF;
+		state->view[i].cr = fb_pixel_pair[i] & 0xFF;
+	}
 
 	return 0;
 }
@@ -45,7 +53,7 @@ int main(int argc, const char* argv[])
 		.width = FRAME_W,
 		.height = FRAME_H
 	};
-	
+
 	cam_t cam[2] = {
 		cam_open("/dev/video0", &cfg),
 		cam_open("/dev/video1", &cfg),

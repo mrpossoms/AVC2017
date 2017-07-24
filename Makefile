@@ -11,6 +11,8 @@ ifeq ($(OS),Darwin)
 	LINK += -lopencv_videoio
 endif
 
+all: viewer collector masseuse
+
 viewer: $(VIEWER_SRC)
 	$(CC) -g -L/usr/local/lib $^ -o viewer $(VIEWER_LINK)
 
@@ -21,4 +23,4 @@ masseuse: $(MASSEUSE_SRC)
 	$(CC) -g $^ -o masseuse
 
 clean:
-	@rm collector
+	@rm collector viewer masseuse

@@ -1,9 +1,9 @@
 #ifndef AVC_STRUCTS
 #define AVC_STRUCTS
 
-#define FRAME_W 160
-#define FRAME_H 120
-#define PIX_DEPTH 2
+#define FRAME_W 80
+#define FRAME_H 60
+#define PIX_DEPTH 3
 
 #define VIEW_PIXELS (FRAME_W * FRAME_H)
 
@@ -11,8 +11,21 @@ typedef union {
 	struct {
 		uint8_t r, g, b;
 	};
+	struct {
+		uint8_t y, cb, cr;
+	};
 	uint8_t v[3];
 } color_t;
+
+typedef union {
+	struct {
+		float r, g, b;
+	};
+	struct {
+		float y, cb, cr;
+	};
+	float v[3];
+} color_f_t;
 
 typedef struct {
 	uint8_t throttle, steering;
@@ -23,7 +36,7 @@ typedef struct {
 	int16_t acc[3];
 	int8_t vel;
 	uint32_t distance;
-	uint8_t view[FRAME_W * FRAME_H * PIX_DEPTH];
+	color_t view[FRAME_W * FRAME_H];
 } raw_state_t;
 
 typedef struct {
@@ -37,10 +50,9 @@ typedef union {
 		float acc[3];
 		float vel;
 		float distance;
-		float luma[VIEW_PIXELS];
-		float chroma[VIEW_PIXELS / 4];
+		color_f_t view[FRAME_W * FRAME_H];
 	};
-	float v[3 + 3 + 2 + VIEW_PIXELS + VIEW_PIXELS / 4];
+	float v[3 + 3 + 2 + VIEW_PIXELS * 3];
 } state_f_t;
 
 typedef union {

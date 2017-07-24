@@ -102,12 +102,11 @@ void dataset_raw_to_float(raw_example_t* raw_ex, example_t* ex, calib_t* cal, un
 		s->state.distance = rs->state.distance;
 
 		// Convert camera data
-		uint32_t* yuvy = (uint32_t*)rs->state.view;
-		for(int cell = sizeof(rs->state.view) / sizeof(uint32_t); cell--;)
+		for(int cell = FRAME_W * FRAME_H; cell--;)
 		{
-			s->state.chroma[cell] = (yuvy[cell] >> 8) & 0xFFFF;
-			s->state.luma[(cell << 1) + 0] = yuvy[cell] >> 24;
-			s->state.luma[(cell << 1) + 1] = yuvy[cell] & 0x08;
+			s->state.view[cell].y = rs->state.view[cell].y;
+			s->state.view[cell].cb = rs->state.view[cell].cb;
+			s->state.view[cell].cr = rs->state.view[cell].cr;
 		}
 
 		// Convert the action vectors
