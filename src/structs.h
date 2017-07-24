@@ -1,6 +1,9 @@
 #ifndef AVC_STRUCTS
 #define AVC_STRUCTS
 
+#include <sys/types.h>
+#include <inttypes.h>
+
 #define FRAME_W 80
 #define FRAME_H 60
 #define PIX_DEPTH 3

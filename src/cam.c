@@ -3,11 +3,13 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <strings.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "structs.h"
 #include "cam.h"
 
 cam_t cam_open(const char* path, cam_settings_t* cfg)
