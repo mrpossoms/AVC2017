@@ -4,7 +4,7 @@ CC=gcc
 COLLECTOR_SRC=src/collector.c src/i2c.c src/cam.c
 VIEWER_SRC=src/viewer.c
 VIEWER_LINK=
-
+MASSEUSE_SRC=src/masseuse.c
 
 ifeq ($(OS),Darwin)
 	VIEWER_LINK+=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
@@ -16,6 +16,9 @@ viewer: $(VIEWER_SRC)
 
 collector: $(COLLECTOR_SRC)
 	$(CC) -g $^ -o collector
+
+masseuse: $(MASSEUSE_SRC)
+	$(CC) -g $^ -o masseuse
 
 clean:
 	@rm collector

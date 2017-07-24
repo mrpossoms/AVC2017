@@ -56,6 +56,15 @@ typedef struct {
 	action_f_t action;
 } example_t;
 
+typedef struct {
+	float min, max;
+} range_t;
+
+typedef struct {
+	range_t steering;
+	range_t throttle;
+} calib_t;
+
 #define VEC_DIMENSIONS_F(v) (sizeof((v)) / sizeof(float))
 
 #endif
