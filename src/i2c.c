@@ -3,6 +3,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
 
 #ifdef __linux__
 #include <linux/i2c-dev.h>
@@ -31,7 +32,8 @@ int i2c_write_bytes(int fd, uint8_t devAddr, uint8_t dstReg, uint8_t* srcBuf, si
 		return 1;
 	#else
 
-		uint8_t buf[bytes + 1] = { dstReg };
+		uint8_t buf[bytes + 1];
+		buf[0] = dstReg; 
 		memcpy(buf + 1, srcBuf, bytes);
 
 		ioctl(fd, I2C_SLAVE, devAddr);

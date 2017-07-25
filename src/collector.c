@@ -38,9 +38,9 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	uint32_t* fb_pixel_pair = cams[0].frame_buffer;
 	for(unsigned int i = cams[0].buffer_info.length / sizeof(uint32_t); i--;)
 	{
-		state->view[i].y  = (fb_pixel_pair[i] >> 8) & 0xFF;
-		state->view[i].cb = (fb_pixel_pair[i] >> 16) & 0xFF;
-		state->view[i].cr = fb_pixel_pair[i] & 0xFF;
+		state->view[i].y  = fb_pixel_pair[i] & 0xFF;
+		state->view[i].cb = (fb_pixel_pair[i] >> 24) & 0xFF;
+		state->view[i].cr = (fb_pixel_pair[i] >> 8) & 0xFF;
 	}
 
 	return 0;
