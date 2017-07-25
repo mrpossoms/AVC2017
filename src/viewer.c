@@ -11,6 +11,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include "structs.h"
+
 // #define RENDER_DEMO
 
 GLFWwindow* WIN;
@@ -37,11 +39,21 @@ static void createTexture(GLuint* tex)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
-void yuv422_to_lum8(uint8_t* yuv, uint8_t* lum8, int w, int h)
+void yuv422_to_lum8(color_t* yuv, uint8_t* lum8, int w, int h)
 {
 	for(int i = w * h; i--;)
 	{
-		lum8[i] = yuv[i * 2];
+		lum8[i] = yuv[i].y;
+	}
+}
+
+void yuv422_to_rgb(color_t* yuv, color_t* rgb, int w, int h)
+{
+	for(int i = w * h; i--;)
+	{
+		rgb[i].r = yuv[i].y + 1.4075 * (yuv[i].cb - 128);
+		rgb[i].g = yuv[i].y - 0.3455 * (yuv[i].cr - 128) - (0.7169 * (yuv[i].cb - 128));
+		rgb[i].b = yuv[i].y + 1.7790 * (yuv[i].cr - 128);
 	}
 }
 
@@ -65,16 +77,18 @@ int main(int argc, char* argv[])
 	setupGL();
 	createTexture(&frameTex);
 
-	const int width = 160;
-	const int height = 120;
+	const int width = 80;
+	const int height = 60;
 
 	uint8_t lum[width * height];
-	uint8_t yuvy[width * height * 2];
+	color_t yuv[width * height];
+	color_t rgb[width * height];
 
 	int img_fd = open(argv[1], O_RDONLY);
-	oneOK = (read(img_fd, yuvy, sizeof(yuvy)) == sizeof(yuvy));
+	oneOK = (read(img_fd, yuv, sizeof(yuv)) == sizeof(yuv));
 
-	yuv422_to_lum8(yuvy, lum, width, height);
+	// yuv422_to_lum8(yuv, lum, width, height);
+	yuv422_to_rgb(yuv, rgb, width, height);
 
 	while(!glfwWindowShouldClose(WIN)){
 
@@ -87,7 +101,7 @@ int main(int argc, char* argv[])
 		}
 
 
-		read(rand_fd, lum, sizeof(lum));
+		read(rand_fd, lum, VIEW_PIXELS);
 
 		glTexImage2D(
 			GL_TEXTURE_2D,
@@ -105,6 +119,7 @@ int main(int argc, char* argv[])
 	else
 	{
 
+/*
 		glTexImage2D(
 			GL_TEXTURE_2D,
 			0,
@@ -116,9 +131,23 @@ int main(int argc, char* argv[])
 			GL_UNSIGNED_BYTE,
 			lum
 		);
+*/
+		glTexImage2D(
+			GL_TEXTURE_2D,
+			0,
+			GL_RGB,
+			width,
+			height,
+			0,
+			GL_RGB,
+			GL_UNSIGNED_BYTE,
+			rgb
+		);
 
-		oneOK = (read(img_fd, yuvy, sizeof(yuvy)) == sizeof(yuvy));
-		yuv422_to_lum8(yuvy, lum, width, height);
+		oneOK = (read(img_fd, yuv, sizeof(yuv)) == sizeof(yuv));
+		// yuv422_to_lum8(yuv, lum, width, height);
+		yuv422_to_rgb(yuv, rgb, width, height);
+
 		usleep(100000);
 	}
 

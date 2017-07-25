@@ -1,0 +1,7 @@
+location: src
+sources:
+- name: BNO055_driver
+  repo: https://github.com/mrpossoms/BNO055_driver
+  rev: master
+  scripts:
+  -
