@@ -2,7 +2,8 @@ $(eval OS := $(shell uname))
 
 CC=gcc
 CFLAGS=-g --std=c99
-COLLECTOR_SRC=src/collector.c src/i2c.c src/cam.c
+COLLECTOR_SRC=src/collector.c src/i2c.c src/cam.c src/BNO055_driver/*.c
+COLLECTOR_INC=-I./src
 VIEWER_SRC=src/viewer.c
 VIEWER_LINK=
 MASSEUSE_SRC=src/masseuse.c
@@ -19,7 +20,7 @@ viewer: $(VIEWER_SRC)
 	$(CC) $(CFLAGS) -L/usr/local/lib $^ -o viewer $(VIEWER_LINK)
 
 collector: $(COLLECTOR_SRC)
-	$(CC) $(CFLAGS) $^ -o collector
+	$(CC) $(CFLAGS) $(COLLECTOR_INC) $^ -o collector
 
 masseuse: $(MASSEUSE_SRC)
 	$(CC) $(CFLAGS) $^ -o masseuse
