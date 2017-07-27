@@ -47,13 +47,19 @@ void yuv422_to_lum8(color_t* yuv, uint8_t* lum8, int w, int h)
 	}
 }
 
+float clamp(float v)
+{
+	v = v > 255 ? 255 : v;
+	return  v < 0 ? 0 : v;
+}
+
 void yuv422_to_rgb(color_t* yuv, color_t* rgb, int w, int h)
 {
 	for(int i = w * h; i--;)
 	{
-		rgb[i].r = yuv[i].y + 1.4075 * (yuv[i].cb - 128);
-		rgb[i].g = yuv[i].y - 0.3455 * (yuv[i].cr - 128) - (0.7169 * (yuv[i].cb - 128));
-		rgb[i].b = yuv[i].y + 1.7790 * (yuv[i].cr - 128);
+		rgb[i].r = clamp(yuv[i].y + 1.14 * (yuv[i].cb - 128));
+		rgb[i].g = clamp(yuv[i].y - 0.395 * (yuv[i].cr - 128) - (0.581 * (yuv[i].cb - 128)));
+		rgb[i].b = clamp(yuv[i].y + 2.033 * (yuv[i].cr - 128));
 	}
 }
 
@@ -66,7 +72,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	WIN = glfwCreateWindow(640, 480, "AVC 2016", NULL, NULL);
+	WIN = glfwCreateWindow(640, 480, "AVC 2017", NULL, NULL);
 
 	if (!WIN){
 		glfwTerminate();

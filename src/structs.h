@@ -4,6 +4,12 @@
 #include <sys/types.h>
 #include <inttypes.h>
 
+#define EXIT(...) {\
+	fprintf(stderr, __VA_ARGS__);\
+	fprintf(stderr, " (%d)\n", errno);\
+	exit(-1);\
+}\
+
 #define FRAME_W 80
 #define FRAME_H 60
 #define PIX_DEPTH 3

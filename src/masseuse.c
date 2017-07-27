@@ -12,12 +12,6 @@ static calib_t CALIBRATION;
 static raw_example_t* RAW_DS;
 static char* DS_PATH;
 
-#define EXIT(...) {\
-	fprintf(stderr, __VA_ARGS__);\
-	fprintf(stderr, " (%d)\n", errno);\
-	exit(-1);\
-}\
-
 void dataset_mean(example_t* dataset, float* mu_vec, unsigned int dims, unsigned int examples)
 {
 	bzero(mu_vec, sizeof(float) * dims);
