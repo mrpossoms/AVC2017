@@ -3,7 +3,7 @@ $(eval OS := $(shell uname))
 CC=gcc
 CFLAGS=-g --std=c99
 COLLECTOR_SRC=src/collector.c src/i2c.c src/cam.c src/BNO055_driver/*.c
-COLLECTOR_INC=-I./src
+COLLECTOR_INC=-I./src -I./src/BNO055_driver
 VIEWER_SRC=src/viewer.c
 VIEWER_LINK=
 MASSEUSE_SRC=src/masseuse.c

@@ -9,18 +9,27 @@
 #include "cam.h"
 
 #define THROTTLE_STOPPED 0
-#define PWM_LOGGER_ADDR 0x69
 int I2C_BUS;
 
 int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 {
-	// TODO get sensor readings
-	return 0;
-
 	// Get throttle and steering state
-	if(i2c_read(I2C_BUS, PWM_LOGGER_ADDR, 0x1, (void*)action, sizeof(raw_action_t)))
+	if(i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 7, (void*)action, sizeof(raw_action_t)))
 	{
 		return 1;
+	}
+
+	uint8_t mode = 0;
+	int res = bno055_get_operation_mode(&mode);
+
+	if(bno055_read_accel_xyz((struct bno055_accel_t*)state->acc))
+	{
+		EXIT("Error reading from BNO055\n");
+	}
+
+	if(bno055_read_gyro_xyz((struct bno055_gyro_t*)state->rot_rate))
+	{
+		EXIT("Error reading from BNO055\n");
 	}
 
 	return 0;
@@ -29,8 +38,6 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 
 int poll_vision(raw_state_t* state, cam_t* cams)
 {
-	// TODO
-
 	cam_wait_frame(cams);
 
 	// Downsample the intensity resolution to match that of
@@ -38,9 +45,9 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	uint32_t* fb_pixel_pair = cams[0].frame_buffer;
 	for(unsigned int i = cams[0].buffer_info.length / sizeof(uint32_t); i--;)
 	{
-		state->view[i].y  = fb_pixel_pair[i] & 0xFF;
-		state->view[i].cb = (fb_pixel_pair[i] >> 24) & 0xFF;
-		state->view[i].cr = (fb_pixel_pair[i] >> 8) & 0xFF;
+		state->view[i >> 1].y  = fb_pixel_pair[i] & 0xFF;
+		state->view[i >> 1].cb = (fb_pixel_pair[i] >> 24) & 0xFF;
+		state->view[i >> 1].cr = (fb_pixel_pair[i] >> 8) & 0xFF;
 	}
 
 	return 0;
@@ -51,14 +58,49 @@ int main(int argc, const char* argv[])
 {
 	int started = 0;
 	cam_settings_t cfg = {
-		.width = FRAME_W,
-		.height = FRAME_H
+		.width = 160,
+		.height = 120
 	};
 
 	cam_t cam[2] = {
 		cam_open("/dev/video0", &cfg),
 		cam_open("/dev/video1", &cfg),
 	};
+
+
+	if(i2c_init("/dev/i2c-1"))
+	{
+		return -1;
+	}
+
+	uint8_t reg, byte;
+	int16_t v[3];
+
+	reg = 0x7; byte = 0;
+	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
+	write(I2C_BUS_FD, &reg, 1);
+	write(I2C_BUS_FD, &byte, 1);
+
+	reg = 0X3F; byte = 0x80;
+	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
+	write(I2C_BUS_FD, &reg, 1);
+	write(I2C_BUS_FD, &byte, 1);
+
+	reg = 0X3D; byte = 0X07;
+	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
+	write(I2C_BUS_FD, &reg, 1);
+	write(I2C_BUS_FD, &byte, 1);
+
+	reg = 0x0D; byte = 0;
+	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
+	write(I2C_BUS_FD, &reg, 1);
+	write(I2C_BUS_FD, &byte, 1);
+
+
+	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
+	reg = 8;
+	write(I2C_BUS_FD, &reg, 1);
+	int res = read(I2C_BUS_FD, v, 6);
 
 	for(;;)
 	{
@@ -95,12 +137,15 @@ int main(int argc, const char* argv[])
 			break;
 		}
 
-		raw_example_t ex = { state, action };
-		if(write(1, &ex, sizeof(ex)) != sizeof(ex))
-		{
-			fprintf(stderr, "Error writing state-action pair\n");
-			return -3;
-		}
+		printf("a: %d %d %d\n", state.acc[0], state.acc[1], state.acc[2]);
+		printf("g: %d %d %d\n", state.rot_rate[0], state.rot_rate[1], state.rot_rate[2]);
+
+		// raw_example_t ex = { state, action };
+		// if(write(1, &ex, sizeof(ex)) != sizeof(ex))
+		// {
+		// 	fprintf(stderr, "Error writing state-action pair\n");
+		// 	return -3;
+		// }
 	}
 
 	return 0;
