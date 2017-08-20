@@ -7,6 +7,7 @@
 #include <strings.h>
 
 #include "structs.h"
+#include "curves.h"
 
 static calib_t CALIBRATION;
 static raw_example_t* RAW_DS;
@@ -57,23 +58,6 @@ void dataset_range(example_t* dataset, range_t* ranges, unsigned int dims, unsig
 }
 
 
-static int bucket_index(float value, range_t* buckets_range, int buckets)
-{
-	float d = buckets_range->max - buckets_range->min;
-
-	value -= buckets_range->min;
-	return (value / d) * buckets;
-}
-
-
-static float falloff(float mu, float x)
-{
-	float d_mu = x - mu;
-
-	return 1.f / (d_mu * d_mu + 1.f);
-}
-
-
 void dataset_raw_to_float(raw_example_t* raw_ex, example_t* ex, calib_t* cal, unsigned int examples)
 {
 	for(int i = examples; i--;)
@@ -105,30 +89,7 @@ void dataset_raw_to_float(raw_example_t* raw_ex, example_t* ex, calib_t* cal, un
 
 		// Convert the action vectors
 		// -------------------------
-		int throttle_buckets = sizeof(s->action.throttle) / sizeof(float);
-		int steering_buckets = sizeof(s->action.steering) / sizeof(float);
-
-		float throttle_mu = bucket_index(
-			rs->action.throttle,
-			&cal->throttle,
-			throttle_buckets
-		);
-
-		float steering_mu = bucket_index(
-			rs->action.steering,
-			&cal->steering,
-			steering_buckets
-		);
-
-		for(int j = throttle_buckets; j--;)
-		{
-			s->action.throttle[j] = falloff(throttle_mu, j);
-		}
-
-		for(int j = steering_buckets; j--;)
-		{
-			s->action.steering[j] = falloff(steering_mu, j);
-		}
+		convert_action(&rs->action, &s->action, cal);
 	}
 }
 
