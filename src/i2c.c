@@ -37,12 +37,16 @@ int i2c_write_bytes(int fd, uint8_t devAddr, uint8_t dstReg, uint8_t* srcBuf, si
 		return 1;
 	#else
 
-		uint8_t buf[bytes + 1];
+		int buf_len = bytes + 1;
+		uint8_t buf[buf_len];
 		buf[0] = dstReg;
 		memcpy(buf + 1, srcBuf, bytes);
 
 		ioctl(fd, I2C_SLAVE, devAddr);
-		write(fd, buf, bytes + 1);
+		if(write(fd, buf, buf_len) != buf_len)
+		{
+			return -1;
+		}
 
 		return 0;
 	#endif
@@ -96,6 +100,11 @@ s8 BNO055_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 }
 
 
+void BNO055_delay_msec(u32 msek)
+{
+	usleep(1000 * msek);
+}
+
 int i2c_init(const char* path)
 {
 	// open bus files
@@ -109,11 +118,12 @@ int i2c_init(const char* path)
 	// Initalize the BNO055 driver
 	I2C_bno055.bus_write = BNO055_I2C_bus_write;
 	I2C_bno055.bus_read  = BNO055_I2C_bus_read;
+	I2C_bno055.delay_msec= BNO055_delay_msec;
 	I2C_bno055.dev_addr  = BNO055_I2C_ADDR1;
 
 	bno055_init(&I2C_bno055);
 	bno055_set_power_mode(BNO055_POWER_MODE_NORMAL);
-	bno055_set_data_output_format(BNO055_OPERATION_MODE_AMG);
+	bno055_set_operation_mode(BNO055_OPERATION_MODE_NDOF);
 
 	// reboot the PWM logger
 	i2c_write(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0B, 0);

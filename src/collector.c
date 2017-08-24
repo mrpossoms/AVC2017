@@ -73,35 +73,6 @@ int main(int argc, const char* argv[])
 		return -1;
 	}
 
-	uint8_t reg, byte;
-	int16_t v[3];
-
-	reg = 0x7; byte = 0;
-	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
-	write(I2C_BUS_FD, &reg, 1);
-	write(I2C_BUS_FD, &byte, 1);
-
-	reg = 0X3F; byte = 0x80;
-	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
-	write(I2C_BUS_FD, &reg, 1);
-	write(I2C_BUS_FD, &byte, 1);
-
-	reg = 0X3D; byte = 0X07;
-	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
-	write(I2C_BUS_FD, &reg, 1);
-	write(I2C_BUS_FD, &byte, 1);
-
-	reg = 0x0D; byte = 0;
-	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
-	write(I2C_BUS_FD, &reg, 1);
-	write(I2C_BUS_FD, &byte, 1);
-
-
-	ioctl(I2C_BUS_FD, I2C_SLAVE, 0x28);
-	reg = 8;
-	write(I2C_BUS_FD, &reg, 1);
-	int res = read(I2C_BUS_FD, v, 6);
-
 	for(;;)
 	{
 		raw_state_t state = {};
@@ -126,6 +97,11 @@ int main(int argc, const char* argv[])
 		close(img_fd);
 		write(1, ".", 1);
 
+		printf("a: %d %d %d\n", state.acc[0], state.acc[1], state.acc[2]);
+		//printf("g: %d %d %d\n", state.rot_rate[0], state.rot_rate[1], state.rot_rate[2]);
+		fflush(stdout);
+
+
 		if(action.throttle == THROTTLE_STOPPED)
 		{
 			if(!started)
@@ -137,10 +113,7 @@ int main(int argc, const char* argv[])
 			break;
 		}
 
-		printf("a: %d %d %d\n", state.acc[0], state.acc[1], state.acc[2]);
-		printf("g: %d %d %d\n", state.rot_rate[0], state.rot_rate[1], state.rot_rate[2]);
-
-		// raw_example_t ex = { state, action };
+				// raw_example_t ex = { state, action };
 		// if(write(1, &ex, sizeof(ex)) != sizeof(ex))
 		// {
 		// 	fprintf(stderr, "Error writing state-action pair\n");
