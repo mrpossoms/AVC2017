@@ -8,7 +8,7 @@
 #include "i2c.h"
 #include "cam.h"
 
-#define THROTTLE_STOPPED 0
+#define THROTTLE_STOPPED 117
 int I2C_BUS;
 
 int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
@@ -58,7 +58,7 @@ int main(int argc, const char* argv[])
 {
 	int started = 0;
 	cam_settings_t cfg = {
-		.width = 160,
+		.width  = 160,
 		.height = 120
 	};
 
@@ -72,6 +72,7 @@ int main(int argc, const char* argv[])
 	{
 		return -1;
 	}
+	
 
 	for(;;)
 	{
@@ -92,17 +93,8 @@ int main(int argc, const char* argv[])
 			return -2;
 		}
 
-		int img_fd = open("frame.data", O_RDWR | O_CREAT | O_APPEND, 0666);
-		write(img_fd, state.view, sizeof(state.view));
-		close(img_fd);
-		write(1, ".", 1);
-
-		printf("a: %d %d %d\n", state.acc[0], state.acc[1], state.acc[2]);
-		//printf("g: %d %d %d\n", state.rot_rate[0], state.rot_rate[1], state.rot_rate[2]);
-		fflush(stdout);
-
-
-		if(action.throttle == THROTTLE_STOPPED)
+		int gas = action.throttle;
+		if((THROTTLE_STOPPED - 3) >= gas && gas <= (THROTTLE_STOPPED + 3))
 		{
 			if(!started)
 			{
@@ -112,13 +104,17 @@ int main(int argc, const char* argv[])
 			fprintf(stderr, "Finished\n");
 			break;
 		}
+		else
+		{
+			started = 1;
+		}
 
-				// raw_example_t ex = { state, action };
-		// if(write(1, &ex, sizeof(ex)) != sizeof(ex))
-		// {
-		// 	fprintf(stderr, "Error writing state-action pair\n");
-		// 	return -3;
-		// }
+		raw_example_t ex = { state, action };
+		if(write(1, &ex, sizeof(ex)) != sizeof(ex))
+		{
+			fprintf(stderr, "Error writing state-action pair\n");
+			return -3;
+		}
 	}
 
 	return 0;
