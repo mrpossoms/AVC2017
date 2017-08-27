@@ -19,8 +19,13 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 		return 1;
 	}
 
+	uint16_t odo = 0;
+	int res = i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0C, (void*)&odo, sizeof(odo));
+
+	fprintf(stderr, "odo: %d\n", odo);
+
 	uint8_t mode = 0;
-	int res = bno055_get_operation_mode(&mode);
+	res = bno055_get_operation_mode(&mode);
 
 	if(bno055_read_accel_xyz((struct bno055_accel_t*)state->acc))
 	{
@@ -31,6 +36,7 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 	{
 		EXIT("Error reading from BNO055\n");
 	}
+
 
 	return 0;
 }
@@ -56,23 +62,27 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 
 int main(int argc, const char* argv[])
 {
-	int started = 0;
+	int res, started = 0;
 	cam_settings_t cfg = {
 		.width  = 160,
 		.height = 120
 	};
+
+	fprintf(stderr, "Sensors...");
 
 	cam_t cam[2] = {
 		cam_open("/dev/video0", &cfg),
 		cam_open("/dev/video1", &cfg),
 	};
 
-
-	if(i2c_init("/dev/i2c-1"))
+	if((res = i2c_init("/dev/i2c-1")))
 	{
+		fprintf(stderr, "I2C init failed (%d)\n", res);
 		return -1;
 	}
 	
+	fprintf(stderr, "OK\n");
+	fprintf(stderr, "raw_state_t: %uB, raw_action_t: %uB\n", sizeof(raw_state_t), sizeof(raw_action_t));
 
 	for(;;)
 	{
