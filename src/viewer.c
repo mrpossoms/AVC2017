@@ -89,9 +89,10 @@ int main(int argc, char* argv[])
 	uint8_t lum[width * height];
 	color_t yuv[width * height];
 	color_t rgb[width * height];
+	raw_example_t ex = {};
 
 	int img_fd = open(argv[1], O_RDONLY);
-	oneOK = (read(img_fd, yuv, sizeof(yuv)) == sizeof(yuv));
+	oneOK = (read(img_fd, ex, sizeof(ex)) == sizeof(ex));
 
 	// yuv422_to_lum8(yuv, lum, width, height);
 	yuv422_to_rgb(yuv, rgb, width, height);
@@ -99,13 +100,14 @@ int main(int argc, char* argv[])
 	while(!glfwWindowShouldClose(WIN)){
 
 	int res = 1;
-	if(!oneOK){
+	if(!oneOK)
+	{
 		static int rand_fd;
 
-		if(!rand_fd){
+		if(!rand_fd)
+		{
 			rand_fd = open("/dev/random", O_RDONLY);
 		}
-
 
 		read(rand_fd, lum, VIEW_PIXELS);
 
@@ -124,20 +126,6 @@ int main(int argc, char* argv[])
 	}
 	else
 	{
-
-/*
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_LUMINANCE, // one color channel
-			width,
-			height,
-			0, // no border
-			GL_LUMINANCE,
-			GL_UNSIGNED_BYTE,
-			lum
-		);
-*/
 		glTexImage2D(
 			GL_TEXTURE_2D,
 			0,
@@ -150,9 +138,9 @@ int main(int argc, char* argv[])
 			rgb
 		);
 
-		oneOK = (read(img_fd, yuv, sizeof(yuv)) == sizeof(yuv));
+		oneOK = (read(img_fd, ex, sizeof(ex)) == sizeof(ex));
 		// yuv422_to_lum8(yuv, lum, width, height);
-		yuv422_to_rgb(yuv, rgb, width, height);
+		yuv422_to_rgb(ex.state.view, rgb, width, height);
 
 		usleep(100000);
 	}

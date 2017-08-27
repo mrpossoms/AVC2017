@@ -13,6 +13,9 @@ TST_SRC=masseuse_falloff masseuse_bucket
 ifeq ($(OS),Darwin)
 	VIEWER_LINK+=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
 	LINK += -lopencv_videoio
+else
+	VIEWER_LINK +=-lglfw3 -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm -pthread -ldl
+	CFLAGS += -D_XOPEN_SOURCE=500
 endif
 
 bin/tests:
