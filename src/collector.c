@@ -49,11 +49,11 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	// Downsample the intensity resolution to match that of
 	// the chroma
 	uint32_t* fb_pixel_pair = cams[0].frame_buffer;
-	for(unsigned int i = cams[0].buffer_info.length / sizeof(uint32_t); i--;)
+	for(int i = FRAME_W * FRAME_H; i--;)
 	{
-		state->view[i >> 1].y  = fb_pixel_pair[i] & 0xFF;
-		state->view[i >> 1].cb = (fb_pixel_pair[i] >> 24) & 0xFF;
-		state->view[i >> 1].cr = (fb_pixel_pair[i] >> 8) & 0xFF;
+		state->view[i].y  = fb_pixel_pair[i << 2] & 0xFF;
+		state->view[i].cb = (fb_pixel_pair[i << 2] >> 24) & 0xFF;
+		state->view[i].cr = (fb_pixel_pair[i << 2] >> 8) & 0xFF;
 	}
 
 	return 0;
@@ -80,7 +80,7 @@ int main(int argc, const char* argv[])
 		fprintf(stderr, "I2C init failed (%d)\n", res);
 		return -1;
 	}
-	
+
 	fprintf(stderr, "OK\n");
 	fprintf(stderr, "raw_state_t: %uB, raw_action_t: %uB\n", sizeof(raw_state_t), sizeof(raw_action_t));
 

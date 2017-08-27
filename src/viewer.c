@@ -72,6 +72,8 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	fprintf(stderr, "raw_state_t: %luB, raw_action_t: %luB\n", sizeof(raw_state_t), sizeof(raw_action_t));
+
 	WIN = glfwCreateWindow(640, 480, "AVC 2017", NULL, NULL);
 
 	if (!WIN){
@@ -83,19 +85,16 @@ int main(int argc, char* argv[])
 	setupGL();
 	createTexture(&frameTex);
 
-	const int width = 80;
-	const int height = 60;
-
-	uint8_t lum[width * height];
-	color_t yuv[width * height];
-	color_t rgb[width * height];
+	uint8_t lum[FRAME_W * FRAME_H];
+	color_t yuv[FRAME_W * FRAME_H];
+	color_t rgb[FRAME_W * FRAME_H];
 	raw_example_t ex = {};
 
 	int img_fd = open(argv[1], O_RDONLY);
-	oneOK = (read(img_fd, ex, sizeof(ex)) == sizeof(ex));
+	oneOK = (read(img_fd, &ex, sizeof(ex)) == sizeof(ex));
 
-	// yuv422_to_lum8(yuv, lum, width, height);
-	yuv422_to_rgb(yuv, rgb, width, height);
+	// yuv422_to_lum8(yuv, lum, FRAME_W, FRAME_H);
+	yuv422_to_rgb(yuv, rgb, FRAME_W, FRAME_H);
 
 	while(!glfwWindowShouldClose(WIN)){
 
@@ -115,8 +114,8 @@ int main(int argc, char* argv[])
 			GL_TEXTURE_2D,
 			0,
 			GL_LUMINANCE, // one color channel
-			width,
-			height,
+			FRAME_W,
+			FRAME_H,
 			0, // no border
 			GL_LUMINANCE,
 			GL_UNSIGNED_BYTE,
@@ -130,19 +129,19 @@ int main(int argc, char* argv[])
 			GL_TEXTURE_2D,
 			0,
 			GL_RGB,
-			width,
-			height,
+			FRAME_W,
+			FRAME_H,
 			0,
 			GL_RGB,
 			GL_UNSIGNED_BYTE,
 			rgb
 		);
 
-		oneOK = (read(img_fd, ex, sizeof(ex)) == sizeof(ex));
-		// yuv422_to_lum8(yuv, lum, width, height);
-		yuv422_to_rgb(ex.state.view, rgb, width, height);
+		oneOK = (read(img_fd, &ex, sizeof(ex)) == sizeof(ex));
+		// yuv422_to_lum8(yuv, lum, FRAME_W, FRAME_H);
+		yuv422_to_rgb(ex.state.view, rgb, FRAME_W, FRAME_H);
 
-		usleep(100000);
+		usleep(500000);
 	}
 
 		glClear(GL_COLOR_BUFFER_BIT);
