@@ -1,9 +1,13 @@
 #include "i2c.h"
+#include "bno055.h"
 
 #include <sys/ioctl.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 
 #ifdef __linux__
 #include <linux/i2c-dev.h>
@@ -33,12 +37,16 @@ int i2c_write_bytes(int fd, uint8_t devAddr, uint8_t dstReg, uint8_t* srcBuf, si
 		return 1;
 	#else
 
-		uint8_t buf[bytes + 1];
+		int buf_len = bytes + 1;
+		uint8_t buf[buf_len];
 		buf[0] = dstReg;
 		memcpy(buf + 1, srcBuf, bytes);
 
 		ioctl(fd, I2C_SLAVE, devAddr);
-		write(fd, buf, bytes + 1);
+		if(write(fd, buf, buf_len) != buf_len)
+		{
+			return -1;
+		}
 
 		return 0;
 	#endif
@@ -51,9 +59,7 @@ int i2c_read(int fd, uint8_t devAddr, uint8_t srcReg, void* dstBuf, size_t bytes
 #else
 
 	ioctl(fd, I2C_SLAVE, devAddr);
-
-	uint8_t commByte = 0x80 | srcReg;
-	if(write(fd, &commByte, 1) != 1)
+	if(write(fd, &srcReg, 1) != 1)
 	{
 		return -1;
 	}
@@ -72,7 +78,7 @@ s8 BNO055_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
 	s32 BNO055_iERROR = BNO055_INIT_VALUE;
 
-	if(i2c_read(I2C_BUS_FDS[0], dev_addr, reg_addr, reg_data, cnt))
+	if(i2c_read(I2C_BUS_FD, dev_addr, reg_addr, reg_data, cnt))
 	{
 		BNO055_iERROR = -1;
 	}
@@ -85,7 +91,7 @@ s8 BNO055_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
 	s32 BNO055_iERROR = BNO055_INIT_VALUE;
 
-	if(i2c_write_bytes(I2C_BUS_FDS[0], dev_addr, reg_addr, reg_data, cnt))
+	if(i2c_write_bytes(I2C_BUS_FD, dev_addr, reg_addr, reg_data, cnt))
 	{
 		BNO055_iERROR = -1;
 	}
@@ -94,30 +100,38 @@ s8 BNO055_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 }
 
 
-int i2c_init(const char** paths[], int busses)
+void BNO055_delay_msec(u32 msek)
+{
+	usleep(1000 * msek);
+}
+
+int i2c_init(const char* path)
 {
 	// open bus files
-	for(int i = busses; i--;)
-	{
-		I2C_BUS_FDS[i] = open(paths[i], O_RDWR);
+	I2C_BUS_FD = open(path, O_RDWR);
 
-		if(I2C_BUS_FDS[i] < 0)
-		{
-			EXIT("Failed to open I2C bus '%s'", paths[i]);
-		}
+	if(I2C_BUS_FD < 0)
+	{
+		EXIT("Failed to open I2C bus '%s'", path);
 	}
 
 	// Initalize the BNO055 driver
 	I2C_bno055.bus_write = BNO055_I2C_bus_write;
 	I2C_bno055.bus_read  = BNO055_I2C_bus_read;
+	I2C_bno055.delay_msec= BNO055_delay_msec;
 	I2C_bno055.dev_addr  = BNO055_I2C_ADDR1;
 
 	bno055_init(&I2C_bno055);
 	bno055_set_power_mode(BNO055_POWER_MODE_NORMAL);
+	bno055_set_operation_mode(BNO055_OPERATION_MODE_NDOF);
+
+	// reboot the PWM logger
+	i2c_write(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0B, 0);
+	sleep(2);
 }
 
 int i2c_poll_devices(raw_state_t* state)
 {
-	bno055_read_accel_xyz((bno055_linear_accel_t*)state->rot_rate);
-	bno055_read_gyro_xyz((bno055_gyro_t*)state->acc);
+	bno055_read_accel_xyz((struct bno055_linear_accel_t*)state->rot_rate);
+	bno055_read_gyro_xyz((struct bno055_gyro_t*)state->acc);
 }

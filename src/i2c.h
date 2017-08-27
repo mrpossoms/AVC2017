@@ -12,6 +12,8 @@
 #include <linux/i2c-dev.h>
 #endif
 
+#define PWM_LOGGER_ADDR 0x69
+
 #ifdef __cplusplus
 extern "C" {
 #endif

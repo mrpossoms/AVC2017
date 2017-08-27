@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 #include <inttypes.h>
+#include <errno.h>
 
 #define EXIT(...) {\
 	fprintf(stderr, __VA_ARGS__);\
