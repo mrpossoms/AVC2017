@@ -11,11 +11,25 @@
 	exit(-1);\
 }\
 
-#define FRAME_W 80
-#define FRAME_H 60
+#define FRAME_W 160
+#define FRAME_H 120
 #define PIX_DEPTH 3
 
 #define VIEW_PIXELS (FRAME_W * FRAME_H)
+
+typedef union {
+	struct {
+		uint8_t cb, cr;
+	};
+	uint8_t v[2];
+} chroma_t;
+
+typedef union {
+	struct {
+		float cb, cr;
+	};
+	float v[2];
+} chroma_f_t;
 
 typedef union {
 	struct {
@@ -46,7 +60,10 @@ typedef struct {
 	int16_t acc[3];
 	int8_t vel;
 	uint32_t distance;
-	color_t view[FRAME_W * FRAME_H];
+	struct {
+		uint8_t luma[FRAME_W * FRAME_H];
+		chroma_t chroma[FRAME_W * FRAME_H / 4];
+	} view;
 } raw_state_t;
 
 typedef struct {
@@ -60,7 +77,10 @@ typedef union {
 		float acc[3];
 		float vel;
 		float distance;
-		color_f_t view[FRAME_W * FRAME_H];
+		struct {
+			float luma[FRAME_W * FRAME_H];
+			chroma_t chroma[FRAME_W * FRAME_H / 4];		
+		} view;
 	};
 	float v[3 + 3 + 2 + VIEW_PIXELS * 3];
 } state_f_t;

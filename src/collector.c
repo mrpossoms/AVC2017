@@ -48,12 +48,23 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 
 	// Downsample the intensity resolution to match that of
 	// the chroma
-	uint32_t* fb_pixel_pair = cams[0].frame_buffer;
-	for(int i = FRAME_W * FRAME_H; i--;)
+	for(int j = FRAME_H; j--;)
 	{
-		state->view[i].y  = fb_pixel_pair[i << 2] & 0xFF;
-		state->view[i].cb = (fb_pixel_pair[i << 2] >> 24) & 0xFF;
-		state->view[i].cr = (fb_pixel_pair[i << 2] >> 8) & 0xFF;
+		uint32_t* row = cams[0].frame_buffer + (j * 160 * 4);
+
+		for(int i = FRAME_W; i -= 2;)
+		{	
+/*
+			state->view[i + j * FRAME_W].y  = row[i] & 0xFF;
+			state->view[i + j * FRAME_W].cb = (row[i] >> 24) & 0xFF;
+			state->view[i + j * FRAME_W].cr = (row[i] >> 8) & 0xFF;
+*/
+			state->view.luma[i + 0 * j * FRAME_W] = row[i] & 0xFF;
+			state->view.luma[i + 1 * j * FRAME_W] = (row[i] >> 16) & 0xFF;
+
+			state->view.chroma[(i >> 1) * (FRAME_W >> 1)].cr = (row[i] >> 8) & 0xFF;
+			state->view.chroma[(i >> 1) * (FRAME_W >> 1)].cb = (row[i] >> 24) & 0xFF;
+		}
 	}
 
 	return 0;
