@@ -62,7 +62,7 @@ typedef struct {
 	uint32_t distance;
 	struct {
 		uint8_t luma[FRAME_W * FRAME_H];
-		chroma_t chroma[FRAME_W * FRAME_H / 4];
+		chroma_t chroma[FRAME_W / 2 * FRAME_H];
 	} view;
 } raw_state_t;
 
