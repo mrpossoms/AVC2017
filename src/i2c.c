@@ -132,6 +132,6 @@ int i2c_init(const char* path)
 
 int i2c_poll_devices(raw_state_t* state)
 {
-	bno055_read_accel_xyz((struct bno055_linear_accel_t*)state->rot_rate);
+	bno055_read_accel_xyz((struct bno055_accel_t*)state->rot_rate);
 	bno055_read_gyro_xyz((struct bno055_gyro_t*)state->acc);
 }

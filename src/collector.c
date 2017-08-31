@@ -51,19 +51,22 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	for(int j = FRAME_H; j--;)
 	{
 		uint32_t* row = cams[0].frame_buffer + (j * 160 * 4);
+		uint8_t* luma_row = state->view.luma + (j * FRAME_W);
+		chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
 
-		for(int i = FRAME_W; i -= 2;)
+		for(int i = FRAME_W / 2; i--;)
 		{	
 /*
 			state->view[i + j * FRAME_W].y  = row[i] & 0xFF;
 			state->view[i + j * FRAME_W].cb = (row[i] >> 24) & 0xFF;
 			state->view[i + j * FRAME_W].cr = (row[i] >> 8) & 0xFF;
 */
-			state->view.luma[i + 0 * j * FRAME_W] = row[i] & 0xFF;
-			state->view.luma[i + 1 * j * FRAME_W] = (row[i] >> 16) & 0xFF;
 
-			state->view.chroma[(i >> 1) * (FRAME_W >> 1)].cr = (row[i] >> 8) & 0xFF;
-			state->view.chroma[(i >> 1) * (FRAME_W >> 1)].cb = (row[i] >> 24) & 0xFF;
+			luma_row[(i << 1) + 0] = row[i] & 0xFF;
+			luma_row[(i << 1) + 1] = (row[i] >> 16) & 0xFF;
+
+			chroma_row[i].cr = (row[i] >> 8) & 0xFF;
+			chroma_row[i].cb = (row[i] >> 24) & 0xFF;
 		}
 	}
 
