@@ -53,13 +53,18 @@ float clamp(float v)
 	return  v < 0 ? 0 : v;
 }
 
-void yuv422_to_rgb(color_t* yuv, color_t* rgb, int w, int h)
+void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
 {
-	for(int i = w * h; i--;)
+	for(int yi = h; yi--;)
+	for(int xi = w; xi--;)
+	// for(int i = w * h; i--;)
 	{
-		rgb[i].r = clamp(yuv[i].y + 1.14 * (yuv[i].cb - 128));
-		rgb[i].g = clamp(yuv[i].y - 0.395 * (yuv[i].cr - 128) - (0.581 * (yuv[i].cb - 128)));
-		rgb[i].b = clamp(yuv[i].y + 2.033 * (yuv[i].cr - 128));
+		int i = yi * w + xi;
+		int j = yi * (w >> 1) + (xi >> 1);
+
+		rgb[i].r = clamp(luma[i] + 1.14 * (uv[j].cb - 128));
+		rgb[i].g = clamp(luma[i] - 0.395 * (uv[j].cr - 128) - (0.581 * (uv[j].cb - 128)));
+		rgb[i].b = clamp(luma[i] + 2.033 * (uv[j].cr - 128));
 	}
 }
 
@@ -87,14 +92,14 @@ int main(int argc, char* argv[])
 
 	uint8_t lum[FRAME_W * FRAME_H];
 	color_t yuv[FRAME_W * FRAME_H];
-	color_t rgb[FRAME_W * FRAME_H];
+	color_t rgb[FRAME_W * FRAME_H] = {};
 	raw_example_t ex = {};
 
 	int img_fd = open(argv[1], O_RDONLY);
 	oneOK = (read(img_fd, &ex, sizeof(ex)) == sizeof(ex));
 
 	// yuv422_to_lum8(yuv, lum, FRAME_W, FRAME_H);
-	yuv422_to_rgb(yuv, rgb, FRAME_W, FRAME_H);
+	yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
 
 	while(!glfwWindowShouldClose(WIN)){
 
@@ -139,25 +144,26 @@ int main(int argc, char* argv[])
 
 		oneOK = (read(img_fd, &ex, sizeof(ex)) == sizeof(ex));
 		// yuv422_to_lum8(yuv, lum, FRAME_W, FRAME_H);
-		yuv422_to_rgb(ex.state.view, rgb, FRAME_W, FRAME_H);
+		yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
 
-		usleep(500000);
+		usleep(100000);
 	}
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		glEnable(GL_TEXTURE_2D);
 		glBegin(GL_QUADS);
-			glVertex2f( 1,  1);
-			glTexCoord2f(0, 0);
 
-			glVertex2f(-1,  1);
-			glTexCoord2f(0, 1);
-
-			glVertex2f(-1, -1);
-			glTexCoord2f(1, 1);
-
-			glVertex2f( 1, -1);
 			glTexCoord2f(1, 0);
+			glVertex2f( 1,  1);
+
+			glTexCoord2f(0, 0);
+			glVertex2f(-1,  1);
+
+			glTexCoord2f(0, 1);
+			glVertex2f(-1, -1);
+
+			glTexCoord2f(1, 1);
+			glVertex2f( 1, -1);
 		glEnd();
 
 		glfwPollEvents();

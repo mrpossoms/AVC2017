@@ -11,6 +11,7 @@
 
 static calib_t CALIBRATION;
 static raw_example_t* RAW_DS;
+static int DS_SIZE;
 static char* DS_PATH;
 
 void dataset_mean(example_t* dataset, float* mu_vec, unsigned int dims, unsigned int examples)
@@ -38,10 +39,11 @@ void dataset_range(example_t* dataset, range_t* ranges, unsigned int dims, unsig
 {
 	float* ex = dataset[0].state.v;
 
+	for(int i = examples; i--;)
 	for(int j = dims; j--;)
 	{
-		ranges[j].min = ex[j];
-		ranges[j].max = ex[j];
+		ranges[j].min = dataset[i].state.v[j];
+		ranges[j].max = dataset[i].state.v[j];
 	}
 
 	for(int i = examples; i--;)
@@ -80,11 +82,15 @@ void dataset_raw_to_float(raw_example_t* raw_ex, example_t* ex, calib_t* cal, un
 		s->state.distance = rs->state.distance;
 
 		// Convert camera data
-		for(int cell = FRAME_W * FRAME_H; cell--;)
+		for(int cell = LUMA_PIXELS; cell--;)
 		{
-			s->state.view[cell].y = rs->state.view[cell].y;
-			s->state.view[cell].cb = rs->state.view[cell].cb;
-			s->state.view[cell].cr = rs->state.view[cell].cr;
+			s->state.view.luma[cell] = rs->state.view.luma[cell];
+		}
+
+		for(int cell = CHRO_PIXELS; cell--;)
+		{
+			s->state.view.chroma[cell].cr = rs->state.view.chroma[cell].cr;
+			s->state.view.chroma[cell].cb = rs->state.view.chroma[cell].cb;
 		}
 
 		// Convert the action vectors
@@ -104,10 +110,12 @@ void load_dataset(const char* path)
 	}
 
 	off_t size = lseek(fd, 0, SEEK_END);
-	unsigned int examples = size / sizeof(raw_example_t);
+	DS_SIZE = size / sizeof(raw_example_t);
+
+	fprintf(stderr, "Reading dataset of %u examples...", DS_SIZE);
 
 	lseek(fd, 0, SEEK_SET);
-	RAW_DS = calloc(examples, sizeof(raw_example_t));
+	RAW_DS = calloc(DS_SIZE, sizeof(raw_example_t));
 
 	if(!RAW_DS)
 	{
@@ -115,13 +123,15 @@ void load_dataset(const char* path)
 	}
 
 	// Read whole file
-	for(int i = 0; i < examples; ++i)
+	for(int i = 0; i < DS_SIZE; ++i)
 	{
 		if(read(fd, RAW_DS + i, sizeof(raw_example_t)) != sizeof(raw_example_t))
 		{
 			EXIT("Read failed");
 		}
 	}
+
+	fprintf(stderr, "done!\n");
 
 	// clean up
 	close(fd);
@@ -161,7 +171,16 @@ int main(int argc, const char* argv[])
 {
 	proc_opts(argc, argv);
 
+	example_t examples[DS_SIZE];
+	range_t ranges[sizeof(state_vector_t) / 4] = {};
 
+	dataset_raw_to_float(RAW_DS, examples, &CALIBRATION, DS_SIZE);
+	dataset_range(examples, ranges, dims, DS_SIZE);
+
+	for(int i = dims; i--;)
+	{
+		printf("%d [%f - %f]\n", i, ranges[i].min, ranges[i].max);
+	}
 
 	return 0;
 }

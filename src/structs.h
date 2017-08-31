@@ -16,6 +16,8 @@
 #define PIX_DEPTH 3
 
 #define VIEW_PIXELS (FRAME_W * FRAME_H)
+#define LUMA_PIXELS (FRAME_W * FRAME_H)
+#define CHRO_PIXELS (FRAME_W / 2 * FRAME_H)
 
 typedef union {
 	struct {
@@ -61,8 +63,8 @@ typedef struct {
 	int8_t vel;
 	uint32_t distance;
 	struct {
-		uint8_t luma[FRAME_W * FRAME_H];
-		chroma_t chroma[FRAME_W / 2 * FRAME_H];
+		uint8_t luma[LUMA_PIXELS];
+		chroma_t chroma[CHRO_PIXELS];
 	} view;
 } raw_state_t;
 
@@ -71,6 +73,8 @@ typedef struct {
 	raw_action_t action;
 } raw_example_t;
 
+typedef float state_vector_t[3 + 3 + 1 + 1];
+
 typedef union {
 	struct {
 		float rot[3];
@@ -78,11 +82,11 @@ typedef union {
 		float vel;
 		float distance;
 		struct {
-			float luma[FRAME_W * FRAME_H];
-			chroma_t chroma[FRAME_W * FRAME_H / 4];		
+			float luma[LUMA_PIXELS];
+			chroma_f_t chroma[CHRO_PIXELS];
 		} view;
 	};
-	float v[3 + 3 + 2 + VIEW_PIXELS * 3];
+	state_vector_t v;
 } state_f_t;
 
 typedef union {
