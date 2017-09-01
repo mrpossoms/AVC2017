@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "structs.h"
+#include "dataset_hdr.h"
 #include "i2c.h"
 #include "cam.h"
 
@@ -94,10 +95,9 @@ int main(int argc, const char* argv[])
 	fprintf(stderr, "OK\n");
 	fprintf(stderr, "raw_state_t: %uB, raw_action_t: %uB\n", sizeof(raw_state_t), sizeof(raw_action_t));
 
-	dataset_header_t hdr = {
-		.magic = MAGIC,
-		.is_raw = 1
-	};
+	dataset_header_t hdr = {};
+	hdr.magic = MAGIC;
+	hdr.is_raw = 1;
 
 	// write the header first
 	write(1, &hdr, sizeof(hdr));

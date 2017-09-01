@@ -31,9 +31,11 @@ viewer: $(VIEWER_SRC)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $^ -o viewer $(VIEWER_LINK)
 
 collector: $(COLLECTOR_SRC)
+	make magic
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(COLLECTOR_INC) $^ -o collector
 
 masseuse: $(MASSEUSE_SRC)
+	make magic
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $^ $(MASSEUSE_MAIN) -o masseuse
 
 
