@@ -119,7 +119,11 @@ int main(int argc, char* argv[])
 
 	dataset_header_t hdr = {};
 	int oneOK = read(img_fd, &hdr, sizeof(hdr)) == sizeof(hdr);
-	oneOK *= hdr.magic == MAGIC;
+
+	if(hdr.magic != MAGIC)
+	{
+		EXIT("Incompatible version");
+	}
 
 	next_example(img_fd, &ex);
 	yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);

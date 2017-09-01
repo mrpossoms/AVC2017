@@ -8,6 +8,7 @@
 
 #include "structs.h"
 #include "curves.h"
+#include "dataset_hdr.h"
 
 static calib_t CALIBRATION;
 static raw_example_t* RAW_DS;
@@ -109,6 +110,14 @@ void load_dataset(const char* path)
 		EXIT("Failed to open '%s'", path);
 	}
 
+	dataset_header_t hdr = {};
+	read(fd, &hdr, sizeof(hdr));
+
+	if(hdr.magic != MAGIC)
+	{
+		EXIT("Incompatible version");
+	}
+
 	off_t size = lseek(fd, 0, SEEK_END);
 	DS_SIZE = size / sizeof(raw_example_t);
 
@@ -171,6 +180,7 @@ int main(int argc, const char* argv[])
 {
 	proc_opts(argc, argv);
 
+	const int dims = sizeof(state_vector_t) / 4;
 	example_t examples[DS_SIZE];
 	range_t ranges[sizeof(state_vector_t) / 4] = {};
 
