@@ -23,17 +23,21 @@ bin/tests:
 
 all: viewer collector masseuse
 
+magic: src/structs.h
+	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
+
 viewer: $(VIEWER_SRC)
-	$(CC) $(CFLAGS) -L/usr/local/lib $^ -o viewer $(VIEWER_LINK)
+	make magic
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $^ -o viewer $(VIEWER_LINK)
 
 collector: $(COLLECTOR_SRC)
-	$(CC) $(CFLAGS) $(COLLECTOR_INC) $^ -o collector
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(COLLECTOR_INC) $^ -o collector
 
 masseuse: $(MASSEUSE_SRC)
-	$(CC) $(CFLAGS) $^ $(MASSEUSE_MAIN) -o masseuse
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $^ $(MASSEUSE_MAIN) -o masseuse
 
 
-tests: bin/tests
+tests: bin/tests magic
 	@echo "Building tests..."
 	@for source in $(TST_SRC); do\
 		($(CC) -I./src  $(CFLAGS) $(MASSEUSE_SRC) src/tests/$$source.c  -o bin/tests/$${source%.*}.bin $(LINK)) || (exit 1);\

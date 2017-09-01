@@ -55,7 +55,7 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 		chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
 
 		for(int i = FRAME_W / 2; i--;)
-		{	
+		{
 			int li = i << 1;
 
 			luma_row[li + 0] = row[i] & 0xFF;
@@ -93,6 +93,14 @@ int main(int argc, const char* argv[])
 
 	fprintf(stderr, "OK\n");
 	fprintf(stderr, "raw_state_t: %uB, raw_action_t: %uB\n", sizeof(raw_state_t), sizeof(raw_action_t));
+
+	dataset_header_t hdr = {
+		.magic = MAGIC,
+		.is_raw = 1
+	};
+
+	// write the header first
+	write(1, &hdr, sizeof(hdr));
 
 	for(;;)
 	{

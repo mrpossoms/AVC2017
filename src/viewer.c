@@ -11,6 +11,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include "dataset_hdr.h"
 #include "structs.h"
 
 // #define RENDER_DEMO
@@ -68,6 +69,20 @@ void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
 	}
 }
 
+void next_example(int fd, raw_example_t* ex)
+{
+	size_t needed = sizeof(raw_example_t);
+	off_t  off = 0;
+	uint8_t* buf = (uint8_t*)ex;
+
+	while(needed)
+	{
+		size_t gotten = read(fd, buf + off, needed);
+		needed -= gotten;
+		off += gotten;
+	}
+}
+
 static int oneOK;
 int main(int argc, char* argv[])
 {
@@ -77,7 +92,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	fprintf(stderr, "raw_state_t: %luB, raw_action_t: %luB\n", sizeof(raw_state_t), sizeof(raw_action_t));
+	fprintf(stderr, "Magic %d\n", MAGIC);
 
 	WIN = glfwCreateWindow(640, 480, "AVC 2017", NULL, NULL);
 
@@ -95,10 +110,18 @@ int main(int argc, char* argv[])
 	color_t rgb[FRAME_W * FRAME_H] = {};
 	raw_example_t ex = {};
 
-	int img_fd = open(argv[1], O_RDONLY);
-	oneOK = (read(img_fd, &ex, sizeof(ex)) == sizeof(ex));
+	int img_fd = 0;
 
-	// yuv422_to_lum8(yuv, lum, FRAME_W, FRAME_H);
+	if(argc >= 2)
+	{
+		img_fd = open(argv[1], O_RDONLY);
+	}
+
+	dataset_header_t hdr = {};
+	int oneOK = read(img_fd, &hdr, sizeof(hdr)) == sizeof(hdr);
+	oneOK *= hdr.magic == MAGIC;
+
+	next_example(img_fd, &ex);
 	yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
 
 	while(!glfwWindowShouldClose(WIN)){
@@ -142,7 +165,8 @@ int main(int argc, char* argv[])
 			rgb
 		);
 
-		oneOK = (read(img_fd, &ex, sizeof(ex)) == sizeof(ex));
+		next_example(img_fd, &ex);
+		// oneOK = (read(img_fd, &ex, sizeof(ex)) == sizeof(ex));
 		// yuv422_to_lum8(yuv, lum, FRAME_W, FRAME_H);
 		yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
 
