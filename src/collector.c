@@ -3,14 +3,39 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <getopt.h>
 
 #include "structs.h"
 #include "dataset_hdr.h"
 #include "i2c.h"
 #include "cam.h"
 
+typedef enum {
+	COL_MODE_NORMAL = 0,
+	COL_MODE_ACT_CAL,
+} col_mode_t;
+
 #define THROTTLE_STOPPED 117
 int I2C_BUS;
+col_mode_t MODE;
+
+void proc_opts(int argc, const char ** argv)
+{
+	for(;;)
+	{
+		int c = getopt(argc, (char *const *)argv, "c");
+		if(c == -1) break;
+
+		switch (c) 
+		{
+			case 'c':
+				MODE = COL_MODE_ACT_CAL;
+				break;
+		}
+	}
+}
+
+
 
 int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 {
@@ -71,30 +96,9 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 }
 
 
-int main(int argc, const char* argv[])
+int collection(cam_t* cam)
 {
-	int res, started = 0;
-	cam_settings_t cfg = {
-		.width  = 160,
-		.height = 120
-	};
-
-	fprintf(stderr, "Sensors...");
-
-	cam_t cam[2] = {
-		cam_open("/dev/video0", &cfg),
-		cam_open("/dev/video1", &cfg),
-	};
-
-	if((res = i2c_init("/dev/i2c-1")))
-	{
-		fprintf(stderr, "I2C init failed (%d)\n", res);
-		return -1;
-	}
-
-	fprintf(stderr, "OK\n");
-	fprintf(stderr, "raw_state_t: %uB, raw_action_t: %uB\n", sizeof(raw_state_t), sizeof(raw_action_t));
-
+	int started = 0;
 	dataset_header_t hdr = {};
 	hdr.magic = MAGIC;
 	hdr.is_raw = 1;
@@ -144,6 +148,42 @@ int main(int argc, const char* argv[])
 			return -3;
 		}
 	}
+}
 
-	return 0;
+
+int main(int argc, const char* argv[])
+{
+	int res;
+	cam_settings_t cfg = {
+		.width  = 160,
+		.height = 120
+	};
+
+	proc_opts(argc, argv);
+
+	fprintf(stderr, "Sensors...");
+
+	cam_t cam[2] = {
+		cam_open("/dev/video0", &cfg),
+		cam_open("/dev/video1", &cfg),
+	};
+
+	if((res = i2c_init("/dev/i2c-1")))
+	{
+		fprintf(stderr, "I2C init failed (%d)\n", res);
+		return -1;
+	}
+
+	fprintf(stderr, "OK\n");
+
+	switch(MODE)
+	{
+		case COL_MODE_ACT_CAL:
+			break;
+		default:
+			res = collection(cam);
+	}
+
+
+	return res;
 }
