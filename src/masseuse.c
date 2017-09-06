@@ -95,7 +95,8 @@ void dataset_range(int fd, range_t* ranges, unsigned int dims, unsigned int exam
 	{
 		float* st;
 
-		read(fd, &ex, sizeof(ex));
+		read(fd, &raw, sizeof(raw));
+		dataset_raw_to_float(&raw, &ex, &CALIBRATION);
 		st = ex.state.v;
 		for(int j = dims; j--;)
 		{
@@ -109,24 +110,24 @@ void dataset_range(int fd, range_t* ranges, unsigned int dims, unsigned int exam
 
 int load_dataset(const char* path)
 {
-	int fd = open(path, O_RDONLY);
+	DS_FD = open(path, O_RDONLY);
 
-	if(fd < 0)
+	if(DS_FD < 0)
 	{
 		EXIT("Failed to open '%s'", path);
 	}
 
 	dataset_header_t hdr = {};
-	read(fd, &hdr, sizeof(hdr));
+	read(DS_FD, &hdr, sizeof(hdr));
 
 	if(hdr.magic != MAGIC)
 	{
 		EXIT("Incompatible version");
 	}
 
-	off_t size = lseek(fd, 0, SEEK_END);
+	off_t size = lseek(DS_FD, 0, SEEK_END);
 	DS_SIZE = size / sizeof(raw_example_t);
-	lseek(fd, 0, SEEK_SET);
+	lseek(DS_FD, 0, SEEK_SET);
 
 	return 0;
 }
