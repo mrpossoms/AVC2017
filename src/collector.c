@@ -19,6 +19,8 @@ typedef enum {
 int I2C_BUS;
 col_mode_t MODE;
 
+calib_t CAL;
+
 void proc_opts(int argc, const char ** argv)
 {
 	for(;;)
@@ -39,10 +41,12 @@ void proc_opts(int argc, const char ** argv)
 
 int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 {
+	if(!action) return 1;
+
 	// Get throttle and steering state
 	if(i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 7, (void*)action, sizeof(raw_action_t)))
 	{
-		return 1;
+		return 2;
 	}
 
 	uint16_t odo = 0;
@@ -52,6 +56,8 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 
 	uint8_t mode = 0;
 	res = bno055_get_operation_mode(&mode);
+
+	if(!state) return 3;
 
 	if(bno055_read_accel_xyz((struct bno055_accel_t*)state->acc))
 	{
@@ -93,6 +99,44 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	}
 
 	return 0;
+}
+
+
+int calibration()
+{
+	raw_action_t action = {};
+		
+	poll_i2c_devs(NULL, &action);
+
+	CAL.throttle.min = CAL.throttle.max = action.throttle;
+	CAL.steering.min = CAL.steering.max = action.steering;
+
+	for(;;)
+	{
+		poll_i2c_devs(NULL, &action);
+		calib_t last_cal = CAL;
+
+		if(action.steering > CAL.steering.max) CAL.steering.max = action.steering;
+		if(action.throttle > CAL.throttle.max) CAL.throttle.max = action.throttle;
+
+		if(action.steering < CAL.steering.min) CAL.steering.min = action.steering;
+		if(action.throttle < CAL.throttle.min) CAL.throttle.min = action.throttle;
+
+		if(memcmp(&last_cal, &CAL, sizeof(CAL)))
+		{
+			fprintf(stderr, "throttle: [%f - %f]\nsteering: [%f - %f]\n",
+					CAL.throttle.min, CAL.throttle.max,
+					CAL.steering.min, CAL.steering.max
+			       );
+
+			// save the calibration profile
+			int fd = open("actions.cal", O_CREAT, 0666);
+			write(fd, &CAL, sizeof(CAL));
+			close(fd);
+		}
+
+		usleep(500000);
+	}
 }
 
 
@@ -179,6 +223,7 @@ int main(int argc, const char* argv[])
 	switch(MODE)
 	{
 		case COL_MODE_ACT_CAL:
+			calibration();
 			break;
 		default:
 			res = collection(cam);
