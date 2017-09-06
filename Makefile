@@ -34,9 +34,9 @@ collector: $(COLLECTOR_SRC)
 	make magic
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(COLLECTOR_INC) $^ -o collector
 
-masseuse: $(MASSEUSE_SRC)
+masseuse: $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	make magic
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $^ $(MASSEUSE_MAIN) -o masseuse
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $^  -o masseuse
 
 
 tests: bin/tests magic
