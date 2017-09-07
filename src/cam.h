@@ -1,6 +1,7 @@
 #ifndef AVC_CAM
 #define AVC_CAM
 
+#include <time.h>
 #include <linux/videodev2.h>
 #include <inttypes.h>
 #include <sys/types.h>

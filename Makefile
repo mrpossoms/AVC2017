@@ -2,7 +2,7 @@ $(eval OS := $(shell uname))
 
 CC=gcc
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
-COLLECTOR_SRC=src/collector.c src/i2c.c src/cam.c src/BNO055_driver/*.c
+COLLECTOR_SRC=src/BNO055_driver/*.c src/collector.c src/i2c.c src/cam.c 
 COLLECTOR_INC=-I./src -I./src/BNO055_driver
 VIEWER_SRC=src/viewer.c
 VIEWER_LINK=

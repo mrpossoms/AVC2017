@@ -20,7 +20,10 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	if(fd < 0)
 	{
 		fprintf(stderr, "Error opening video device '%s'\n", path);
-		exit(-1);
+		//exit(-1);
+
+		cam_t empty = {};
+		return empty;
 	}
 
 	struct v4l2_capability cap;

@@ -17,15 +17,15 @@ typedef enum {
 
 #define THROTTLE_STOPPED 117
 int I2C_BUS;
+int NORM_VIDEO;
 col_mode_t MODE;
-
 calib_t CAL;
 
 void proc_opts(int argc, const char ** argv)
 {
 	for(;;)
 	{
-		int c = getopt(argc, (char *const *)argv, "c");
+		int c = getopt(argc, (char *const *)argv, "cn");
 		if(c == -1) break;
 
 		switch (c) 
@@ -33,6 +33,10 @@ void proc_opts(int argc, const char ** argv)
 			case 'c':
 				MODE = COL_MODE_ACT_CAL;
 				break;
+			case 'n':
+				NORM_VIDEO = 1;
+				break;
+
 		}
 	}
 }
@@ -130,7 +134,7 @@ int calibration()
 			       );
 
 			// save the calibration profile
-			int fd = open("actions.cal", O_CREAT, 0666);
+			int fd = open("actions.cal", O_CREAT | O_WRONLY, 0666);
 			write(fd, &CAL, sizeof(CAL));
 			close(fd);
 		}
