@@ -10,6 +10,9 @@
 #include "i2c.h"
 #include "cam.h"
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 typedef enum {
 	COL_MODE_NORMAL = 0,
 	COL_MODE_ACT_CAL,
@@ -82,6 +85,14 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 {
 	cam_wait_frame(cams);
 
+	range_t luma_range = { 128, 128 };
+	range_t cr_range = { 128, 128 };
+	range_t cb_range = { 128, 128 };
+	float luma_mu = 0;
+	float cr_mu = 0;
+	float cb_mu = 0;
+
+
 	// Downsample the intensity resolution to match that of
 	// the chroma
 	for(int j = FRAME_H; j--;)
@@ -89,7 +100,7 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 		uint32_t* row = cams[0].frame_buffer + (j * FRAME_W * 2);
 		uint8_t* luma_row = state->view.luma + (j * FRAME_W);
 		chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
-
+		
 		for(int i = FRAME_W / 2; i--;)
 		{
 			int li = i << 1;
@@ -99,8 +110,49 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 
 			chroma_row[i].cr = (row[i] >> 8) & 0xFF;
 			chroma_row[i].cb = (row[i] >> 24) & 0xFF;
+
+			if(NORM_VIDEO)
+			{
+				for(int k = 2; k--;)
+				{
+					luma_range.min = MIN(luma_range.min, luma_row[li + i + k]);
+					luma_range.max = MAX(luma_range.max, luma_row[li + i + k]);
+					luma_mu += luma_row[li + i + k];
+				}		
+
+
+				cr_range.min = MIN(cr_range.min, chroma_row[i].cr);
+				cr_range.max = MAX(cr_range.max, chroma_row[i].cr);
+				cb_range.min = MIN(cb_range.min, chroma_row[i].cb);
+				cb_range.max = MAX(cb_range.max, chroma_row[i].cb);
+
+				cr_mu += chroma_row[i].cr;
+				cb_mu += chroma_row[i].cb;
+			}
 		}
 	}
+
+	if(NORM_VIDEO)
+	{
+		luma_mu /= (FRAME_W * FRAME_H);
+		cr_mu /= (FRAME_W / 2) * FRAME_H;
+		cb_mu /= (FRAME_W / 2) * FRAME_H;
+
+		for(int j = FRAME_H; j--;)
+		{
+			uint32_t* row = cams[0].frame_buffer + (j * FRAME_W * 2);
+			uint8_t* luma_row = state->view.luma + (j * FRAME_W);
+			chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
+			
+			for(int i = FRAME_W / 2; i--;)
+			{
+				int li = i << 1;
+
+
+			}
+		}
+	}
+
 
 	return 0;
 }
@@ -182,7 +234,7 @@ int collection(cam_t* cam)
 			}
 
 			fprintf(stderr, "Finished\n");
-			break;
+			//break;
 		}
 		else
 		{
