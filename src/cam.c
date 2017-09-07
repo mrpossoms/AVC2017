@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <assert.h>
 
 #include "structs.h"
 #include "cam.h"
@@ -156,10 +157,11 @@ int cam_config(int fd, cam_settings_t* cfg)
 
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-	parm.parm.capture.timeperframe.numerator = 30;
+	parm.parm.capture.timeperframe.numerator = 15;
 	parm.parm.capture.timeperframe.denominator = 1;
 
 	int ret = ioctl(fd, VIDIOC_S_PARM, &parm);
+	assert(ret == 0);
 
 	return 0;
 }
