@@ -18,8 +18,6 @@
 
 GLFWwindow* WIN;
 GLuint frameTex;
-size_t frameBufferSize;
-char*  frameBuffer = NULL;
 
 static void setupGL()
 {
@@ -58,7 +56,6 @@ void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
 {
 	for(int yi = h; yi--;)
 	for(int xi = w; xi--;)
-	// for(int i = w * h; i--;)
 	{
 		int i = yi * w + xi;
 		int j = yi * (w >> 1) + (xi >> 1);
@@ -83,11 +80,36 @@ void next_example(int fd, raw_example_t* ex)
 	}
 }
 
+
+void display_static()
+{
+	static int rand_fd;
+	static uint8_t lum[FRAME_W * FRAME_H];
+
+	if(!rand_fd)
+	{
+		rand_fd = open("/dev/random", O_RDONLY);
+	}
+
+	read(rand_fd, lum, VIEW_PIXELS);
+
+	glTexImage2D(
+		GL_TEXTURE_2D,
+		0,
+		GL_LUMINANCE, // one color channel
+		FRAME_W,
+		FRAME_H,
+		0, // no border
+		GL_LUMINANCE,
+		GL_UNSIGNED_BYTE,
+		lum
+	);
+}
+
+
 static int oneOK;
 int main(int argc, char* argv[])
 {
-	pthread_t rcThread;
-
 	if (!glfwInit()){
 		return -1;
 	}
@@ -105,8 +127,6 @@ int main(int argc, char* argv[])
 	setupGL();
 	createTexture(&frameTex);
 
-	uint8_t lum[FRAME_W * FRAME_H];
-	color_t yuv[FRAME_W * FRAME_H];
 	color_t rgb[FRAME_W * FRAME_H] = {};
 	raw_example_t ex = {};
 
@@ -130,52 +150,27 @@ int main(int argc, char* argv[])
 
 	while(!glfwWindowShouldClose(WIN)){
 
-	int res = 1;
-	if(!oneOK)
-	{
-		static int rand_fd;
-
-		if(!rand_fd)
+		if(!oneOK)
 		{
-			rand_fd = open("/dev/random", O_RDONLY);
+			display_static();
 		}
+		else
+		{
+			glTexImage2D(
+				GL_TEXTURE_2D,
+				0,
+				GL_RGB,
+				FRAME_W,
+				FRAME_H,
+				0,
+				GL_RGB,
+				GL_UNSIGNED_BYTE,
+				rgb
+			);
 
-		read(rand_fd, lum, VIEW_PIXELS);
-
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_LUMINANCE, // one color channel
-			FRAME_W,
-			FRAME_H,
-			0, // no border
-			GL_LUMINANCE,
-			GL_UNSIGNED_BYTE,
-			lum
-		);
-
-	}
-	else
-	{
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_RGB,
-			FRAME_W,
-			FRAME_H,
-			0,
-			GL_RGB,
-			GL_UNSIGNED_BYTE,
-			rgb
-		);
-
-		next_example(img_fd, &ex);
-		// oneOK = (read(img_fd, &ex, sizeof(ex)) == sizeof(ex));
-		// yuv422_to_lum8(yuv, lum, FRAME_W, FRAME_H);
-		yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
-
-		usleep(100000);
-	}
+			next_example(img_fd, &ex);
+			yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
+		}
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		glEnable(GL_TEXTURE_2D);

@@ -26,17 +26,14 @@ all: viewer collector masseuse
 magic: src/structs.h
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
-viewer: $(VIEWER_SRC)
-	make magic
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $^ -o viewer $(VIEWER_LINK)
+viewer: magic $(VIEWER_SRC)
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(VIEWER_SRC) -o viewer $(VIEWER_LINK)
 
-collector: $(COLLECTOR_SRC)
-	make magic
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(COLLECTOR_INC) $^ -o collector
+collector: magic $(COLLECTOR_SRC)
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(COLLECTOR_INC) $(COLLECTOR_SRC) -o collector
 
-masseuse: $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
-	make magic
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $^  -o masseuse
+masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
 
 
 tests: bin/tests magic
