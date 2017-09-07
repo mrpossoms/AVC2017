@@ -129,6 +129,13 @@ int load_dataset(const char* path)
 	DS_SIZE = size / sizeof(raw_example_t);
 	lseek(DS_I_FD, 0, SEEK_SET);
 
+	int fd = open("actions.cal", O_RDONLY);
+	if(fd >= 0)
+	{
+		read(fd, &CALIBRATION, sizeof(CALIBRATION));
+		close(fd);
+	}
+
 	return 0;
 }
 
