@@ -35,6 +35,7 @@ void proc_opts(int argc, const char ** argv)
 		{
 			case 'c':
 				MODE = COL_MODE_ACT_CAL;
+				fprintf(stderr, "Calibrating action vector\n");
 				break;
 			case 'n':
 				NORM_VIDEO = 1;
@@ -51,7 +52,7 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 	if(!action) return 1;
 
 	// Get throttle and steering state
-	if(i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 7, (void*)action, sizeof(raw_action_t)))
+	if(i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 1, (void*)action, sizeof(raw_action_t)))
 	{
 		return 2;
 	}
@@ -148,6 +149,12 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 			{
 				int li = i << 1;
 
+			luma_row[li + 0] /= FRAME_H * FRAME_W;
+			luma_row[li + 1] /= FRAME_H * FRAME_W;
+
+			chroma_row[i].cr /= FRAME_H * FRAME_W / 2;
+			chroma_row[i].cb /= FRAME_H * FRAME_W / 2;
+
 
 			}
 		}
@@ -158,7 +165,7 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 }
 
 
-int calibration()
+int calibration(cam_settings_t cfg)
 {
 	raw_action_t action = {};
 		
@@ -224,6 +231,7 @@ int collection(cam_t* cam)
 			fprintf(stderr, "Error capturing frame\n");
 			return -2;
 		}
+/*
 
 		int gas = action.throttle;
 		if((THROTTLE_STOPPED - 3) >= gas && gas <= (THROTTLE_STOPPED + 3))
@@ -240,7 +248,7 @@ int collection(cam_t* cam)
 		{
 			started = 1;
 		}
-
+*/
 		raw_example_t ex = { state, action };
 		if(write(1, &ex, sizeof(ex)) != sizeof(ex))
 		{
@@ -279,7 +287,7 @@ int main(int argc, const char* argv[])
 	switch(MODE)
 	{
 		case COL_MODE_ACT_CAL:
-			calibration();
+			calibration(cfg);
 			break;
 		default:
 			res = collection(cam);

@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 #include "structs.h"
 #include "cam.h"
@@ -16,6 +17,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 {
 
 	int fd = open(path, O_RDWR);
+	int res;
 
 	if(fd < 0)
 	{
@@ -27,20 +29,22 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	}
 
 	struct v4l2_capability cap;
-	if(ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0)
+	res = ioctl(fd, VIDIOC_QUERYCAP, &cap);
+	if(res < 0)
 	{
-		fprintf(stderr, "Error querying '%s' for capabilities\n", path);
+		fprintf(stderr, "Error: %d querying '%s' for capabilities (%d)\n", res, path, errno);
 		exit(-2);
 	}
 
 	if(!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE))
 	{
-		fprintf(stderr, "Error, '%s' lacks V4L2_CAP_VIDEO_CAPTURE capability\n", path);
+		fprintf(stderr, "Error: '%s' lacks V4L2_CAP_VIDEO_CAPTURE capability\n", path);
 	}
 
-	if(cam_config(fd, cfg) < 0)
+	res = cam_config(fd, cfg);
+	if(res < 0)
 	{
-		fprintf(stderr, "Error configuring '%s'\n", path);
+		fprintf(stderr, "Error: %d configuring '%s' (%d)\n", res, path, errno);
 		exit(-3);
 	}
 
