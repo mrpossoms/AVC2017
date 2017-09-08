@@ -52,7 +52,7 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 	if(!action) return 1;
 
 	// Get throttle and steering state
-	if(i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 1, (void*)action, sizeof(raw_action_t)))
+	if(i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 2, (void*)action, sizeof(raw_action_t)))
 	{
 		return 2;
 	}
@@ -139,6 +139,9 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 		luma_mu /= (FRAME_W * FRAME_H);
 		cr_mu /= (FRAME_W / 2) * FRAME_H;
 		cb_mu /= (FRAME_W / 2) * FRAME_H;
+		float luma_spread = luma_range.max - luma_range.min;
+		float cr_spread = cr_range.max - cr_range.min;
+		float cb_spread = cb_range.max - cb_range.min;
 
 		int bi = cams[0].buffer_info.index;
 
@@ -152,12 +155,13 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 			{
 				int li = i << 1;
 
-			luma_row[li + 0] /= FRAME_H * FRAME_W;
-			luma_row[li + 1] /= FRAME_H * FRAME_W;
+			luma_row[li + 0] = 255 * (luma_row[li + 0] - luma_range.min) / luma_spread;
+			luma_row[li + 1] = 255 * (luma_row[li + 1] - luma_range.min) / luma_spread;
 
-			chroma_row[i].cr /= FRAME_H * FRAME_W / 2;
-			chroma_row[i].cb /= FRAME_H * FRAME_W / 2;
-
+/*
+			chroma_row[i].cr = 255 * (chroma_row[i].cr - cr_range.min) / cr_spread;
+			chroma_row[i].cb = 255 * (chroma_row[i].cb - cb_range.min) / cb_spread;
+*/
 
 			}
 		}
