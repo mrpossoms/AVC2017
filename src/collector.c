@@ -272,6 +272,7 @@ int collection(cam_t* cam)
 		{
 			fprintf(stderr, "%dHz\n", updates);
 			updates = 0;
+			now = time(NULL);
 		}
 	}
 }

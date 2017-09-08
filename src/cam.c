@@ -53,7 +53,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	struct v4l2_requestbuffers bufrequest = {};
 	bufrequest.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	bufrequest.memory = V4L2_MEMORY_MMAP;
-	bufrequest.count = 30;
+	bufrequest.count = 10;
 
 	if(ioctl(fd, VIDIOC_REQBUFS, &bufrequest) < 0)
 	{
@@ -133,7 +133,7 @@ int cam_request_frame(cam_t* cam)
 
 int cam_wait_frame(cam_t* cam)
 {
-	return ioctl(cam->fd, VIDIOC_DQBUF, &cam->buffer_info);
+	ioctl(cam->fd, VIDIOC_DQBUF, &cam->buffer_info);
 }
 
 
@@ -172,8 +172,8 @@ int cam_config(int fd, cam_settings_t* cfg)
 
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-	parm.parm.capture.timeperframe.numerator = 15;
-	parm.parm.capture.timeperframe.denominator = 1;
+	parm.parm.capture.timeperframe.numerator = 1;
+	parm.parm.capture.timeperframe.denominator = 15;
 
 	res = ioctl(fd, VIDIOC_S_PARM, &parm);
 
