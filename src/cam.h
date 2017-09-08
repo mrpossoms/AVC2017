@@ -13,7 +13,7 @@ typedef struct {
 
 typedef struct {
 	int fd;
-	void* frame_buffer;
+	void** frame_buffers;
 	struct v4l2_buffer buffer_info;
 } cam_t;
 

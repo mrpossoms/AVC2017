@@ -98,7 +98,8 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	// the chroma
 	for(int j = FRAME_H; j--;)
 	{
-		uint32_t* row = cams[0].frame_buffer + (j * FRAME_W * 2);
+		int bi = cams[0].buffer_info.index;
+		uint32_t* row = cams[0].frame_buffers[bi] + (j * FRAME_W * 2);
 		uint8_t* luma_row = state->view.luma + (j * FRAME_W);
 		chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
 		
@@ -139,9 +140,11 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 		cr_mu /= (FRAME_W / 2) * FRAME_H;
 		cb_mu /= (FRAME_W / 2) * FRAME_H;
 
+		int bi = cams[0].buffer_info.index;
+
 		for(int j = FRAME_H; j--;)
 		{
-			uint32_t* row = cams[0].frame_buffer + (j * FRAME_W * 2);
+			uint32_t* row = cams[0].frame_buffers[bi] + (j * FRAME_W * 2);
 			uint8_t* luma_row = state->view.luma + (j * FRAME_W);
 			chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
 			
@@ -205,13 +208,16 @@ int calibration(cam_settings_t cfg)
 
 int collection(cam_t* cam)
 {
-	int started = 0;
+	time_t now;
+	int started = 0, updates = 0;
 	dataset_header_t hdr = {};
 	hdr.magic = MAGIC;
 	hdr.is_raw = 1;
 
 	// write the header first
 	write(1, &hdr, sizeof(hdr));
+
+	now = time(NULL);
 
 	for(;;)
 	{
@@ -223,7 +229,7 @@ int collection(cam_t* cam)
 		if(poll_i2c_devs(&state, &action))
 		{
 			fprintf(stderr, "Error reading from i2c devices\n");
-			return -1;
+			//return -1;
 		}
 
 		if(poll_vision(&state, cam))
@@ -255,6 +261,14 @@ int collection(cam_t* cam)
 			fprintf(stderr, "Error writing state-action pair\n");
 			return -3;
 		}
+
+		++updates;
+
+		if(now != time(NULL))
+		{
+			fprintf(stderr, "%dHz\n", updates);
+			updates = 0;
+		}
 	}
 }
 
@@ -273,13 +287,13 @@ int main(int argc, const char* argv[])
 
 	cam_t cam[2] = {
 		cam_open("/dev/video0", &cfg),
-		cam_open("/dev/video1", &cfg),
+		//cam_open("/dev/video1", &cfg),
 	};
 
 	if((res = i2c_init("/dev/i2c-1")))
 	{
 		fprintf(stderr, "I2C init failed (%d)\n", res);
-		return -1;
+		//return -1;
 	}
 
 	fprintf(stderr, "OK\n");

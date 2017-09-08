@@ -49,10 +49,10 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	}
 
 	// Inform v4l about the buffers we want to receive data through
-	struct v4l2_requestbuffers bufrequest;
+	struct v4l2_requestbuffers bufrequest = {};
 	bufrequest.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	bufrequest.memory = V4L2_MEMORY_MMAP;
-	bufrequest.count = 1;
+	bufrequest.count = 30;
 
 	if(ioctl(fd, VIDIOC_REQBUFS, &bufrequest) < 0)
 	{
@@ -61,40 +61,50 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	}
 
 
-	// Find the buffer size
-	struct v4l2_buffer bufferinfo;
-	memset(&bufferinfo, 0, sizeof(bufferinfo));
-
-	bufferinfo.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	bufferinfo.memory = V4L2_MEMORY_MMAP;
-	bufferinfo.index = 0;
-
-	if(ioctl(fd, VIDIOC_QUERYBUF, &bufferinfo) < 0)
+	if(bufrequest.count < 10)
 	{
-		fprintf(stderr, "VIDIOC_QUERYBUF\n");
+		fprintf(stderr, "Not enough memory\n");
 		exit(-5);
 	}
 
-	void* frame_buffer = mmap(
-		NULL,
-		bufferinfo.length,
-		PROT_READ | PROT_WRITE,
-		MAP_SHARED,
-		fd,
-		bufferinfo.m.offset
-	);	
 
-	bzero(frame_buffer, bufferinfo.length);
-
-	if(frame_buffer == MAP_FAILED)
+	struct v4l2_buffer bufferinfo = {};
+	void** fbs = calloc(sizeof(void*), bufrequest.count);
+	for(int i = bufrequest.count; i--;)
 	{
-		fprintf(stderr, "mmap failed\n");
-		exit(-6);
+		bufferinfo.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		bufferinfo.memory = V4L2_MEMORY_MMAP;
+		bufferinfo.index = i;
+
+		if(ioctl(fd, VIDIOC_QUERYBUF, &bufferinfo) < 0)
+		{
+			fprintf(stderr, "VIDIOC_QUERYBUF\n");
+			exit(-5);
+		}
+
+		fbs[i] = mmap(
+			NULL,
+			bufferinfo.length,
+			PROT_READ | PROT_WRITE,
+			MAP_SHARED,
+			fd,
+			bufferinfo.m.offset
+		);
+
+		if(fbs[i] == MAP_FAILED)
+		{
+			fprintf(stderr, "mmap failed\n");
+			exit(-6);
+		}
+
+		bzero(fbs[i], bufferinfo.length);
+		ioctl(fd, VIDIOC_QBUF, &bufferinfo);
 	}
+
 
 	cam_t cam = {
 		.fd = fd,
-		.frame_buffer = frame_buffer,
+		.frame_buffers = fbs,
 		.buffer_info = bufferinfo,
 	};
 
@@ -110,6 +120,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	return cam;
 }
 
+
 int cam_request_frame(cam_t* cam)
 {
 	cam->buffer_info.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -118,25 +129,29 @@ int cam_request_frame(cam_t* cam)
 	return ioctl(cam->fd, VIDIOC_QBUF, &cam->buffer_info);
 }
 
+
 int cam_wait_frame(cam_t* cam)
 {
 	return ioctl(cam->fd, VIDIOC_DQBUF, &cam->buffer_info);
 }
 
+
 int cam_config(int fd, cam_settings_t* cfg)
 {
+	int res = 0;
 	struct v4l2_format format;
 
 	if(!cfg)
 	{
-		fprintf(stderr, "Error, null configuration provided\n");
+		fprintf(stderr, "Error: null configuration provided\n");
 		return -1;
 	}
 
 /*
-	if(ioctl(fd, VIDIOC_G_FMT, &format) < 0)
+	res = ioctl(fd, VIDIOC_G_FMT, &format);
+	if(res < 0)
 	{
-		fprintf(stderr, "Error, failed retrieving camera settings\n");
+		fprintf(stderr, "Error: failed retrieving camera settings (%d)\n", errno);
 		return -2;
 	}
 */
@@ -148,18 +163,18 @@ int cam_config(int fd, cam_settings_t* cfg)
 
 	if(ioctl(fd, VIDIOC_S_FMT, &format) < 0)
 	{
-		fprintf(stderr, "Error, failed applying camera settings\n");
+		fprintf(stderr, "Error: failed applying camera settings\n");
 		return -3;
 	}
 
-	struct v4l2_streamparm parm;
+	struct v4l2_streamparm parm = {};
 
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-	parm.parm.capture.timeperframe.numerator = 30;
+	parm.parm.capture.timeperframe.numerator = 15;
 	parm.parm.capture.timeperframe.denominator = 1;
 
-	int ret = ioctl(fd, VIDIOC_S_PARM, &parm);
+	res = ioctl(fd, VIDIOC_S_PARM, &parm);
 
 	return 0;
 }

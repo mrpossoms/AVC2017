@@ -112,7 +112,8 @@ int i2c_init(const char* path)
 
 	if(I2C_BUS_FD < 0)
 	{
-		EXIT("Failed to open I2C bus '%s'", path);
+		//EXIT("Failed to open I2C bus '%s'", path);
+		return -1;
 	}
 
 	// Initalize the BNO055 driver
