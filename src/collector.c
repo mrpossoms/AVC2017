@@ -8,6 +8,7 @@
 #include "structs.h"
 #include "dataset_hdr.h"
 #include "i2c.h"
+#include "drv_pwm.h"
 #include "cam.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -49,20 +50,16 @@ void proc_opts(int argc, const char ** argv)
 
 int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 {
-	if(!action) return 1;
-
-	// Get throttle and steering state
-	if(i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 2, (void*)action, sizeof(raw_action_t)))
-	{
-		return 2;
-	}
-
 	uint16_t odo = 0;
-	int res = i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0C, (void*)&odo, sizeof(odo));
-
-	fprintf(stderr, "odo: %d\n", odo);
-
 	uint8_t mode = 0;
+	int res;
+
+	res = pwm_get_action(action);
+	if(res) return res;
+
+	res = i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0C, (void*)&odo, sizeof(odo));
+
+
 	res = bno055_get_operation_mode(&mode);
 
 	if(!state) return 3;
@@ -300,7 +297,8 @@ int main(int argc, const char* argv[])
 		fprintf(stderr, "I2C init failed (%d)\n", res);
 		//return -1;
 	}
-
+	
+	pwm_reset();
 	fprintf(stderr, "OK\n");
 
 	switch(MODE)

@@ -126,9 +126,6 @@ int i2c_init(const char* path)
 	bno055_set_power_mode(BNO055_POWER_MODE_NORMAL);
 	bno055_set_operation_mode(BNO055_OPERATION_MODE_NDOF);
 
-	// reboot the PWM logger
-	i2c_write(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0B, 0);
-	sleep(2);
 }
 
 int i2c_poll_devices(raw_state_t* state)
