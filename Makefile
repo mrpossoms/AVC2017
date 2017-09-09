@@ -1,7 +1,7 @@
 $(eval OS := $(shell uname))
 
 CC=gcc
-CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
+CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wno-pointer-compare
 COLLECTOR_SRC=src/BNO055_driver/*.c src/collector.c src/i2c.c src/cam.c 
 COLLECTOR_INC=-I./src -I./src/BNO055_driver
 VIEWER_SRC=src/viewer.c
@@ -34,6 +34,12 @@ collector: magic $(COLLECTOR_SRC)
 
 masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
+
+install-bot: collector
+	ln -s $(shell pwd)/$^ /usr/bin/$^
+
+install-tools: masseuse viewer
+	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
 
 
 tests: bin/tests magic
