@@ -19,7 +19,6 @@ typedef enum {
 	COL_MODE_ACT_CAL,
 } col_mode_t;
 
-#define THROTTLE_STOPPED 117
 int I2C_BUS;
 int NORM_VIDEO;
 col_mode_t MODE;
@@ -50,15 +49,15 @@ void proc_opts(int argc, const char ** argv)
 
 int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
 {
-	uint16_t odo = 0;
+	int odo = 0;
 	uint8_t mode = 0;
 	int res;
 
 	res = pwm_get_action(action);
 	if(res) return res;
 
-	res = i2c_read(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0C, (void*)&odo, sizeof(odo));
-
+	odo = pwm_get_odo();
+	if(odo < 0) return odo;
 
 	res = bno055_get_operation_mode(&mode);
 
