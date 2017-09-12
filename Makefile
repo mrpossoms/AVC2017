@@ -2,7 +2,7 @@ $(eval OS := $(shell uname))
 
 CC=gcc
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wno-pointer-compare
-COLLECTOR_SRC=src/BNO055_driver/*.c src/collector.c src/i2c.c src/drv_pwm.c src/cam.c 
+COLLECTOR_SRC=src/sys.c src/BNO055_driver/*.c src/collector.c src/i2c.c src/drv_pwm.c src/cam.c 
 INC=-I./src -I./src/BNO055_driver
 VIEWER_SRC=src/viewer.c
 VIEWER_LINK=
@@ -31,7 +31,7 @@ viewer: magic $(VIEWER_SRC)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(VIEWER_SRC) -o viewer $(VIEWER_LINK)
 
 collector: magic $(COLLECTOR_SRC)
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(COLLECTOR_SRC) -o collector
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(COLLECTOR_SRC) -o collector -lpthread
 
 masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse

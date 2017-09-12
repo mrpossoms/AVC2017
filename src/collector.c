@@ -5,6 +5,7 @@
 #include <string.h>
 #include <getopt.h>
 
+#include "sys.h"
 #include "structs.h"
 #include "dataset_hdr.h"
 #include "i2c.h"
@@ -23,6 +24,7 @@ int I2C_BUS;
 int NORM_VIDEO;
 col_mode_t MODE;
 calib_t CAL;
+unsigned int ODO;
 
 void proc_opts(int argc, const char ** argv)
 {
@@ -46,18 +48,19 @@ void proc_opts(int argc, const char ** argv)
 }
 
 
-
-int poll_i2c_devs(raw_state_t* state, raw_action_t* action)
+int poll_i2c_devs(raw_state_t* state, raw_action_t* action, int* odo)
 {
-	int odo = 0;
 	uint8_t mode = 0;
 	int res;
 
 	res = pwm_get_action(action);
 	if(res) return res;
 
-	odo = pwm_get_odo();
-	if(odo < 0) return odo;
+	if(odo)
+	{
+		*odo = pwm_get_odo();
+		if(*odo < 0) return *odo;
+	}
 
 	res = bno055_get_operation_mode(&mode);
 
@@ -95,7 +98,7 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	for(int j = FRAME_H; j--;)
 	{
 		int bi = cams[0].buffer_info.index;
-		uint32_t* row = cams[0].frame_buffers[bi] + (j * FRAME_W * 2);
+		uint32_t* row = cams[0].frame_buffers[bi] + (j * (FRAME_W << 1));
 		uint8_t* luma_row = state->view.luma + (j * FRAME_W);
 		chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
 		
@@ -151,14 +154,8 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 			{
 				int li = i << 1;
 
-			luma_row[li + 0] = 255 * (luma_row[li + 0] - luma_range.min) / luma_spread;
-			luma_row[li + 1] = 255 * (luma_row[li + 1] - luma_range.min) / luma_spread;
-
-/*
-			chroma_row[i].cr = 255 * (chroma_row[i].cr - cr_range.min) / cr_spread;
-			chroma_row[i].cb = 255 * (chroma_row[i].cb - cb_range.min) / cb_spread;
-*/
-
+				luma_row[li + 0] = 255 * (luma_row[li + 0] - luma_range.min) / luma_spread;
+				luma_row[li + 1] = 255 * (luma_row[li + 1] - luma_range.min) / luma_spread;
 			}
 		}
 	}
@@ -172,14 +169,14 @@ int calibration(cam_settings_t cfg)
 {
 	raw_action_t action = {};
 		
-	poll_i2c_devs(NULL, &action);
+	poll_i2c_devs(NULL, &action, NULL);
 
 	CAL.throttle.min = CAL.throttle.max = action.throttle;
 	CAL.steering.min = CAL.steering.max = action.steering;
 
 	for(;;)
 	{
-		poll_i2c_devs(NULL, &action);
+		poll_i2c_devs(NULL, &action, NULL);
 		calib_t last_cal = CAL;
 
 		if(action.steering > CAL.steering.max) CAL.steering.max = action.steering;
@@ -205,71 +202,93 @@ int calibration(cam_settings_t cfg)
 	}
 }
 
+pthread_mutex_t STATE_LOCK;
+float TIMING = 0;
+void* pose_estimator(void* params)
+{
+	timegate_t tg = {
+		.interval_us = 10000
+	};
+
+	raw_example_t* ex = (raw_example_t*)params;
+	int last_odo = 0;
+	struct timeval then, now;
+
+	while(1)
+	{
+		gettimeofday(&then, NULL);
+		timegate_open(&tg);
+
+		int odo = 0;
+		
+		pthread_mutex_lock(&STATE_LOCK);
+		if(poll_i2c_devs(&ex->state, &ex->action, &odo))
+		{
+			return (void*)-1;
+		}
+		pthread_mutex_unlock(&STATE_LOCK);
+
+		const float wheel_cir = 0.082 * M_PI / 4.0;
+		float delta = (odo - last_odo) * wheel_cir; 
+
+		// TODO: pose integration	
+
+	
+		last_odo = odo;
+		timegate_close(&tg);
+		gettimeofday(&now, NULL);
+		TIMING = diff_us(then, now) / 10e6f;	
+	}
+}
 
 int collection(cam_t* cam)
 {
+	pthread_t pose_thread;
 	time_t now;
 	int started = 0, updates = 0;
 	dataset_header_t hdr = {};
 	hdr.magic = MAGIC;
 	hdr.is_raw = 1;
 
+	pthread_mutex_init(&STATE_LOCK, NULL);
+
 	// write the header first
 	write(1, &hdr, sizeof(hdr));
 
 	now = time(NULL);
+	raw_example_t ex = { };
+
+	pthread_create(&pose_thread, NULL, pose_estimator, (void*)&ex);
 
 	for(;;)
 	{
-		raw_state_t state = {};
-		raw_action_t action = {};
-
 		cam_request_frame(cam);
 
-		if(poll_i2c_devs(&state, &action))
+		// Do something while we wait for our
+		// next frame to come in...
+		++updates;
+		if(now != time(NULL))
 		{
-			fprintf(stderr, "Error reading from i2c devices\n");
-			//return -1;
+			fprintf(stderr, "%dHz %f\n", updates, TIMING);
+			updates = 0;
+			now = time(NULL);
 		}
 
-		if(poll_vision(&state, cam))
+		if(poll_vision(&ex.state, cam))
 		{
 			fprintf(stderr, "Error capturing frame\n");
 			return -2;
 		}
-/*
 
-		int gas = action.throttle;
-		if((THROTTLE_STOPPED - 3) >= gas && gas <= (THROTTLE_STOPPED + 3))
-		{
-			if(!started)
-			{
-				continue;
-			}
 
-			fprintf(stderr, "Finished\n");
-			//break;
-		}
-		else
-		{
-			started = 1;
-		}
-*/
-		raw_example_t ex = { state, action };
+		pthread_mutex_lock(&STATE_LOCK);
 		if(write(1, &ex, sizeof(ex)) != sizeof(ex))
 		{
 			fprintf(stderr, "Error writing state-action pair\n");
 			return -3;
 		}
+		pthread_mutex_unlock(&STATE_LOCK);
 
-		++updates;
-
-		if(now != time(NULL))
-		{
-			fprintf(stderr, "%dHz\n", updates);
-			updates = 0;
-			now = time(NULL);
-		}
 	}
 }
 
@@ -290,6 +309,8 @@ int main(int argc, const char* argv[])
 		cam_open("/dev/video0", &cfg),
 		//cam_open("/dev/video1", &cfg),
 	};
+
+	ioctl(cam[0].fd, VIDIOC_S_PRIORITY, V4L2_PRIORITY_RECORD);
 
 	if((res = i2c_init("/dev/i2c-1")))
 	{

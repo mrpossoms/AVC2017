@@ -14,6 +14,8 @@
 #include "structs.h"
 #include "cam.h"
 
+#define CAM_FPS 5
+
 cam_t cam_open(const char* path, cam_settings_t* cfg)
 {
 
@@ -173,7 +175,7 @@ int cam_config(int fd, cam_settings_t* cfg)
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	parm.parm.capture.timeperframe.numerator = 1;
-	parm.parm.capture.timeperframe.denominator = 15;
+	parm.parm.capture.timeperframe.denominator = 30;
 
 	res = ioctl(fd, VIDIOC_S_PARM, &parm);
 
