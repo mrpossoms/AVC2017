@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <inttypes.h>
 #include <errno.h>
+#include "linmath.h"
 
 #define EXIT(...) {\
 	fprintf(stderr, __VA_ARGS__);\
@@ -58,10 +59,12 @@ typedef struct {
 } raw_action_t;
 
 typedef struct {
-	int16_t rot_rate[3];
-	int16_t acc[3];
-	int8_t vel;
+	int16_t  rot_rate[3];
+	int16_t  acc[3];
+	int8_t   vel;
 	uint32_t distance;
+	vec3     heading;
+	vec3     position;
 	struct {
 		uint8_t luma[LUMA_PIXELS];
 		chroma_t chroma[CHRO_PIXELS];

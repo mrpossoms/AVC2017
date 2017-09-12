@@ -5,3 +5,8 @@ sources:
   rev: master
   scripts:
   -
+- name: linmath
+  repo: https://github.com/mrpossoms/linmath.h
+  rev: master
+  scripts:
+  -

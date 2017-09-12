@@ -11,6 +11,7 @@
 #include "i2c.h"
 #include "drv_pwm.h"
 #include "cam.h"
+#include "linmath.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -24,7 +25,7 @@ int I2C_BUS;
 int NORM_VIDEO;
 col_mode_t MODE;
 calib_t CAL;
-unsigned int ODO;
+
 
 void proc_opts(int argc, const char ** argv)
 {
@@ -202,6 +203,7 @@ int calibration(cam_settings_t cfg)
 	}
 }
 
+
 pthread_mutex_t STATE_LOCK;
 float TIMING = 0;
 void* pose_estimator(void* params)
@@ -220,7 +222,8 @@ void* pose_estimator(void* params)
 		timegate_open(&tg);
 
 		int odo = 0;
-		
+		struct bno055_quaternion_t iq;		
+
 		pthread_mutex_lock(&STATE_LOCK);
 		if(poll_i2c_devs(&ex->state, &ex->action, &odo))
 		{
@@ -232,14 +235,23 @@ void* pose_estimator(void* params)
 		float delta = (odo - last_odo) * wheel_cir; 
 
 		// TODO: pose integration	
+		bno055_read_quaternion_wxyz(&iq);
+		const float m = 0x7fff >> 1;
+		vec3 forward = { 0, 1, 0 };
+		vec3 heading;
+		quat q = { iq.x / m, iq.y / m, iq.z / m, iq.w / m };
+		quat_mul_vec3(heading, q, forward);
+		vec3_copy(ex->state.heading, heading);
+		vec3_scale(heading, heading, delta);
+		vec3_add(ex->state.position, ex->state.position, heading);
 
-	
 		last_odo = odo;
 		timegate_close(&tg);
 		gettimeofday(&now, NULL);
 		TIMING = diff_us(then, now) / 10e6f;	
 	}
 }
+
 
 int collection(cam_t* cam)
 {
