@@ -55,7 +55,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	struct v4l2_requestbuffers bufrequest = {};
 	bufrequest.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	bufrequest.memory = V4L2_MEMORY_MMAP;
-	bufrequest.count = 10;
+	bufrequest.count = 2;
 
 	if(ioctl(fd, VIDIOC_REQBUFS, &bufrequest) < 0)
 	{
@@ -64,7 +64,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	}
 
 
-	if(bufrequest.count < 10)
+	if(bufrequest.count < 2)
 	{
 		fprintf(stderr, "Not enough memory\n");
 		exit(-5);

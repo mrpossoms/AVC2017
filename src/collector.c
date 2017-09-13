@@ -1,9 +1,12 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <getopt.h>
+#include <sched.h>
+#include <pthread.h>
 
 #include "sys.h"
 #include "structs.h"
@@ -204,17 +207,23 @@ int calibration(cam_settings_t cfg)
 }
 
 
+	int last_odo = 0;
 pthread_mutex_t STATE_LOCK;
 float TIMING = 0;
+int CYCLES = 0;
 void* pose_estimator(void* params)
 {
 	timegate_t tg = {
-		.interval_us = 10000
+		.interval_us = 20000
 	};
 
 	raw_example_t* ex = (raw_example_t*)params;
-	int last_odo = 0;
 	struct timeval then, now;
+	
+	cpu_set_t* pose_cpu = CPU_ALLOC(1);
+	CPU_SET(3, pose_cpu);
+	size_t pose_cpu_size = CPU_ALLOC_SIZE(1);
+	
 
 	while(1)
 	{
@@ -234,6 +243,7 @@ void* pose_estimator(void* params)
 		const float wheel_cir = 0.082 * M_PI / 4.0;
 		float delta = (odo - last_odo) * wheel_cir; 
 
+
 		// TODO: pose integration	
 		bno055_read_quaternion_wxyz(&iq);
 		const float m = 0x7fff >> 1;
@@ -241,10 +251,14 @@ void* pose_estimator(void* params)
 		vec3 heading;
 		quat q = { iq.x / m, iq.y / m, iq.z / m, iq.w / m };
 		quat_mul_vec3(heading, q, forward);
+
+
+		//pthread_mutex_lock(&STATE_LOCK);
 		vec3_copy(ex->state.heading, heading);
 		vec3_scale(heading, heading, delta);
 		vec3_add(ex->state.position, ex->state.position, heading);
-
+		//pthread_mutex_unlock(&STATE_LOCK);
+		CYCLES++;
 		last_odo = odo;
 		timegate_close(&tg);
 		gettimeofday(&now, NULL);
@@ -255,7 +269,9 @@ void* pose_estimator(void* params)
 
 int collection(cam_t* cam)
 {
+	int res = 0;
 	pthread_t pose_thread;
+	pthread_attr_t pose_attr;
 	time_t now;
 	int started = 0, updates = 0;
 	dataset_header_t hdr = {};
@@ -269,8 +285,14 @@ int collection(cam_t* cam)
 
 	now = time(NULL);
 	raw_example_t ex = { };
+	int pri = sched_get_priority_max(SCHED_RR) - 1;
 
-	pthread_create(&pose_thread, NULL, pose_estimator, (void*)&ex);
+	errno = 0;
+	res = pthread_attr_init(&pose_attr);
+	res = pthread_attr_setschedpolicy(&pose_attr, SCHED_FIFO);
+	//res = pthread_attr_setinheritsched(&pose_attr, PTHREAD_EXPLICIT_SCHED);
+	res = pthread_create(&pose_thread, &pose_attr, pose_estimator, (void*)&ex);
+	res = pthread_setschedprio(pose_thread, pri);	
 
 	for(;;)
 	{
@@ -281,7 +303,14 @@ int collection(cam_t* cam)
 		++updates;
 		if(now != time(NULL))
 		{
-			fprintf(stderr, "%dHz %f\n", updates, TIMING);
+			fprintf(stderr, "%dHz (%f %f %f) %d %f\n",
+				updates,
+				ex.state.position[0],
+				ex.state.position[1],
+				ex.state.position[2],
+				last_odo,
+				TIMING
+			);
 			updates = 0;
 			now = time(NULL);
 		}

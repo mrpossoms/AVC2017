@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include <math.h>
+#include <assert.h>
 
 typedef struct {	
 	struct timeval start;
