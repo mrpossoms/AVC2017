@@ -28,6 +28,7 @@ int I2C_BUS;
 int NORM_VIDEO;
 col_mode_t MODE;
 calib_t CAL;
+float VEL;
 
 
 void proc_opts(int argc, const char ** argv)
@@ -214,17 +215,20 @@ int CYCLES = 0;
 void* pose_estimator(void* params)
 {
 	timegate_t tg = {
-		.interval_us = 20000
+		.interval_us = 10000
 	};
 
 	raw_example_t* ex = (raw_example_t*)params;
 	struct timeval then, now;
 	
+	// Run exclusively on the 4th core
 	cpu_set_t* pose_cpu = CPU_ALLOC(1);
 	CPU_SET(3, pose_cpu);
 	size_t pose_cpu_size = CPU_ALLOC_SIZE(1);
-
 	assert(sched_setaffinity(0, pose_cpu_size, pose_cpu) == 0);
+
+	float distance_rolled = 0;
+	int LAST_D_ODO_CYCLE = 0;
 
 	while(1)
 	{
@@ -243,7 +247,18 @@ void* pose_estimator(void* params)
 
 		const float wheel_cir = 0.082 * M_PI / 4.0;
 		float delta = (odo - last_odo) * wheel_cir; 
+		int cycles_d = CYCLES - LAST_D_ODO_CYCLE;
 
+		if(delta)
+		{
+			ex->state.vel = delta / (cycles_d * (tg.interval_us / 1.0E6));
+			LAST_D_ODO_CYCLE = CYCLES;
+		}
+		
+		if(cycles_d * tg.interval_us > 1E6)
+		{
+			ex->state.vel = 0;
+		}
 
 		// TODO: pose integration	
 		bno055_read_quaternion_wxyz(&iq);
@@ -252,7 +267,6 @@ void* pose_estimator(void* params)
 		vec3 heading;
 		quat q = { iq.x / m, iq.y / m, iq.z / m, iq.w / m };
 		quat_mul_vec3(heading, q, forward);
-
 
 		//pthread_mutex_lock(&STATE_LOCK);
 		vec3_copy(ex->state.heading, heading);
@@ -264,9 +278,6 @@ void* pose_estimator(void* params)
 		timegate_close(&tg);
 		gettimeofday(&now, NULL);
 		TIMING = diff_us(then, now) / 10e6f;
-
-		if(TIMING > 0.8)
-			write(1, ".", 1);
 	}
 }
 
@@ -302,12 +313,13 @@ int collection(cam_t* cam)
 		++updates;
 		if(now != time(NULL))
 		{
-			fprintf(stderr, "%dHz (%f %f %f) %d %f\n",
+			fprintf(stderr, "%dHz (%f %f %f) %d %fm/s %f\n",
 				updates,
 				ex.state.position[0],
 				ex.state.position[1],
 				ex.state.position[2],
 				last_odo,
+				ex.state.vel,
 				TIMING
 			);
 			updates = 0;

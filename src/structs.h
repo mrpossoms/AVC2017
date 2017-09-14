@@ -61,7 +61,7 @@ typedef struct {
 typedef struct {
 	int16_t  rot_rate[3];
 	int16_t  acc[3];
-	int8_t   vel;
+	float    vel;
 	uint32_t distance;
 	vec3     heading;
 	vec3     position;
