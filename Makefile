@@ -28,13 +28,13 @@ magic: src/structs.h
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 viewer: magic $(VIEWER_SRC)
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(VIEWER_SRC) -o viewer $(VIEWER_LINK)
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $(VIEWER_SRC) -o viewer $(VIEWER_LINK)
 
 collector: magic $(COLLECTOR_SRC)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(COLLECTOR_SRC) -o collector -lpthread
 
 masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
 
 botd: magic $(BOTD_SRC)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(BOTD_SRC) -o botd	
