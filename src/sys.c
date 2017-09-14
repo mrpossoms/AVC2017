@@ -11,8 +11,16 @@ void timegate_open(timegate_t* tg)
 
 long diff_us(struct timeval then, struct timeval now)
 {
-	long us = (now.tv_sec - then.tv_sec) * 10e6;
-	us += (now.tv_usec - then.tv_usec);
+	long us = (now.tv_sec - then.tv_sec) * 1e6;
+
+	if(us)
+	{
+		us = (us - then.tv_usec) + now.tv_usec;
+	}
+	else
+	{
+		us = now.tv_usec - then.tv_usec;
+	}
 
 	return us;
 }

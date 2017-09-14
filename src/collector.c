@@ -223,7 +223,8 @@ void* pose_estimator(void* params)
 	cpu_set_t* pose_cpu = CPU_ALLOC(1);
 	CPU_SET(3, pose_cpu);
 	size_t pose_cpu_size = CPU_ALLOC_SIZE(1);
-	
+
+	assert(sched_setaffinity(0, pose_cpu_size, pose_cpu) == 0);
 
 	while(1)
 	{
@@ -233,12 +234,12 @@ void* pose_estimator(void* params)
 		int odo = 0;
 		struct bno055_quaternion_t iq;		
 
-		pthread_mutex_lock(&STATE_LOCK);
+		//pthread_mutex_lock(&STATE_LOCK);
 		if(poll_i2c_devs(&ex->state, &ex->action, &odo))
 		{
 			return (void*)-1;
 		}
-		pthread_mutex_unlock(&STATE_LOCK);
+		//pthread_mutex_unlock(&STATE_LOCK);
 
 		const float wheel_cir = 0.082 * M_PI / 4.0;
 		float delta = (odo - last_odo) * wheel_cir; 
@@ -262,7 +263,10 @@ void* pose_estimator(void* params)
 		last_odo = odo;
 		timegate_close(&tg);
 		gettimeofday(&now, NULL);
-		TIMING = diff_us(then, now) / 10e6f;	
+		TIMING = diff_us(then, now) / 10e6f;
+
+		if(TIMING > 0.8)
+			write(1, ".", 1);
 	}
 }
 
@@ -287,12 +291,7 @@ int collection(cam_t* cam)
 	raw_example_t ex = { };
 	int pri = sched_get_priority_max(SCHED_RR) - 1;
 
-	errno = 0;
-	res = pthread_attr_init(&pose_attr);
-	res = pthread_attr_setschedpolicy(&pose_attr, SCHED_FIFO);
-	//res = pthread_attr_setinheritsched(&pose_attr, PTHREAD_EXPLICIT_SCHED);
-	res = pthread_create(&pose_thread, &pose_attr, pose_estimator, (void*)&ex);
-	res = pthread_setschedprio(pose_thread, pri);	
+	res = pthread_create(&pose_thread, NULL, pose_estimator, (void*)&ex);
 
 	for(;;)
 	{
@@ -361,6 +360,13 @@ int main(int argc, const char* argv[])
 	
 	pwm_reset();
 	fprintf(stderr, "OK\n");
+
+	// Use the round-robin real-time scheduler
+	// with a high priority
+	struct sched_param sch_par = {
+		.sched_priority = 50,
+	};
+	assert(sched_setscheduler(0, SCHED_RR, &sch_par) == 0);
 
 	switch(MODE)
 	{
