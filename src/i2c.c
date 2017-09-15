@@ -105,6 +105,13 @@ void BNO055_delay_msec(u32 msek)
 	usleep(1000 * msek);
 }
 
+
+void i2c_uninit()
+{
+	close(I2C_BUS_FD);
+}
+
+
 int i2c_init(const char* path)
 {
 	// open bus files

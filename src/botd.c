@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <spawn.h>
+#include <sys/wait.h>
 
 #include "i2c.h"
 #include "drv_pwm.h"
@@ -29,6 +30,17 @@ void proc_opts(int argc, char* const argv[])
 }
 
 
+static void i2c_up()
+{
+	int res = i2c_init("/dev/i2c-1");
+
+	if(res)
+	{
+		fprintf(stderr, "i2c_init failed (%d)\n", res);
+		exit(-1);
+	}
+}
+
 void child_loop()
 {
 	int odo = pwm_get_odo();
@@ -41,16 +53,22 @@ void child_loop()
 			exit(-2);
 		}
 
+		if(act.throttle > 0)
 		if(act.throttle - 1 > THROTTLE_STOPPED || act.throttle + 1 < THROTTLE_STOPPED)
 		{
+			//
+			// Let the collector have the i2c bus
+			//
+			i2c_uninit();
+
 			//
 			// Start collecting!
 			//
 			pid_t collector_pid;
 			char buf[1024];
-			char* argv[1];
+			char* argv[] = { buf, NULL };
 
-			snprintf(buf, sizeof(buf), "-m%s", MEDIA_PATH);
+			snprintf(buf, sizeof(buf), "-m%s/%lu.session", MEDIA_PATH, time(NULL));
 			argv[0] = buf;
 			posix_spawn(
 				&collector_pid, 
@@ -59,8 +77,15 @@ void child_loop()
 				argv,
 				NULL
 			);
-		}	
+
+			// Wait for the collector process to terminate
+			// then bring the i2c bus back up
+			waitpid(collector_pid, NULL, 0);
+			i2c_up();
+		}
 	}
+
+	app.last_odo = odo;
 }
 
 
@@ -71,11 +96,7 @@ int main(int argc, char* const argv[])
 	
 	if(!MEDIA_PATH) return -1;	
 	
-	if((res = i2c_init("/dev/i2c-1")))
-	{
-		fprintf(stderr, "i2c_init failed (%d)\n", res);
-		return -1;
-	}
+	i2c_up();
 
 	RUNNING = 1;
 	pid_t child_pid = fork();
@@ -83,6 +104,7 @@ int main(int argc, char* const argv[])
 	if(child_pid < 0) return -2;
 	if(child_pid == 0)
 	{
+		printf("I'm the child %d\n", RUNNING);
 		// child
 		while(RUNNING) child_loop();
 	}

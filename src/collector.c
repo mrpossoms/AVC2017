@@ -24,6 +24,7 @@ typedef enum {
 	COL_MODE_ACT_CAL,
 } col_mode_t;
 
+char* MEDIA_PATH;
 int I2C_BUS;
 int NORM_VIDEO;
 col_mode_t MODE;
@@ -35,7 +36,7 @@ void proc_opts(int argc, const char ** argv)
 {
 	for(;;)
 	{
-		int c = getopt(argc, (char *const *)argv, "cn");
+		int c = getopt(argc, (char *const *)argv, "cnm:");
 		if(c == -1) break;
 
 		switch (c) 
@@ -47,7 +48,9 @@ void proc_opts(int argc, const char ** argv)
 			case 'n':
 				NORM_VIDEO = 1;
 				break;
-
+			case 'm':
+				MEDIA_PATH = optarg;
+				break;
 		}
 	}
 }
@@ -284,7 +287,7 @@ void* pose_estimator(void* params)
 
 int collection(cam_t* cam)
 {
-	int res = 0;
+	int res = 0, fd = 1;
 	pthread_t pose_thread;
 	pthread_attr_t pose_attr;
 	time_t now;
@@ -295,8 +298,19 @@ int collection(cam_t* cam)
 
 	pthread_mutex_init(&STATE_LOCK, NULL);
 
+	if(MEDIA_PATH)
+	{
+		fd = open(MEDIA_PATH, O_CREAT | O_WRONLY, 0666);
+
+		if(fd < 0)
+		{
+			fprintf(stderr, "Error: couldn't open/create %s\n", MEDIA_PATH);
+			exit(-1);
+		}
+	}
+
 	// write the header first
-	write(1, &hdr, sizeof(hdr));
+	write(fd, &hdr, sizeof(hdr));
 
 	now = time(NULL);
 	raw_example_t ex = { };
@@ -334,7 +348,7 @@ int collection(cam_t* cam)
 
 
 		pthread_mutex_lock(&STATE_LOCK);
-		if(write(1, &ex, sizeof(ex)) != sizeof(ex))
+		if(write(fd, &ex, sizeof(ex)) != sizeof(ex))
 		{
 			fprintf(stderr, "Error writing state-action pair\n");
 			return -3;

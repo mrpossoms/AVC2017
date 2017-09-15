@@ -25,6 +25,7 @@ int i2c_write_bytes(int fd, uint8_t devAddr, uint8_t dstReg, uint8_t* srcBuf, si
 int i2c_read(int fd, uint8_t devAddr, uint8_t srcReg, void* dstBuf, size_t bytes);
 
 int i2c_init(const char* path);
+void i2c_uninit();
 int i2c_poll_devices(raw_state_t* state);
 
 #ifdef __cplusplus
