@@ -20,6 +20,9 @@
 #define LUMA_PIXELS (FRAME_W * FRAME_H)
 #define CHRO_PIXELS (FRAME_W / 2 * FRAME_H)
 
+#define STEERING_BANDS 15
+#define THROTTLE_BANDS 7
+
 typedef union {
 	struct {
 		uint8_t cb, cr;
@@ -58,6 +61,14 @@ typedef struct {
 	uint8_t throttle, steering;
 } raw_action_t;
 
+typedef union {
+	struct {
+		float throttle[THROTTLE_BANDS];
+		float steering[STEERING_BANDS];
+	};
+	float v[THROTTLE_BANDS + STEERING_BANDS];
+} action_f_t;
+
 typedef struct {
 	int16_t  rot_rate[3];
 	int16_t  acc[3];
@@ -73,7 +84,7 @@ typedef struct {
 
 typedef struct {
 	raw_state_t state;
-	raw_action_t action;
+	action_f_t action;
 } raw_example_t;
 
 typedef float state_vector_t[3 + 3 + 1 + 1];
@@ -91,14 +102,6 @@ typedef union {
 	};
 	state_vector_t v;
 } state_f_t;
-
-typedef union {
-	struct {
-		float throttle[7];
-		float steering[15];
-	};
-	float v[22];
-} action_f_t;
 
 typedef struct {
 	state_f_t  state;

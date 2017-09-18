@@ -7,6 +7,7 @@
 #include <getopt.h>
 #include <sched.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 #include "sys.h"
 #include "structs.h"
@@ -15,9 +16,12 @@
 #include "drv_pwm.h"
 #include "cam.h"
 #include "linmath.h"
+#include "curves.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+#define ACTION_CAL_PATH "actions.cal"
 
 typedef enum {
 	COL_MODE_NORMAL = 0,
@@ -201,7 +205,7 @@ int calibration(cam_settings_t cfg)
 			       );
 
 			// save the calibration profile
-			int fd = open("actions.cal", O_CREAT | O_WRONLY, 0666);
+			int fd = open(ACTION_CAL_PATH, O_CREAT | O_WRONLY, 0666);
 			write(fd, &CAL, sizeof(CAL));
 			close(fd);
 		}
@@ -222,6 +226,7 @@ void* pose_estimator(void* params)
 	};
 
 	raw_example_t* ex = (raw_example_t*)params;
+	raw_action_t action;
 	struct timeval then, now;
 	
 	// Run exclusively on the 4th core
@@ -242,9 +247,21 @@ void* pose_estimator(void* params)
 		struct bno055_quaternion_t iq;		
 
 		//pthread_mutex_lock(&STATE_LOCK);
-		if(poll_i2c_devs(&ex->state, &ex->action, &odo))
+		if(poll_i2c_devs(&ex->state, &action, &odo))
 		{
 			return (void*)-1;
+		}
+
+		float mu = bucket_index(action.steering, &CAL.steering, STEERING_BANDS); 
+		for(int i = STEERING_BANDS; i--;)
+		{
+			ex->action.steering[i] = falloff(mu, i);
+		}
+
+		mu = bucket_index(action.throttle, &CAL.throttle, THROTTLE_BANDS); 
+		for(int i = THROTTLE_BANDS; i--;)
+		{
+			ex->action.throttle[i] = falloff(mu, i);
 		}
 		//pthread_mutex_unlock(&STATE_LOCK);
 
@@ -346,7 +363,6 @@ int collection(cam_t* cam)
 			return -2;
 		}
 
-
 		pthread_mutex_lock(&STATE_LOCK);
 		if(write(fd, &ex, sizeof(ex)) != sizeof(ex))
 		{
@@ -394,6 +410,21 @@ int main(int argc, const char* argv[])
 	};
 	assert(sched_setscheduler(0, SCHED_RR, &sch_par) == 0);
 
+	// Check to see if that action calibration file
+	// exists. If not, switch to calibration mode. Otherwise
+	// load the calibration values
+	struct stat st;
+	if(stat(ACTION_CAL_PATH, &st))
+	{
+		MODE = COL_MODE_ACT_CAL;
+	}
+	else
+	{
+		int cal_fd = open(ACTION_CAL_PATH, O_RDONLY);
+		read(cal_fd, &CAL, sizeof(CAL));
+		close(cal_fd);
+	}
+	
 	switch(MODE)
 	{
 		case COL_MODE_ACT_CAL:

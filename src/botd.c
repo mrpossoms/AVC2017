@@ -10,6 +10,7 @@
 
 static const char* MEDIA_PATH;
 static int RUNNING;
+static int DAEMONIZE;
 
 struct {
 	int last_odo;
@@ -18,10 +19,13 @@ struct {
 void proc_opts(int argc, char* const argv[])
 {
 	int c;
-	while ((c = getopt(argc, argv, "m:")) != -1)
+	while ((c = getopt(argc, argv, "dm:")) != -1)
 	{
 		switch(c)
 		{
+			case 'd':
+				DAEMONIZE = 1;
+				break;
 			case 'm':
 				MEDIA_PATH = optarg;
 				break;
@@ -99,16 +103,15 @@ int main(int argc, char* const argv[])
 	i2c_up();
 
 	RUNNING = 1;
-	pid_t child_pid = fork();
 
-	if(child_pid < 0) return -2;
-	if(child_pid == 0)
+	if(DAEMONIZE)
 	{
-		printf("I'm the child %d\n", RUNNING);
-		// child
-		while(RUNNING) child_loop();
+		if(fork() != 0) return 0;
 	}
 
+	printf("I'm the child %d\n", RUNNING);
+	// child
+	while(RUNNING) child_loop();
 
 	return 0;
 }
