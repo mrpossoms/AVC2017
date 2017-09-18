@@ -215,7 +215,7 @@ int calibration(cam_settings_t cfg)
 }
 
 
-	int last_odo = 0;
+int last_odo = 0;
 pthread_mutex_t STATE_LOCK;
 float TIMING = 0;
 int CYCLES = 0;
@@ -318,6 +318,7 @@ int collection(cam_t* cam)
 	if(MEDIA_PATH)
 	{
 		fd = open(MEDIA_PATH, O_CREAT | O_WRONLY, 0666);
+		fprintf(stderr, "Writing data to '%s'\n", MEDIA_PATH);
 
 		if(fd < 0)
 		{
@@ -417,6 +418,7 @@ int main(int argc, const char* argv[])
 	if(stat(ACTION_CAL_PATH, &st))
 	{
 		MODE = COL_MODE_ACT_CAL;
+		fprintf(stderr, "No %s file found. Calibrating...\n", ACTION_CAL_PATH);
 	}
 	else
 	{
