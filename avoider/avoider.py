@@ -4,6 +4,12 @@ import sys
 from fibers.fibers import *
 
 
+FRAME_W=160
+FRAME_H=120
+LUMA_PIXELS = (FRAME_W * FRAME_H)
+CHRO_PIXELS = (FRAME_W / 2 * FRAME_H)
+
+
 class BlobTrainingSet():
     def __init__(self, path, shape=[160, 120]):
         self.index = 0
