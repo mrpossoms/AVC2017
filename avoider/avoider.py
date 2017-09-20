@@ -1,6 +1,7 @@
 import tensorflow as tf
 import struct
 import sys
+import subprocess
 from fibers.fibers import *
 
 
@@ -8,6 +9,7 @@ FRAME_W=160
 FRAME_H=120
 LUMA_PIXELS = (FRAME_W * FRAME_H)
 CHRO_PIXELS = (FRAME_W / 2 * FRAME_H)
+SAMPLE_SIZE = None
 
 
 class BlobTrainingSet():
@@ -15,17 +17,41 @@ class BlobTrainingSet():
         self.index = 0
         self.file = open(path, mode='rb')
         self.shape = shape
+        self._sample_size = None;
+
+        self.magic = struct.unpack('Q', self.file.read(8))
+        self.is_raw = self.file.read(1);
 
     def reset(self):
         self.index = 0
-        self.file.seek(0);
+        self.file.seek(9);
 
     def size(self):
         last_pos = self.file.tell()
         self.file.seek(0, 2)
-        size = self.file.tell() // (4 + np.prod(self.shape))
+        size = self.file.tell() // sample_size()
         self.file.seek(last_pos, 0)
         return size
+
+    def decode_sample(self):
+        start = self.file.tell()
+        rot_rate = struct.unpack('hhh', self.file.read(6))
+        acc = struct.unpack('hhh', self.file.read(6))
+        vel = struct.unpack('f', self.file.read(4))
+        distance = struct.unpack('I', self.file.read(4));
+        heading = struct.unpack('fff', self.file.read(12));
+        position = struct.unpack('fff', self.file.read(12));
+        luma = self.file.read(np.prod(self.shape))
+
+        chroma_shape = [self.shape[0] // 2, self.shape[1]]
+        chroma = self.file.read(self.shape[0] // 2 * self.shape[1] * 2)
+
+        action_vector = struct.unpack('ffffffffffffffffffffff', self.file.read(4 * 22))
+        stop = self.file.tell()
+
+        print(stop - start)
+
+        return luma
 
     def next_batch(self, size):
         images, labels = [], []
@@ -54,6 +80,13 @@ class BlobTrainingSet():
         batch = np.asarray(images), np.asarray(labels).reshape([len(labels), 1])
         return batch
         #return np.asarray(images), np.asarray(labels)
+
+
+def sample_size():
+    global SAMPLE_SIZE
+    if SAMPLE_SIZE is None:
+        SAMPLE_SIZE = int(subprocess.check_output(['structsize']))
+        return SAMPLE_SIZE
 
 
 class AvoiderNet:
@@ -89,6 +122,9 @@ def main(args):
     with tf.Session() as session:
         net = AvoiderNet()
 
+    ts = BlobTrainingSet(path="s0")
+    ts.decode_sample()
+    ts.decode_sample()
 
 if __name__ == '__main__':
     main(sys.argv)

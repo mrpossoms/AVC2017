@@ -27,6 +27,9 @@ all: viewer collector masseuse
 magic: src/structs.h
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
+structsize:
+	$(CC) $(CFLAGS) $(INC) src/size.c -o structsize
+
 viewer: magic $(VIEWER_SRC)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $(VIEWER_SRC) -o viewer $(VIEWER_LINK)
 
@@ -39,10 +42,10 @@ masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 botd: magic $(BOTD_SRC)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(BOTD_SRC) -o botd	
 
-install-bot: collector
+install-bot: collector size
 	ln -s $(shell pwd)/$^ /usr/bin/$^
 
-install-tools: masseuse viewer
+install-tools: masseuse viewer structsize
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
 
 
