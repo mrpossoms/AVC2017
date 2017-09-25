@@ -16,7 +16,7 @@
 #include "drv_pwm.h"
 #include "cam.h"
 #include "linmath.h"
-#include "curves.h"
+#include "deadreckon.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -57,39 +57,6 @@ void proc_opts(int argc, const char ** argv)
 				break;
 		}
 	}
-}
-
-
-int poll_i2c_devs(raw_state_t* state, raw_action_t* action, int* odo)
-{
-	uint8_t mode = 0;
-	int res;
-
-	res = pwm_get_action(action);
-	if(res) return res;
-
-	if(odo)
-	{
-		*odo = pwm_get_odo();
-		if(*odo < 0) return *odo;
-	}
-
-	res = bno055_get_operation_mode(&mode);
-
-	if(!state) return 3;
-
-	if(bno055_read_accel_xyz((struct bno055_accel_t*)state->acc))
-	{
-		EXIT("Error reading from BNO055\n");
-	}
-
-	if(bno055_read_gyro_xyz((struct bno055_gyro_t*)state->rot_rate))
-	{
-		EXIT("Error reading from BNO055\n");
-	}
-
-
-	return 0;
 }
 
 
@@ -215,92 +182,7 @@ int calibration(cam_settings_t cfg)
 }
 
 
-int last_odo = 0;
 pthread_mutex_t STATE_LOCK;
-float TIMING = 0;
-int CYCLES = 0;
-void* pose_estimator(void* params)
-{
-	timegate_t tg = {
-		.interval_us = 10000
-	};
-
-	raw_example_t* ex = (raw_example_t*)params;
-	raw_action_t action;
-	struct timeval then, now;
-	
-	// Run exclusively on the 4th core
-	cpu_set_t* pose_cpu = CPU_ALLOC(1);
-	CPU_SET(3, pose_cpu);
-	size_t pose_cpu_size = CPU_ALLOC_SIZE(1);
-	assert(sched_setaffinity(0, pose_cpu_size, pose_cpu) == 0);
-
-	float distance_rolled = 0;
-	int LAST_D_ODO_CYCLE = 0;
-
-	while(1)
-	{
-		gettimeofday(&then, NULL);
-		timegate_open(&tg);
-
-		int odo = 0;
-		struct bno055_quaternion_t iq;		
-
-		//pthread_mutex_lock(&STATE_LOCK);
-		if(poll_i2c_devs(&ex->state, &action, &odo))
-		{
-			return (void*)-1;
-		}
-
-		float mu = bucket_index(action.steering, &CAL.steering, STEERING_BANDS); 
-		for(int i = STEERING_BANDS; i--;)
-		{
-			ex->action.steering[i] = falloff(mu, i);
-		}
-
-		mu = bucket_index(action.throttle, &CAL.throttle, THROTTLE_BANDS); 
-		for(int i = THROTTLE_BANDS; i--;)
-		{
-			ex->action.throttle[i] = falloff(mu, i);
-		}
-		//pthread_mutex_unlock(&STATE_LOCK);
-
-		const float wheel_cir = 0.082 * M_PI / 4.0;
-		float delta = (odo - last_odo) * wheel_cir; 
-		int cycles_d = CYCLES - LAST_D_ODO_CYCLE;
-
-		if(delta)
-		{
-			ex->state.vel = delta / (cycles_d * (tg.interval_us / 1.0E6));
-			LAST_D_ODO_CYCLE = CYCLES;
-		}
-		
-		if(cycles_d * tg.interval_us > 1E6)
-		{
-			ex->state.vel = 0;
-		}
-
-		// TODO: pose integration	
-		bno055_read_quaternion_wxyz(&iq);
-		const float m = 0x7fff >> 1;
-		vec3 forward = { 0, 1, 0 };
-		vec3 heading;
-		quat q = { iq.x / m, iq.y / m, iq.z / m, iq.w / m };
-		quat_mul_vec3(heading, q, forward);
-
-		//pthread_mutex_lock(&STATE_LOCK);
-		vec3_copy(ex->state.heading, heading);
-		vec3_scale(heading, heading, delta);
-		vec3_add(ex->state.position, ex->state.position, heading);
-		//pthread_mutex_unlock(&STATE_LOCK);
-		CYCLES++;
-		last_odo = odo;
-		timegate_close(&tg);
-		gettimeofday(&now, NULL);
-		TIMING = diff_us(then, now) / 10e6f;
-	}
-}
-
 
 int collection(cam_t* cam)
 {
@@ -345,14 +227,12 @@ int collection(cam_t* cam)
 		++updates;
 		if(now != time(NULL))
 		{
-			fprintf(stderr, "%dHz (%f %f %f) %d %fm/s %f\n",
+			fprintf(stderr, "%dHz (%f %f %f) %fm/s\n",
 				updates,
 				ex.state.position[0],
 				ex.state.position[1],
 				ex.state.position[2],
-				last_odo,
-				ex.state.vel,
-				TIMING
+				ex.state.vel
 			);
 			updates = 0;
 			now = time(NULL);
