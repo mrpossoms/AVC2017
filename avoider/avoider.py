@@ -6,6 +6,7 @@ import getopt
 import subprocess
 from random import shuffle
 from fibers.fibers import *
+from PIL import Image
 
 
 FRAME_W=160
@@ -19,6 +20,7 @@ class BlobTrainingSet():
     def __init__(self, path=None, shape=[160, 120, 1], file=None):
         self.index = 0
         self.is_stream = False
+        self.saved_one = False
 
         if file is not None:
             self.file = file
@@ -40,17 +42,21 @@ class BlobTrainingSet():
         self.reset()
 
     def seek_sample(self, sample_index):
-        if self.is_stream:
+        sample_index *= 3
+
+        if self.is_stream is not True:
             self.file.seek(self.data_start + sample_size() * sample_index, 0)
 
     def reset(self):
         if self.is_stream:
             return
 
-        self.order = list(range(0, self.size() - 1))
+        example_count = (self.size() - 1) // 3
+
+        self.order = list(range(0, example_count))
         shuffle(self.order)
         self.index = 0
-        self.file.seek(self.data_start, 0);
+        self.file.seek(self.data_start, 0)
 
     def size(self):
         last_pos = self.file.tell()
@@ -63,20 +69,35 @@ class BlobTrainingSet():
         rot_rate = struct.unpack('hhh', self.file.read(6))
         acc = struct.unpack('hhh', self.file.read(6))
         vel = struct.unpack('f', self.file.read(4))
-        distance = struct.unpack('I', self.file.read(4));
-        heading = struct.unpack('fff', self.file.read(12));
-        position = struct.unpack('fff', self.file.read(12));
+        distance = struct.unpack('I', self.file.read(4))
+        heading = struct.unpack('fff', self.file.read(12))
+        position = struct.unpack('fff', self.file.read(12))
         luma = self.file.read(np.prod(self.shape))
-
-        chroma_shape = [self.shape[0] // 2, self.shape[1]]
         chroma = self.file.read(self.shape[0] // 2 * self.shape[1] * 2)
 
-        action_vector = struct.unpack('ffffffffffffffffffffff', self.file.read(4 * 22))
+        throttle = struct.unpack('fffffff', self.file.read(4 * 7))
+        steering = struct.unpack('fffffffffffffff', self.file.read(4 * 15))
 
-        state = (np.frombuffer(luma, dtype=np.uint8).reshape(np.prod(self.shape)) / 255.0)
+        # yuv2 = []
+        # for yi in range(0, self.shape[1]):
+        #     for xi in range(0, self.shape[0]):
+        #         i = yi * self.shape[0] + xi;
+        #         j = yi * (self.shape[0] >> 1) + (xi >> 1)
+        #
+        #         yuv2 += [luma[i], chroma[(j << 1) + 0] , chroma[(j << 1) + 1]]
 
-        return np.asarray(state , dtype=np.float32), \
-               np.asarray(action_vector, dtype=np.float32)
+        #bitmap = np.asarray(luma , dtype=np.uint8)
+        bitmap = np.frombuffer(luma, dtype=np.uint8)
+
+        if not self.saved_one:
+            cube = bitmap.reshape([120, 160])
+            Image.fromarray(cube, 'L').save('./last.png')
+            self.saved_one = True
+
+        state = bitmap.reshape(np.prod([120, 160, 1])) / 255.0
+
+        return state, \
+               np.asarray(steering, dtype=np.float32)
 
     def next_batch(self, size):
 
@@ -87,13 +108,18 @@ class BlobTrainingSet():
                 i = self.order.pop()
                 self.seek_sample(i)
 
-            x, y = self.decode_sample()
+            x = []
+            y = None
 
-            samples.append(x)
+            for _ in range(0, 3):
+                x_, y = self.decode_sample()
+                x += [x_]
+
+            samples.append(np.asarray(x, dtype=np.float32))
             labels.append(y)
             added += 1
 
-        return np.asarray(samples).reshape([added, 19200]), np.asarray(labels).reshape([added, 22])
+        return np.asarray(samples).reshape([added, 57600]), np.asarray(labels).reshape([added, 15])
 
 
 def sample_size():
@@ -105,26 +131,29 @@ def sample_size():
 
 
 class AvoiderNet:
-    def __init__(self):
-        self.x = x = tf.placeholder(tf.float32, shape=[None, 19200], name='X')
-        self.y_ = tf.placeholder(tf.float32, shape=[None, 22], name='y_labels')
+    def __init__(self, output_size):
+        self.x = x = tf.placeholder(tf.float32, shape=[None, 57600], name='X')
+        self.y_ = tf.placeholder(tf.float32, shape=[None, output_size], name='y_labels')
 
-        self.x_image = x_image = tf.reshape(x, [-1, 160, 120, 1])
-        self.conv_layers = (image_input(x_image, [160, 120, 1])
+        self.x_image = x_image = tf.reshape(x, [-1, 120, 160, 3])
+        self.conv_layers = (image_input(x_image, [120, 160, 3])
                             .pool(2)
-                            .to_conv(filter=[5, 5, 8])
+                            .to_conv(filter=[5, 5, 32])
                             .pool(2)
                            )
 
-        self.h = self.conv_layers.to_fc(1024).output_vector(22)
-        self.cost = tf.reduce_mean(tf.pow(self.h - self.y_, 2))
+        self.output = self.conv_layers.to_fc(1024).output_vector(output_size)
+        self.h = self.output.tensor
+        self.cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.y_, logits=self.h))
         self.training_step = tf.train.AdamOptimizer(1E-4).minimize(self.cost)
 
-        correct_prediction = self.cost < 1
+        correct_prediction = tf.equal(tf.argmax(self.y_, 1), tf.argmax(self.h, 1))
         self.prediction_accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
+    def saver_dict(self):
+        return self.output.saver_dict()
+
     def train(self, x, y_):
-        print(self.cost.eval(feed_dict={"X:0": x, "y_labels:0": y_}))
         self.training_step.run(feed_dict={"X:0": x, "y_labels:0": y_})
 
     def predict(self, x):
@@ -138,10 +167,11 @@ class AvoiderNet:
 def main(args):
     model_path = "/tmp/avoider.ckpt"
 
-    opts, _ = getopt.getopt(args, 'sp')
+    opts, _ = getopt.getopt(args, 'spl')
     ts = None
     predict = False
     use_stdin = False
+    should_load = False
 
     for k, v in opts:
         if 's' in k:
@@ -150,8 +180,12 @@ def main(args):
         if 'p' in k:
             predict = True
 
-    net = AvoiderNet()
-    saver = tf.train.Saver()
+        if 'l' in k:
+            should_load = True
+
+    net = AvoiderNet(output_size=15)
+    save_dic = net.saver_dict()
+    saver = tf.train.Saver(save_dic)
 
     if use_stdin:
         ts = BlobTrainingSet(file=sys.stdin.buffer)
@@ -159,28 +193,32 @@ def main(args):
         ts = BlobTrainingSet(path="s0")
 
     with tf.Session() as session:
-        if predict:
-            print('Predicting output')
+        loaded = False
+        session.run(tf.global_variables_initializer())
+
+        if predict or should_load:
             try:
+                print('Restoring session')
                 saver.restore(session, model_path)
+                loaded = True
             except tf.errors.NotFoundError:
                 print('Failed to load')
         else:
             print('Training')
 
-        session.run(tf.global_variables_initializer())
-
         if predict:
+            print('Predicting output')
             while True:
                 x, y_ = ts.next_batch(1)
 
-                h = net.predict(x).reshape([22])
+                h = net.predict(x).reshape([15])
                 i = 0
 
                 print('-------------------------------')
                 for f in h:
                     i += 1
-                    if i < 7: continue
+                    if i == 7:
+                        print('>>>')
                     str = ''
                     for _ in range(0, int(f * 10)):
                         str += '#'
@@ -188,15 +226,14 @@ def main(args):
                     print(str)
 
         else:
-            for epoch in range(1, 50):
+            for epoch in range(1, 200):
                 ts.reset()
                 while len(ts.order) > 0:
                     x, y_ = ts.next_batch(1000)
                     net.train(x, y_)
 
-                    print(len(ts.order))
-                    if epoch % 10 == 0:
-                        saver.save(session, model_path)
+                    #if epoch % 10 == 0:
+                    saver.save(session, model_path)
 
                 ts.reset()
                 x, y_ = ts.next_batch(1000)

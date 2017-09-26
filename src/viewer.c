@@ -191,6 +191,8 @@ int main(int argc, char* argv[])
 
 		glfwPollEvents();
 		glfwSwapBuffers(WIN);
+
+		sleep(1);
 	}
 
 	return 0;
