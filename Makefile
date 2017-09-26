@@ -1,7 +1,7 @@
 $(eval OS := $(shell uname))
 
 CC=gcc
-CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wno-pointer-compare
+CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 
 COLLECTOR_SRC=src/deadreckon.c src/sys.c src/BNO055_driver/*.c src/collector.c src/i2c.c src/drv_pwm.c src/cam.c src/curves.c
 INC=-I./src -I./src/BNO055_driver -I./src/linmath
 VIEWER_SRC=src/viewer.c

@@ -1,11 +1,11 @@
-#!/Users/kirk/.pyenv/shims/python
+#!/usr/bin/python
 import tensorflow as tf
 import struct
 import sys
 import getopt
 import subprocess
 from random import shuffle
-from fibers.fibers import *
+from fibers import *
 
 
 FRAME_W=160
