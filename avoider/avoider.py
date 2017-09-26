@@ -1,4 +1,4 @@
-#!/Users/kirk/.pyenv/shims/python
+#!/usr/bin/python
 import tensorflow as tf
 import struct
 import sys

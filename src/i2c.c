@@ -1,5 +1,6 @@
 #include "i2c.h"
 #include "bno055.h"
+#include "drv_pwm.h"
 
 #include <sys/ioctl.h>
 #include <stdio.h>
@@ -135,8 +136,34 @@ int i2c_init(const char* path)
 
 }
 
-int i2c_poll_devices(raw_state_t* state)
+
+int poll_i2c_devs(raw_state_t* state, raw_action_t* action, int* odo)
 {
-	bno055_read_accel_xyz((struct bno055_accel_t*)state->rot_rate);
-	bno055_read_gyro_xyz((struct bno055_gyro_t*)state->acc);
+	uint8_t mode = 0;
+	int res;
+
+	res = pwm_get_action(action);
+	if(res) return res;
+
+	if(odo)
+	{
+		*odo = pwm_get_odo();
+		if(*odo < 0) return *odo;
+	}
+
+	res = bno055_get_operation_mode(&mode);
+
+	if(!state) return 3;
+
+	if(bno055_read_accel_xyz((struct bno055_accel_t*)state->acc))
+	{
+		EXIT("Error reading from BNO055\n");
+	}
+
+	if(bno055_read_gyro_xyz((struct bno055_gyro_t*)state->rot_rate))
+	{
+		EXIT("Error reading from BNO055\n");
+	}
+
+	return 0;
 }

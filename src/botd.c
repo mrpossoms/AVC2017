@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include <spawn.h>
 #include <sys/wait.h>
+#include <stdarg.h>
 
 #include "i2c.h"
 #include "drv_pwm.h"
@@ -11,10 +12,46 @@
 static const char* MEDIA_PATH;
 static int RUNNING;
 static int DAEMONIZE;
+static FILE* LOG_FILE;
+
+#define GOOD(fmt, ...) do { log_msg(".", fmt, __VA_ARGS__); } while(0)
+#define BAD(fmt, ...) do { log_msg("!", fmt, __VA_ARGS__); } while(0)
+#define INFO(fmt, ...) do { log_msg("*", fmt, __VA_ARGS__); } while(0)
 
 struct {
 	int last_odo;
 } app = {};
+
+
+static void log_msg(const char* type, const char* fmt, ...)
+{
+	va_list ap;
+	char buf[1024];
+
+	fprintf(LOG_FILE, "botd [%ld] %s: ", time(NULL), type);
+
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	
+	fprintf(LOG_FILE, "%s\n", buf);
+}
+
+
+static void bad(const char* fmt, ...)
+{
+	va_list ap;
+	char buf[1024];
+
+	log_msg("!", fmt);
+
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	
+	fprintf(LOG_FILE, "%s\n", buf);
+}
+
 
 void proc_opts(int argc, char* const argv[])
 {
@@ -40,7 +77,7 @@ static void i2c_up()
 
 	if(res)
 	{
-		fprintf(stderr, "i2c_init failed (%d)\n", res);
+		BAD("i2c_init failed (%d)\n", res);
 		exit(-1);
 	}
 }
@@ -98,8 +135,20 @@ int main(int argc, char* const argv[])
 	int res;
 	proc_opts(argc, argv);
 	
-	if(!MEDIA_PATH) return -1;	
+	LOG_FILE = fopen("/var/log/botd", "w+");
 	
+	if(!LOG_FILE)
+	{
+		fprintf(stderr, "Failed to open logfile (%d)\n", errno);
+		return -1;
+	}
+
+	if(!MEDIA_PATH) 
+	{
+		BAD("Please provide a training data media path\n");
+		return -1;	
+	}
+
 	i2c_up();
 
 	RUNNING = 1;

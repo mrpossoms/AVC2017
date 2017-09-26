@@ -26,7 +26,7 @@ int i2c_read(int fd, uint8_t devAddr, uint8_t srcReg, void* dstBuf, size_t bytes
 
 int i2c_init(const char* path);
 void i2c_uninit();
-int i2c_poll_devices(raw_state_t* state);
+int poll_i2c_devs(raw_state_t* state, raw_action_t* action, int* odo);
 
 #ifdef __cplusplus
 }
