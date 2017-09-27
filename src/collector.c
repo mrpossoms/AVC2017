@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -53,6 +54,7 @@ void proc_opts(int argc, const char ** argv)
 				NORM_VIDEO = 1;
 				break;
 			case 'm':
+				fprintf(stderr, "Using media: '%s'\n", optarg);
 				MEDIA_PATH = optarg;
 				break;
 		}
@@ -199,12 +201,16 @@ int collection(cam_t* cam)
 
 	if(MEDIA_PATH)
 	{
-		fd = open(MEDIA_PATH, O_CREAT | O_WRONLY, 0666);
-		fprintf(stderr, "Writing data to '%s'\n", MEDIA_PATH);
+		char path_buf[PATH_MAX];
+
+		snprintf(path_buf, sizeof(path_buf), "%s/%ld", MEDIA_PATH, time(NULL));
+
+		fd = open(path_buf, O_CREAT | O_WRONLY, 0666);
+		fprintf(stderr, "Writing data to '%s'\n", path_buf);
 
 		if(fd < 0)
 		{
-			fprintf(stderr, "Error: couldn't open/create %s\n", MEDIA_PATH);
+			fprintf(stderr, "Error: couldn't open/create %s\n", path_buf);
 			exit(-1);
 		}
 	}
@@ -217,6 +223,12 @@ int collection(cam_t* cam)
 	int pri = sched_get_priority_max(SCHED_RR) - 1;
 
 	res = pthread_create(&pose_thread, NULL, pose_estimator, (void*)&ex);
+
+	// wait for the bot to start moving
+	while(ex.state.vel <= 0)
+	{
+		usleep(100000);
+	}
 
 	for(;;)
 	{
@@ -252,6 +264,11 @@ int collection(cam_t* cam)
 		}
 		pthread_mutex_unlock(&STATE_LOCK);
 
+	
+		if(ex.state.vel == 0)
+		{
+			exit(0);
+		}	
 	}
 }
 
