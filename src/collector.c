@@ -27,6 +27,7 @@
 typedef enum {
 	COL_MODE_NORMAL = 0,
 	COL_MODE_ACT_CAL,
+	COL_MODE_ROUTE,
 } col_mode_t;
 
 char* MEDIA_PATH;
@@ -41,7 +42,7 @@ void proc_opts(int argc, const char ** argv)
 {
 	for(;;)
 	{
-		int c = getopt(argc, (char *const *)argv, "cnm:");
+		int c = getopt(argc, (char *const *)argv, "rcnm:");
 		if(c == -1) break;
 
 		switch (c) 
@@ -56,6 +57,10 @@ void proc_opts(int argc, const char ** argv)
 			case 'm':
 				fprintf(stderr, "Using media: '%s'\n", optarg);
 				MEDIA_PATH = optarg;
+				break;
+			case 'r':
+				fprintf(stderr, "Recording route\n");
+				MODE = COL_MODE_ROUTE;
 				break;
 		}
 	}
@@ -184,45 +189,116 @@ int calibration(cam_settings_t cfg)
 }
 
 
-pthread_mutex_t STATE_LOCK;
-
-int collection(cam_t* cam)
+int set_recording_media(int* fd, const char* ext)
 {
-	int res = 0, fd = 1;
-	pthread_t pose_thread;
-	pthread_attr_t pose_attr;
-	time_t now;
-	int started = 0, updates = 0;
-	dataset_header_t hdr = {};
-	hdr.magic = MAGIC;
-	hdr.is_raw = 1;
-
-	pthread_mutex_init(&STATE_LOCK, NULL);
-
 	if(MEDIA_PATH)
 	{
 		char path_buf[PATH_MAX];
 
-		snprintf(path_buf, sizeof(path_buf), "%s/%ld", MEDIA_PATH, time(NULL));
+		snprintf(path_buf, sizeof(path_buf), "%s/%ld.%s", MEDIA_PATH, time(NULL), ext);
 
-		fd = open(path_buf, O_CREAT | O_WRONLY, 0666);
+		*fd = open(path_buf, O_CREAT | O_WRONLY, 0666);
 		fprintf(stderr, "Writing data to '%s'\n", path_buf);
 
-		if(fd < 0)
+		if(*fd < 0)
 		{
 			fprintf(stderr, "Error: couldn't open/create %s\n", path_buf);
 			exit(-1);
 		}
 	}
 
+	return 0;
+}
+
+
+int start_pose_thread(raw_example_t* ex)
+{
+	pthread_t pose_thread;
+	return pthread_create(&pose_thread, NULL, pose_estimator, (void*)ex);
+}
+
+
+pthread_mutex_t STATE_LOCK;
+
+int route()
+{
+	int res = 0, fd = 1;
+	time_t now;
+	int started = 0;
+	dataset_header_t hdr = { MAGIC, 2 };
+
+	pthread_mutex_init(&STATE_LOCK, NULL);
+
+	set_recording_media(&fd, "route");
+
 	// write the header first
 	write(fd, &hdr, sizeof(hdr));
 
 	now = time(NULL);
 	raw_example_t ex = { };
-	int pri = sched_get_priority_max(SCHED_RR) - 1;
+	start_pose_thread(&ex);
 
-	res = pthread_create(&pose_thread, NULL, pose_estimator, (void*)&ex);
+	// wait for the bot to start moving
+	while(ex.state.vel <= 0)
+	{
+		usleep(100000);
+	}
+
+	
+	vec3 last_pos;
+	vec3_copy(last_pos, ex.state.position);
+
+	for(;;)
+	{
+		vec3 diff = {};
+		vec3_sub(diff, ex.state.position, last_pos);
+		if(vec3_len(diff) >= 1)
+		{
+			waypoint_t wp = {
+				.velocity = ex.state.vel
+			};
+
+			vec3_copy(wp.position, ex.state.position);
+			vec3_copy(wp.heading, ex.state.heading);
+
+			pthread_mutex_lock(&STATE_LOCK);
+			if(write(fd, &wp, sizeof(wp)) != sizeof(wp))
+			{
+				fprintf(stderr, "Error writing waypoint sample\n");
+				return -3;
+			}
+			pthread_mutex_unlock(&STATE_LOCK);
+
+			vec3_copy(last_pos, ex.state.position);
+		}
+
+	
+		if(ex.state.vel == 0)
+		{
+			exit(0);
+		}	
+	}
+}
+
+
+int collection(cam_t* cam)
+{
+	int res = 0, fd = 1;
+	time_t now;
+	int started = 0, updates = 0;
+	dataset_header_t hdr = { MAGIC, 1 };
+
+	pthread_mutex_init(&STATE_LOCK, NULL);
+
+	set_recording_media(&fd, "train");
+	pwm_set_echo(0x6);
+
+	// write the header first
+	write(fd, &hdr, sizeof(hdr));
+
+	now = time(NULL);
+	raw_example_t ex = { };
+	start_pose_thread(&ex);
 
 	// wait for the bot to start moving
 	while(ex.state.vel <= 0)
@@ -329,6 +405,8 @@ int main(int argc, const char* argv[])
 		case COL_MODE_ACT_CAL:
 			calibration(cfg);
 			break;
+		case COL_MODE_ROUTE:
+			route();
 		default:
 			res = collection(cam);
 	}

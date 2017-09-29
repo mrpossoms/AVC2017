@@ -34,7 +34,7 @@ viewer: magic $(VIEWER_SRC)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $(VIEWER_SRC) -o viewer $(VIEWER_LINK)
 
 collector: magic $(COLLECTOR_SRC)
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(COLLECTOR_SRC) -o collector -lpthread
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(COLLECTOR_SRC) -o collector -lm -lpthread
 
 masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
