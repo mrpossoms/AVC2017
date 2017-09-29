@@ -42,8 +42,8 @@ masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 botd: magic $(BOTD_SRC)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(BOTD_SRC) -o botd	
 
-install-bot: collector size
-	ln -s $(shell pwd)/$^ /usr/bin/$^
+install-bot: collector structsize 
+	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
 
 install-tools: masseuse viewer structsize
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)

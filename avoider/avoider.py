@@ -5,7 +5,7 @@ import sys
 import getopt
 import subprocess
 from random import shuffle
-from fibers.fibers import *
+from fibers import *
 from PIL import Image
 
 
@@ -190,7 +190,7 @@ def main(args):
     if use_stdin:
         ts = BlobTrainingSet(file=sys.stdin.buffer)
     else:
-        ts = BlobTrainingSet(path="s0")
+        ts = BlobTrainingSet(path="/var/AVC2017/avoider/s0")
 
     with tf.Session() as session:
         loaded = False

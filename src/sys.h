@@ -8,6 +8,17 @@
 #include <math.h>
 #include <assert.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <getopt.h>
+#include <sched.h>
+#include <pthread.h>
+#include <sys/stat.h>
+
+
 typedef struct {	
 	struct timeval start;
 	uint32_t interval_us;

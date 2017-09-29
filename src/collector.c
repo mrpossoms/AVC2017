@@ -1,14 +1,4 @@
 #define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
-#include <getopt.h>
-#include <sched.h>
-#include <pthread.h>
-#include <sys/stat.h>
-
 #include "sys.h"
 #include "structs.h"
 #include "dataset_hdr.h"
