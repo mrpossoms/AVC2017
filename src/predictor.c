@@ -1,4 +1,5 @@
 #include "sys.h"
+#include "structs.h"
 
 int INPUT_FD = 0;
 

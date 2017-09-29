@@ -108,6 +108,14 @@ typedef struct {
 	action_f_t action;
 } example_t;
 
+struct waypoint;
+typedef struct waypoint {
+	vec3 position;
+	vec3 heading;
+	float velocity;
+	struct waypoint* next;
+} waypoint_t;
+
 typedef struct {
 	float min, max;
 } range_t;

@@ -11,5 +11,6 @@ int pwm_reset();
 int pwm_get_odo();
 int pwm_get_action(raw_action_t* action);
 int pwm_set_action(raw_action_t* action);
+int pwm_set_echo(uint8_t is_echo_flags);
 
 #endif

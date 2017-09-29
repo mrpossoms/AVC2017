@@ -4,19 +4,22 @@
 #include <getopt.h>
 #include <spawn.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <stdarg.h>
 
 #include "i2c.h"
 #include "drv_pwm.h"
+
+extern char** environ;
 
 static const char* MEDIA_PATH;
 static int RUNNING;
 static int DAEMONIZE;
 static FILE* LOG_FILE;
 
-#define GOOD(fmt, ...) do { log_msg(".", fmt, __VA_ARGS__); } while(0)
-#define BAD(fmt, ...) do { log_msg("!", fmt, __VA_ARGS__); } while(0)
-#define INFO(fmt, ...) do { log_msg("*", fmt, __VA_ARGS__); } while(0)
+#define GOOD(fmt...) do { log_msg(".", fmt); } while(0)
+#define BAD(fmt...) do { log_msg("!", fmt); } while(0)
+#define INFO(fmt...) do { log_msg("*", fmt); } while(0)
 
 struct {
 	int last_odo;
@@ -88,6 +91,8 @@ void child_loop()
 
 	if(odo > app.last_odo)
 	{
+		write(1, ".", 1);
+
 		raw_action_t act = {};
 		if(pwm_get_action(&act))
 		{
@@ -97,6 +102,8 @@ void child_loop()
 		if(act.throttle > 0)
 		if(act.throttle - 1 > THROTTLE_STOPPED || act.throttle + 1 < THROTTLE_STOPPED)
 		{
+			INFO("Recording session...");
+
 			//
 			// Let the collector have the i2c bus
 			//
@@ -106,11 +113,8 @@ void child_loop()
 			// Start collecting!
 			//
 			pid_t collector_pid;
-			char buf[1024];
-			char* argv[] = { buf, NULL };
+			char* argv[] = { "collector", "-m", MEDIA_PATH, NULL };
 
-			snprintf(buf, sizeof(buf), "-m%s/%lu.session", MEDIA_PATH, time(NULL));
-			argv[0] = buf;
 			posix_spawn(
 				&collector_pid, 
 				"collector",
@@ -122,11 +126,15 @@ void child_loop()
 			// Wait for the collector process to terminate
 			// then bring the i2c bus back up
 			waitpid(collector_pid, NULL, 0);
+
+			INFO("Session finished");
+			INFO("Waiting...");
 			i2c_up();
 		}
 	}
 
 	app.last_odo = odo;
+	sleep(1);
 }
 
 
