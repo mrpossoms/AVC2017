@@ -12,7 +12,6 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-#define ACTION_CAL_PATH "actions.cal"
 
 typedef enum {
 	COL_MODE_NORMAL = 0,
@@ -24,6 +23,7 @@ char* MEDIA_PATH;
 int I2C_BUS;
 int NORM_VIDEO;
 col_mode_t MODE;
+int WAIT_FOR_MOVEMENT = 1;
 calib_t CAL;
 float VEL;
 
@@ -32,25 +32,28 @@ void proc_opts(int argc, const char ** argv)
 {
 	for(;;)
 	{
-		int c = getopt(argc, (char *const *)argv, "rcnm:");
+		int c = getopt(argc, (char *const *)argv, "ircnm:");
 		if(c == -1) break;
 
 		switch (c) 
 		{
-			case 'c':
+			case 'c': // Calibrate
 				MODE = COL_MODE_ACT_CAL;
-				fprintf(stderr, "Calibrating action vector\n");
+				b_log("Calibrating action vector");
 				break;
-			case 'n':
+			case 'n': // Normalize video
 				NORM_VIDEO = 1;
 				break;
-			case 'm':
-				fprintf(stderr, "Using media: '%s'\n", optarg);
+			case 'm': // Set recording media
+				b_log("Using media: '%s'", optarg);
 				MEDIA_PATH = optarg;
 				break;
-			case 'r':
-				fprintf(stderr, "Recording route\n");
+			case 'r': // Record route
+				b_log("Recording route");
 				MODE = COL_MODE_ROUTE;
+				break;
+			case 'i': // Start immediately
+				WAIT_FOR_MOVEMENT = 0;
 				break;
 		}
 	}
@@ -163,7 +166,7 @@ int calibration(cam_settings_t cfg)
 
 		if(memcmp(&last_cal, &CAL, sizeof(CAL)))
 		{
-			fprintf(stderr, "throttle: [%f - %f]\nsteering: [%f - %f]\n",
+			b_log("throttle: [%f - %f]\nsteering: [%f - %f]",
 					CAL.throttle.min, CAL.throttle.max,
 					CAL.steering.min, CAL.steering.max
 			       );
@@ -188,11 +191,11 @@ int set_recording_media(int* fd, const char* ext)
 		snprintf(path_buf, sizeof(path_buf), "%s/%ld.%s", MEDIA_PATH, time(NULL), ext);
 
 		*fd = open(path_buf, O_CREAT | O_WRONLY, 0666);
-		fprintf(stderr, "Writing data to '%s'\n", path_buf);
+		b_log("Writing data to '%s'", path_buf);
 
 		if(*fd < 0)
 		{
-			fprintf(stderr, "Error: couldn't open/create %s\n", path_buf);
+			b_log("Error: couldn't open/create %s", path_buf);
 			exit(-1);
 		}
 	}
@@ -229,6 +232,7 @@ int route()
 	start_pose_thread(&ex);
 
 	// wait for the bot to start moving
+	if(WAIT_FOR_MOVEMENT)
 	while(ex.state.vel <= 0)
 	{
 		usleep(100000);
@@ -254,7 +258,7 @@ int route()
 			pthread_mutex_lock(&STATE_LOCK);
 			if(write(fd, &wp, sizeof(wp)) != sizeof(wp))
 			{
-				fprintf(stderr, "Error writing waypoint sample\n");
+				b_log("Error writing waypoint sample");
 				return -3;
 			}
 			pthread_mutex_unlock(&STATE_LOCK);
@@ -263,7 +267,7 @@ int route()
 		}
 
 	
-		if(ex.state.vel == 0)
+		if(ex.state.vel == 0 && WAIT_FOR_MOVEMENT)
 		{
 			exit(0);
 		}	
@@ -291,6 +295,7 @@ int collection(cam_t* cam)
 	start_pose_thread(&ex);
 
 	// wait for the bot to start moving
+	if(WAIT_FOR_MOVEMENT)
 	while(ex.state.vel <= 0)
 	{
 		usleep(100000);
@@ -305,7 +310,7 @@ int collection(cam_t* cam)
 		++updates;
 		if(now != time(NULL))
 		{
-			fprintf(stderr, "%dHz (%f %f %f) %fm/s\n",
+			b_log("%dHz (%f %f %f) %fm/s",
 				updates,
 				ex.state.position[0],
 				ex.state.position[1],
@@ -318,20 +323,20 @@ int collection(cam_t* cam)
 
 		if(poll_vision(&ex.state, cam))
 		{
-			fprintf(stderr, "Error capturing frame\n");
+			b_log("Error capturing frame");
 			return -2;
 		}
 
 		pthread_mutex_lock(&STATE_LOCK);
 		if(write(fd, &ex, sizeof(ex)) != sizeof(ex))
 		{
-			fprintf(stderr, "Error writing state-action pair\n");
+			b_log("Error writing state-action pair");
 			return -3;
 		}
 		pthread_mutex_unlock(&STATE_LOCK);
 
 	
-		if(ex.state.vel == 0)
+		if(ex.state.vel == 0 && WAIT_FOR_MOVEMENT)
 		{
 			exit(0);
 		}	
@@ -347,9 +352,11 @@ int main(int argc, const char* argv[])
 		.height = 120
 	};
 
+	PROC_NAME = argv[0];
+
 	proc_opts(argc, argv);
 
-	fprintf(stderr, "Sensors...");
+	b_log("Sensors...");
 
 	cam_t cam[2] = {
 		cam_open("/dev/video0", &cfg),
@@ -360,12 +367,12 @@ int main(int argc, const char* argv[])
 
 	if((res = i2c_init("/dev/i2c-1")))
 	{
-		fprintf(stderr, "I2C init failed (%d)\n", res);
+		b_log("I2C init failed (%d)", res);
 		//return -1;
 	}
 	
 	pwm_reset();
-	fprintf(stderr, "OK\n");
+	b_log("OK");
 
 	// Use the round-robin real-time scheduler
 	// with a high priority
@@ -381,13 +388,11 @@ int main(int argc, const char* argv[])
 	if(stat(ACTION_CAL_PATH, &st))
 	{
 		MODE = COL_MODE_ACT_CAL;
-		fprintf(stderr, "No %s file found. Calibrating...\n", ACTION_CAL_PATH);
+		b_log("No %s file found. Calibrating...", ACTION_CAL_PATH);
 	}
 	else
 	{
-		int cal_fd = open(ACTION_CAL_PATH, O_RDONLY);
-		read(cal_fd, &CAL, sizeof(CAL));
-		close(cal_fd);
+		assert(calib_load(ACTION_CAL_PATH, &CAL) == 0);
 	}
 	
 	switch(MODE)

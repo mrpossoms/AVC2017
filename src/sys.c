@@ -2,12 +2,14 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 
 void timegate_open(timegate_t* tg)
 {
 	gettimeofday(&tg->start, NULL);
 }
+
 
 long diff_us(struct timeval then, struct timeval now)
 {
@@ -25,6 +27,7 @@ long diff_us(struct timeval then, struct timeval now)
 	return us;
 }
 
+
 void timegate_close(timegate_t* tg)
 {
 	struct timeval now = {};
@@ -35,4 +38,35 @@ void timegate_close(timegate_t* tg)
 
 	if(residual < 0) return;	
 	usleep(residual);
+}
+
+
+int calib_load(const char* path, calib_t* cal)
+{
+	int cal_fd = open(ACTION_CAL_PATH, O_RDONLY);
+
+	if(cal_fd < 0)
+	{
+		return -1;
+	}
+
+	if(read(cal_fd, cal, sizeof(calib_t)) != sizeof(calib_t))
+	{
+		return -2;
+	}
+
+	close(cal_fd);
+	return 0;
+}
+
+char* PROC_NAME;
+void b_log(const char* fmt, ...)
+{
+	char buf[1024];
+	va_list ap;
+	
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	fprintf(stderr, "[%s] %s (%d)\n", PROC_NAME, buf, errno); 
 }
