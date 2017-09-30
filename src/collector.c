@@ -24,6 +24,7 @@ int I2C_BUS;
 int NORM_VIDEO;
 col_mode_t MODE;
 int WAIT_FOR_MOVEMENT = 1;
+int READ_ACTION = 1;
 calib_t CAL;
 float VEL;
 
@@ -32,7 +33,7 @@ void proc_opts(int argc, const char ** argv)
 {
 	for(;;)
 	{
-		int c = getopt(argc, (char *const *)argv, "ircnm:");
+		int c = getopt(argc, (char *const *)argv, "aircnm:");
 		if(c == -1) break;
 
 		switch (c) 
@@ -54,6 +55,9 @@ void proc_opts(int argc, const char ** argv)
 				break;
 			case 'i': // Start immediately
 				WAIT_FOR_MOVEMENT = 0;
+				break;
+			case 'a':
+				READ_ACTION = 0;
 				break;
 		}
 	}
@@ -285,7 +289,11 @@ int collection(cam_t* cam)
 	pthread_mutex_init(&STATE_LOCK, NULL);
 
 	set_recording_media(&fd, "train");
-	pwm_set_echo(0x6);
+
+	if(READ_ACTION)
+	{
+		pwm_set_echo(0x6);
+	}
 
 	// write the header first
 	write(fd, &hdr, sizeof(hdr));

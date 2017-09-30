@@ -29,7 +29,7 @@ int pwm_set_action(raw_action_t* action)
 {
 	if(!action) return 1;
 
-	if(i2c_write_bytes(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0, (uint8_t*)action, sizeof(raw_action_t)))
+	if(i2c_write_bytes(I2C_BUS_FD, PWM_LOGGER_ADDR, 2, (uint8_t*)action, sizeof(raw_action_t)))
 	{
 		return 2;	
 	}

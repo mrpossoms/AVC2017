@@ -21,6 +21,8 @@ void proc_opts(int argc, char* const *argv)
 		case 'm':
 			// Explicit PWM channel masking
 			PWM_CHANNEL_MSK = atoi(optarg);
+			b_log("channel mask %x", PWM_CHANNEL_MSK);
+			break;
 		case 'r':
 		{
 			// Load the route
@@ -119,11 +121,14 @@ int main(int argc, char* const argv[])
 		return -2;
 	}
 
-	pwm_set_echo(PWM_CHANNEL_MSK);
 
 	proc_opts(argc, argv);
 		
 	raw_example_t ex = {};
+
+	pwm_reset();
+	sleep(1);
+	pwm_set_echo(PWM_CHANNEL_MSK);
 
 	b_log("Waiting...");
 	read(INPUT_FD, &ex, sizeof(ex)); // block for the first sample
@@ -148,6 +153,8 @@ int main(int argc, char* const argv[])
 		else if(ret) // stuff to read
 		{
 			raw_action_t act = predict(&ex.state, *NEXT_WPT); 
+
+			pwm_set_action(&act);
 		}
 		else // timeout
 		{

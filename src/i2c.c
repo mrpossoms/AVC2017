@@ -142,8 +142,11 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action, int* odo)
 	uint8_t mode = 0;
 	int res;
 
-	res = pwm_get_action(action);
-	if(res) return res;
+	if(action)
+	{
+		res = pwm_get_action(action);
+		if(res) return res;
+	}
 
 	if(odo)
 	{

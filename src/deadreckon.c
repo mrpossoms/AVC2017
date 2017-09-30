@@ -9,7 +9,7 @@
 #include "curves.h"
 #include "deadreckon.h"
 
-
+extern int READ_ACTION;
 int POSE_CYCLES;
 
 void* pose_estimator(void* params)
@@ -19,8 +19,8 @@ void* pose_estimator(void* params)
 	};
 
 	raw_example_t* ex = (raw_example_t*)params;
-	raw_action_t action;
-	
+	raw_action_t action, *act_ptr = NULL;	
+
 	// Run exclusively on the 4th core
 	cpu_set_t* pose_cpu = CPU_ALLOC(1);
 	CPU_SET(3, pose_cpu);
@@ -31,6 +31,11 @@ void* pose_estimator(void* params)
 	int LAST_D_ODO_CYCLE = 0;
 	int last_odo = 0;
 
+	if(READ_ACTION)
+	{
+		act_ptr = &action;
+	}
+
 	while(1)
 	{
 		timegate_open(&tg);
@@ -38,24 +43,25 @@ void* pose_estimator(void* params)
 		int odo = 0;
 		struct bno055_quaternion_t iq;		
 
-		//pthread_mutex_lock(&STATE_LOCK);
-		if(poll_i2c_devs(&ex->state, &action, &odo))
+		if(READ_ACTION)
 		{
-			return (void*)-1;
-		}
+			if(poll_i2c_devs(&ex->state, act_ptr, &odo))
+			{
+				return (void*)-1;
+			}
 
-		float mu = bucket_index(action.steering, &CAL.steering, STEERING_BANDS); 
-		for(int i = STEERING_BANDS; i--;)
-		{
-			ex->action.steering[i] = falloff(mu, i);
-		}
+			float mu = bucket_index(act_ptr->steering, &CAL.steering, STEERING_BANDS); 
+			for(int i = STEERING_BANDS; i--;)
+			{
+				ex->action.steering[i] = falloff(mu, i);
+			}
 
-		mu = bucket_index(action.throttle, &CAL.throttle, THROTTLE_BANDS); 
-		for(int i = THROTTLE_BANDS; i--;)
-		{
-			ex->action.throttle[i] = falloff(mu, i);
+			mu = bucket_index(act_ptr->throttle, &CAL.throttle, THROTTLE_BANDS); 
+			for(int i = THROTTLE_BANDS; i--;)
+			{
+				ex->action.throttle[i] = falloff(mu, i);
+			}
 		}
-		//pthread_mutex_unlock(&STATE_LOCK);
 
 		const float wheel_cir = 0.082 * M_PI / 4.0;
 		float delta = (odo - last_odo) * wheel_cir; 
