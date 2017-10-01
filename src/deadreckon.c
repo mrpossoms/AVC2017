@@ -87,7 +87,7 @@ void* pose_estimator(void* params)
 		quat_mul_vec3(heading, q, forward);
 
 		//pthread_mutex_lock(&STATE_LOCK);
-		vec3_copy(ex->state.heading, heading);
+		vec3_norm(ex->state.heading, heading);
 		vec3_scale(heading, heading, delta);
 		vec3_add(ex->state.position, ex->state.position, heading);
 		//pthread_mutex_unlock(&STATE_LOCK);

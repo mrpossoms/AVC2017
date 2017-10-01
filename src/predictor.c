@@ -65,36 +65,50 @@ void proc_opts(int argc, char* const *argv)
 	}	
 }
 
-
+float LAST_S=117;
 raw_action_t predict(raw_state_t* state, waypoint_t goal)
 {
 	quat q = { 0, 0, sin(M_PI / 4), cos(M_PI / 4) };
-	raw_action_t act = {};
+	raw_action_t act = { 117, 117 };
 	vec3 goal_vec, dist_vec = {};
 	vec3 left, proj;
 
+	if(vec3_len(state->heading) == 0)
+	{
+		return act;
+	}
+
+	// Compute the total delta vector between the car, and the goal
+	// then normalize the delta to get the goal heading
+	// rotate the heading vector about the z-axis to get the left vector
 	vec3_sub(dist_vec, goal.position, state->position);
 	vec3_norm(goal_vec, dist_vec);
 	quat_mul_vec3(left, q, state->heading);
-	float p = vec3_mul_inner(left, goal_vec);
-	
-	//b_log("left (%f, %f, %f)", left[0], left[1], left[2]); 
-	//b_log("heading (%f, %f, %f)", state->heading[0], state->heading[1], state->heading[2]); 
-	//b_log("%f", p);	
 
-	float mu = ((CAL.steering.max - CAL.steering.min) / 2);
+	// Determine if we are pointing toward the goal with the 'coincidence' value
+	// Project the goal vector onto the left vector to determine steering direction
+	// remap range to [0, 1] 
+	float coincidence = vec3_mul_inner(state->heading, goal_vec);
+	float p = (vec3_mul_inner(left, goal_vec) + 1) / 2;
 
-	if(p < 0)
+	// If pointing away, steer all the way to the right or left, so
+	// p will be either 1 or 0
+	if(coincidence < 0)
 	{
-		act.steering = mu * (1 - p) + CAL.steering.min;
-	}
-	else
-	{
-		act.steering = mu * (1 - p) + CAL.steering.max;
+		p = roundf(p); 
 	}
 
+	// Lerp between right and left.
+	act.steering = CAL.steering.max * (1 - p) + CAL.steering.min * p;
+/*
+	b_log("left (%f, %f, %f)", left[0], left[1], left[2]); 
+	b_log("heading (%f, %f, %f)", state->heading[0], state->heading[1], state->heading[2]); 
+	b_log("%f", p);	
 	b_log("steering: %d", act.steering);
 
+	//if(fabs(LAST_S - act.steering) < 5) sleep(1);
+	LAST_S = act.steering;
+*/
 	return act;
 }
 
@@ -102,12 +116,17 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);	
+	raw_action_t act = { 117, 117 };
+	pwm_set_action(&act);
+	exit(0);
 }
 
 
 int main(int argc, char* const argv[])
 {
 	PROC_NAME = argv[0];
+
+	signal(SIGINT, sig_handler);
 
 	if(calib_load(ACTION_CAL_PATH, &CAL))
 	{
@@ -152,6 +171,8 @@ int main(int argc, char* const argv[])
 		}
 		else if(ret) // stuff to read
 		{
+			read(INPUT_FD, &ex, sizeof(ex));
+
 			raw_action_t act = predict(&ex.state, *NEXT_WPT); 
 
 			pwm_set_action(&act);
@@ -162,7 +183,6 @@ int main(int argc, char* const argv[])
 			break;
 		}
 
-		read(INPUT_FD, &ex, sizeof(ex));
 	}
 
 	b_log("terminating");

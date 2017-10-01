@@ -1,6 +1,7 @@
 #include "i2c.h"
 #include "bno055.h"
 #include "drv_pwm.h"
+#include "sys.h"
 
 #include <sys/ioctl.h>
 #include <stdio.h>
@@ -134,6 +135,13 @@ int i2c_init(const char* path)
 	bno055_set_power_mode(BNO055_POWER_MODE_NORMAL);
 	bno055_set_operation_mode(BNO055_OPERATION_MODE_NDOF);
 
+	uint8_t cal_status = 0;
+
+	bno055_get_sys_calib_stat(&cal_status);
+
+	b_log("BNO055 sys cal status: %d", cal_status);
+
+	return 0;
 }
 
 
