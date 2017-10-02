@@ -15,7 +15,7 @@ uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
 void proc_opts(int argc, char* const *argv)
 {
 	int c;
-	while((c = getopt(argc, argv, "rsm:")) != -1)
+	while((c = getopt(argc, argv, "r:sm:")) != -1)
 	switch(c)
 	{	
 		case 'm':
@@ -27,15 +27,28 @@ void proc_opts(int argc, char* const *argv)
 		{
 			// Load the route
 			int fd = open(optarg, O_RDONLY);
-			if(fd < 0) exit(-1);
+			if(fd < 0)
+			{
+				b_log("Loading route: '%s' failed", optarg);
+				exit(-1);
+			}
 
 			dataset_header_t hdr = {};
 			read(fd, &hdr, sizeof(hdr));
 			assert(hdr.magic == MAGIC);
-			off_t len = lseek(fd, SEEK_END, 0);
-			size_t count = len / sizeof(waypoint_t);
+			off_t all_bytes = lseek(fd, 0, SEEK_END);
+			size_t count = all_bytes / sizeof(waypoint_t);
+
+			b_log("Loading route with %d waypoints", count);
+
+			lseek(fd, sizeof(hdr), SEEK_SET);
 			WAYPOINTS = (waypoint_t*)calloc(count + 1, sizeof(waypoint_t));	
-			read(fd, WAYPOINTS, len);
+			size_t read_bytes = read(fd, WAYPOINTS, count * sizeof(waypoint_t));
+			if(read_bytes != count * sizeof(waypoint_t))
+			{
+				b_log("route read of %d/%dB failed", read_bytes, all_bytes);
+				exit(-1);
+			}
 			close(fd);
 
 			// connect waypoint references
@@ -122,6 +135,19 @@ void sig_handler(int sig)
 }
 
 
+int near_waypoint(raw_state_t* state)
+{
+	vec3 diff;
+
+	vec3_sub(diff, state->position, NEXT_WPT->position);
+	float len = vec3_len(diff);
+
+	b_log("%f", len);
+
+	return vec3_len(diff) < 1 ? 1 : 0; 
+}
+
+
 int main(int argc, char* const argv[])
 {
 	PROC_NAME = argv[0];
@@ -145,8 +171,7 @@ int main(int argc, char* const argv[])
 		
 	raw_example_t ex = {};
 
-	pwm_reset();
-	sleep(1);
+	//pwm_reset();
 	pwm_set_echo(PWM_CHANNEL_MSK);
 
 	b_log("Waiting...");
@@ -176,6 +201,17 @@ int main(int argc, char* const argv[])
 			raw_action_t act = predict(&ex.state, *NEXT_WPT); 
 
 			pwm_set_action(&act);
+
+			if(near_waypoint(&ex.state))
+			{
+				NEXT_WPT = NEXT_WPT->next;
+				b_log("next waypoint: %lx", (unsigned int)NEXT_WPT);
+			}
+
+			if(NEXT_WPT == NULL)
+			{
+				sig_handler(0);
+			}		
 		}
 		else // timeout
 		{

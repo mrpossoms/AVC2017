@@ -186,13 +186,13 @@ int calibration(cam_settings_t cfg)
 }
 
 
-int set_recording_media(int* fd, const char* ext)
+int set_recording_media(int* fd, time_t name, const char* ext)
 {
 	if(MEDIA_PATH)
 	{
 		char path_buf[PATH_MAX];
 
-		snprintf(path_buf, sizeof(path_buf), "%s/%ld.%s", MEDIA_PATH, time(NULL), ext);
+		snprintf(path_buf, sizeof(path_buf), "%s/%ld.%s", MEDIA_PATH, name, ext);
 
 		*fd = open(path_buf, O_CREAT | O_WRONLY, 0666);
 		b_log("Writing data to '%s'", path_buf);
@@ -226,7 +226,7 @@ int route()
 
 	pthread_mutex_init(&STATE_LOCK, NULL);
 
-	set_recording_media(&fd, "route");
+	set_recording_media(&fd, 0, "route");
 
 	// write the header first
 	write(fd, &hdr, sizeof(hdr));
@@ -259,6 +259,13 @@ int route()
 			vec3_copy(wp.position, ex.state.position);
 			vec3_copy(wp.heading, ex.state.heading);
 
+			b_log("(%f %f %f) %fm/s",
+				ex.state.position[0],
+				ex.state.position[1],
+				ex.state.position[2],
+				ex.state.vel
+			);
+
 			pthread_mutex_lock(&STATE_LOCK);
 			if(write(fd, &wp, sizeof(wp)) != sizeof(wp))
 			{
@@ -288,7 +295,7 @@ int collection(cam_t* cam)
 
 	pthread_mutex_init(&STATE_LOCK, NULL);
 
-	set_recording_media(&fd, "train");
+	set_recording_media(&fd, time(NULL), "train");
 
 	if(READ_ACTION)
 	{
@@ -379,7 +386,7 @@ int main(int argc, const char* argv[])
 		//return -1;
 	}
 	
-	pwm_reset();
+	pwm_reset_soft();
 	b_log("OK");
 
 	// Use the round-robin real-time scheduler

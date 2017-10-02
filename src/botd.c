@@ -7,6 +7,7 @@
 #include <time.h>
 #include <stdarg.h>
 
+#include "sys.h"
 #include "i2c.h"
 #include "drv_pwm.h"
 
@@ -20,6 +21,8 @@ static FILE* LOG_FILE;
 #define GOOD(fmt...) do { log_msg(".", fmt); } while(0)
 #define BAD(fmt...) do { log_msg("!", fmt); } while(0)
 #define INFO(fmt...) do { log_msg("*", fmt); } while(0)
+
+#define LED_PATH "/sys/class/leds/led0/brightness"
 
 struct {
 	int last_odo;
@@ -55,6 +58,12 @@ static void bad(const char* fmt, ...)
 	fprintf(LOG_FILE, "%s\n", buf);
 }
 
+void set_led(int on)
+{
+	int fd;
+	write((fd = open(LED_PATH, O_WRONLY)), on ? "1" : "0", 1);
+	close(fd);
+}
 
 void proc_opts(int argc, char* const argv[])
 {
@@ -83,14 +92,47 @@ static void i2c_up()
 		BAD("i2c_init failed (%d)\n", res);
 		exit(-1);
 	}
+
+	pwm_set_echo(0x6);
 }
+
+int RECORD_MODE = 1;
+int DX;
 
 void child_loop()
 {
 	int odo = pwm_get_odo();
+	static int last_record_mode;
+	struct bno055_accel_t acc = {};
 
-	if(odo > app.last_odo)
+	bno055_read_accel_xyz(&acc);
+
+	DX = (DX * 9 + acc.x) / 10;
+
+	if(DX > 256 && RECORD_MODE == 1)
 	{
+		RECORD_MODE = 0;
+	}
+	else if(DX < -256 && RECORD_MODE == 0)
+	{
+		RECORD_MODE = 1;
+	}
+	else if(abs(acc.y) > 512)
+	{ // run route
+		b_log("Running!\n");
+		i2c_uninit();
+		system("collector -i -a | predictor -r/media/training/0.route -m2");
+		i2c_up();
+		b_log("Run finished\n");
+	}
+	
+	if(last_record_mode != RECORD_MODE)
+	{
+		set_led(RECORD_MODE);
+	}
+	
+	if(odo > app.last_odo)
+	{ // Start recording session
 		write(1, ".", 1);
 
 		raw_action_t act = {};
@@ -113,7 +155,12 @@ void child_loop()
 			// Start collecting!
 			//
 			pid_t collector_pid;
-			char* argv[] = { "collector", "-m", MEDIA_PATH, NULL };
+			char* argv[] = { "collector", "-m", MEDIA_PATH, "-r", NULL };
+
+			if(RECORD_MODE == 0)
+			{
+				argv[3] == NULL;
+			}
 
 			posix_spawn(
 				&collector_pid, 
@@ -134,13 +181,15 @@ void child_loop()
 	}
 
 	app.last_odo = odo;
-	sleep(1);
+	usleep(1000 * 50);
 }
 
 
 int main(int argc, char* const argv[])
 {
 	int res;
+	
+	PROC_NAME = argv[0];
 	proc_opts(argc, argv);
 	
 	LOG_FILE = fopen("/var/log/botd", "w+");

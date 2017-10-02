@@ -43,13 +43,13 @@ void* pose_estimator(void* params)
 		int odo = 0;
 		struct bno055_quaternion_t iq;		
 
+		if(poll_i2c_devs(&ex->state, READ_ACTION ? act_ptr : NULL, &odo))
+		{
+			return (void*)-1;
+		}
+
 		if(READ_ACTION)
 		{
-			if(poll_i2c_devs(&ex->state, act_ptr, &odo))
-			{
-				return (void*)-1;
-			}
-
 			float mu = bucket_index(act_ptr->steering, &CAL.steering, STEERING_BANDS); 
 			for(int i = STEERING_BANDS; i--;)
 			{

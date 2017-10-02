@@ -42,11 +42,20 @@ int pwm_reset()
 {
 	// reboot the PWM logger
 	i2c_write(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0B, 0);
-	sleep(2);
+	usleep(1000);
 
 	return 0;
 }
 
+
+int pwm_reset_soft()
+{
+	// reboot the PWM logger
+	i2c_write(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0C, 0);
+	usleep(1000);
+
+	return 0;
+}
 
 int pwm_get_odo()
 {

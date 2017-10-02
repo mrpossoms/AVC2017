@@ -9,7 +9,7 @@ VIEWER_SRC=src/viewer.c
 VIEWER_LINK=
 MASSEUSE_SRC=src/curves.c
 MASSEUSE_MAIN=src/masseuse.c
-BOTD_SRC=src/i2c.c src/drv_pwm.c src/BNO055_driver/*.c src/botd.c
+BOTD_SRC=src/sys.c src/i2c.c src/drv_pwm.c src/BNO055_driver/*.c src/botd.c
 TST_SRC=masseuse_falloff masseuse_bucket
 
 ifeq ($(OS),Darwin)
