@@ -130,6 +130,9 @@ int main(int argc, char* argv[])
 	color_t rgb[FRAME_W * FRAME_H] = {};
 	raw_example_t ex = {};
 
+	vec3 positions[1024];
+	int pos_idx = 0;
+
 	int img_fd = 0;
 
 	if(argc >= 2)
@@ -169,13 +172,15 @@ int main(int argc, char* argv[])
 			);
 
 			next_example(img_fd, &ex);
+			vec3_copy(positions[pos_idx++], ex.state.position);
+			pos_idx %= 1024;
 			yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
 		}
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		glEnable(GL_TEXTURE_2D);
-		glBegin(GL_QUADS);
 
+		glBegin(GL_QUADS);
 			glTexCoord2f(1, 0);
 			glVertex2f( 1,  1);
 
@@ -189,10 +194,32 @@ int main(int argc, char* argv[])
 			glVertex2f( 1, -1);
 		glEnd();
 
+		glDisable(GL_TEXTURE_2D);
+
+		glColor3f(1, 0, 0);
+		glBegin(GL_LINE_STRIP);
+			for(int i = 1024; i--;)
+			{
+				glVertex2f(positions[i][0] / 10.f, positions[i][1] / 10.f);
+			}
+		glEnd();
+
+		glColor3f(0, 1, 0);
+		glBegin(GL_LINES);
+				glVertex2f(
+					(ex.state.position[0]) / 10.f,
+					(ex.state.position[1]) / 10.f
+				);
+				glVertex2f(
+					(ex.state.position[0] + ex.state.heading[0]) / 10.f,
+					(ex.state.position[1] + ex.state.heading[1]) / 10.f
+				);
+		glEnd();
+
 		glfwPollEvents();
 		glfwSwapBuffers(WIN);
 
-		sleep(1);
+		usleep(1000 * 250);
 	}
 
 	return 0;
