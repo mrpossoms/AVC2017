@@ -252,12 +252,17 @@ int route()
 		vec3_sub(diff, ex.state.position, last_pos);
 		if(vec3_len(diff) >= 1)
 		{
+
+			pthread_mutex_lock(&STATE_LOCK);
+
 			waypoint_t wp = {
 				.velocity = ex.state.vel
 			};
 
 			vec3_copy(wp.position, ex.state.position);
 			vec3_copy(wp.heading, ex.state.heading);
+
+			pthread_mutex_unlock(&STATE_LOCK);
 
 			b_log("(%f %f %f) %fm/s",
 				ex.state.position[0],
@@ -266,15 +271,13 @@ int route()
 				ex.state.vel
 			);
 
-			pthread_mutex_lock(&STATE_LOCK);
 			if(write(fd, &wp, sizeof(wp)) != sizeof(wp))
 			{
 				b_log("Error writing waypoint sample");
 				return -3;
 			}
-			pthread_mutex_unlock(&STATE_LOCK);
 
-			vec3_copy(last_pos, ex.state.position);
+			vec3_copy(last_pos, wp.position);
 		}
 
 	

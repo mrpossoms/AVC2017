@@ -133,7 +133,8 @@ int i2c_init(const char* path)
 
 	bno055_init(&I2C_bno055);
 	bno055_set_power_mode(BNO055_POWER_MODE_NORMAL);
-	bno055_set_operation_mode(BNO055_OPERATION_MODE_NDOF);
+	bno055_set_operation_mode(BNO055_OPERATION_MODE_IMUPLUS);//NDOF);
+	//bno055_set_operation_mode(BNO055_OPERATION_MODE_NDOF);
 
 	uint8_t cal_status = 0;
 
