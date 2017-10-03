@@ -56,7 +56,7 @@ install-tools: masseuse viewer structsize
 tests: bin/tests magic
 	@echo "Building tests..."
 	@for source in $(TST_SRC); do\
-		($(CC) -I./src  $(CFLAGS) $(MASSEUSE_SRC) src/tests/$$source.c  -o bin/tests/$${source%.*}.bin $(LINK)) || (exit 1);\
+		($(CC) $(INC)  $(CFLAGS) $(MASSEUSE_SRC) src/tests/$$source.c  -o bin/tests/$${source%.*}.bin $(LINK)) || (exit 1);\
 	done
 
 test: tests
