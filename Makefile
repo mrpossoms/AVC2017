@@ -2,26 +2,34 @@ $(eval OS := $(shell uname))
 
 CC=gcc
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 
-COLLECTOR_SRC=src/deadreckon.c src/sys.c src/BNO055_driver/*.c src/collector.c src/i2c.c src/drv_pwm.c src/cam.c src/curves.c
-PREDICTOR_SRC=src/predictor.c src/sys.c src/i2c.c src/drv_pwm.c src/BNO055_driver/*.c
+COLLECTOR_SRC=deadreckon.c sys.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c collector.c i2c.c drv_pwm.c cam.c curves.c
+PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c
 INC=-I./src -I./src/BNO055_driver -I./src/linmath
-VIEWER_SRC=src/viewer.c
+LINK=-lm -lpthread
+VIEWER_SRC=viewer.c
 VIEWER_LINK=
 MASSEUSE_SRC=src/curves.c
 MASSEUSE_MAIN=src/masseuse.c
-BOTD_SRC=src/sys.c src/i2c.c src/drv_pwm.c src/BNO055_driver/*.c src/botd.c
+BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c botd.c
 TST_SRC=masseuse_falloff masseuse_bucket
 
 ifeq ($(OS),Darwin)
-	VIEWER_LINK+=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
+	LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
 	LINK += -lopencv_videoio
 else
-	VIEWER_LINK +=-lglfw3 -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm -pthread -ldl
+	LINK +=-lglfw3 -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm -pthread -ldl
 	CFLAGS += -D_XOPEN_SOURCE=500
 endif
 
 bin/tests:
 	mkdir -p bin/tests
+
+obj:
+	mkdir obj
+	mkdir obj/BNO055_driver
+
+obj/%.o: src/%.c magic obj
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) -c $< -o $@
 
 all: viewer collector masseuse
 
@@ -31,20 +39,20 @@ magic: src/structs.h
 structsize:
 	$(CC) $(CFLAGS) $(INC) src/size.c -o structsize
 
-viewer: magic $(VIEWER_SRC)
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $(VIEWER_SRC) -o viewer $(VIEWER_LINK)
+viewer: $(addprefix src/,$(VIEWER_SRC)) magic 
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $< -o viewer $(LINK)
 
-collector: magic $(COLLECTOR_SRC)
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(COLLECTOR_SRC) -o collector -lm -lpthread
+collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-predictor: magic $(PREDICTOR_SRC)
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(PREDICTOR_SRC) -o predictor -lm -lpthread
+predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
+
+botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
-
-botd: magic $(BOTD_SRC)
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(BOTD_SRC) -o botd	
 
 install-bot: predictor collector structsize 
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
@@ -63,4 +71,5 @@ test: tests
 	@./test_runner.py
 
 clean:
+	@rm -rf obj
 	@rm collector viewer masseuse
