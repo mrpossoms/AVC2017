@@ -136,8 +136,8 @@ void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);	
 	raw_action_t act = { 117, 117 };
-	pwm_set_action(&act);
 	pwm_set_echo(0x6);
+	usleep(10000);
 	exit(0);
 }
 

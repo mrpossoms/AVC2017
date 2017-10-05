@@ -3,6 +3,7 @@
 from flask import * 
 from threading import Thread
 import os
+import time
 
 app = Flask(__name__)
 
@@ -26,7 +27,7 @@ def collector():
 	os.system('collector -r -m/media/training')
 
 def predictor(pwm_msk):
-	os.system('collector -i -a | predictor -r /media/training/0.route -m' + str(pwm_msk))
+	os.system('collector -i -a | predictor -r/media/training/0.route -m' + str(pwm_msk))
 	
 
 @app.route('/')
@@ -41,7 +42,7 @@ def route():
 
 @app.route('/training')
 def training():
-	return view(params=model(request)) 
+	return redirect('/') 
 
 @app.route('/run')
 def run():
@@ -61,13 +62,27 @@ def run():
 	CURRENT_THREAD = Thread(target=predictor, args=(pwm_msk,))
 	CURRENT_THREAD.start()
 
-	return view(params=m) 
+	return redirect('/') 
+
+@app.route('/reboot')
+def reboot():
+	os.system('reboot 1 &')
+	return redirect('/') 
 
 @app.route('/stop')
 def stop():
-	os.system('killall collector predictor')
+	os.system('killall -s2 collector predictor')
 
-	return view(params=model(request)) 
+	return redirect('/') 
+
+os.chdir('/root')
+
+with open('/sys/class/leds/led0/brightness', 'a', 0) as fp:
+	for _ in range(1, 10):
+		fp.write('1')
+		time.sleep(0.25)
+		fp.write('0')
+		time.sleep(0.25)
 
 app.run(host='0.0.0.0')
 url_for('static', filename='bootstrap.min.css')
