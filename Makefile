@@ -14,10 +14,10 @@ BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_suppo
 TST_SRC=masseuse_falloff masseuse_bucket
 
 ifeq ($(OS),Darwin)
-	LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
-	LINK += -lopencv_videoio
+	VIEWER_LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
+	VIEWER_LINK += -lopencv_videoio
 else
-	LINK +=-lglfw3 -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm -pthread -ldl
+	VIEWER_LINK +=-lglfw3 -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm -pthread -ldl
 	CFLAGS += -D_XOPEN_SOURCE=500
 endif
 
@@ -40,12 +40,12 @@ structsize:
 	$(CC) $(CFLAGS) $(INC) src/size.c -o structsize
 
 viewer: $(addprefix src/,$(VIEWER_SRC)) magic 
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $< -o viewer $(LINK)
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $< -o viewer $(VIEWER_LINK) $(LINK)
 
 collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
+predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o)) 
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))

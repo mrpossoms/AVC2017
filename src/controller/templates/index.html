@@ -1,0 +1,28 @@
+<html>
+
+<head>
+	<title>Bot</title>	
+	<link rel="stylesheet" href="static/bootstrap.min.css">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+	<form>
+	<section class="row">
+		<label class="col-6">
+		<input type="checkbox" {% if model.throttle %}checked{%endif%}  name="throttle">Control Throttle</input>
+		</label>
+		<label class="col-6">
+		<input type="checkbox" {% if model.steering %}checked{%endif%}  name="steering">Control Steering</input>
+		</label>
+	</section>
+
+	<section class="row">
+		<button class="btn btn-primary form-control col-md-12" formaction="/route">Route</button>
+		<button class="btn btn-secondary form-control col-md-12" formaction="/training">Training</button>
+		<button class="btn btn-primary form-control col-md-12" formaction="/run">Run</button>
+	</section>
+	</form>	
+</body>
+
+</html>

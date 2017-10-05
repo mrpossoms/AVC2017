@@ -194,7 +194,7 @@ int set_recording_media(int* fd, time_t name, const char* ext)
 
 		snprintf(path_buf, sizeof(path_buf), "%s/%ld.%s", MEDIA_PATH, name, ext);
 
-		*fd = open(path_buf, O_CREAT | O_WRONLY, 0666);
+		*fd = open(path_buf, O_CREAT | O_TRUNC | O_WRONLY, 0666);
 		b_log("Writing data to '%s'", path_buf);
 
 		if(*fd < 0)
@@ -248,12 +248,13 @@ int route()
 
 	for(;;)
 	{
+		pthread_mutex_lock(&STATE_LOCK);
+
 		vec3 diff = {};
 		vec3_sub(diff, ex.state.position, last_pos);
-		if(vec3_len(diff) >= 1)
+		if(vec3_len(diff) >= 0.25)
 		{
 
-			pthread_mutex_lock(&STATE_LOCK);
 
 			waypoint_t wp = {
 				.velocity = ex.state.vel
@@ -262,7 +263,6 @@ int route()
 			vec3_copy(wp.position, ex.state.position);
 			vec3_copy(wp.heading, ex.state.heading);
 
-			pthread_mutex_unlock(&STATE_LOCK);
 
 			b_log("(%f %f %f) %fm/s",
 				ex.state.position[0],
@@ -285,6 +285,10 @@ int route()
 		{
 			exit(0);
 		}	
+
+		pthread_mutex_unlock(&STATE_LOCK);
+
+		usleep(1000 * 100);
 	}
 }
 
@@ -302,7 +306,7 @@ int collection(cam_t* cam)
 
 	if(READ_ACTION)
 	{
-		pwm_set_echo(0x6);
+		//pwm_set_echo(0x6);
 	}
 
 	// write the header first
@@ -389,6 +393,7 @@ int main(int argc, const char* argv[])
 		//return -1;
 	}
 	
+	pwm_set_echo(0x6);
 	pwm_reset_soft();
 	b_log("OK");
 

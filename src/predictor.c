@@ -104,6 +104,9 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	float coincidence = vec3_mul_inner(state->heading, goal_vec);
 	float p = (vec3_mul_inner(left, goal_vec) + 1) / 2;
 
+
+	
+
 	// If pointing away, steer all the way to the right or left, so
 	// p will be either 1 or 0
 	if(coincidence < 0)
@@ -116,12 +119,15 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 /*
 	b_log("left (%f, %f, %f)", left[0], left[1], left[2]); 
 	b_log("heading (%f, %f, %f)", state->heading[0], state->heading[1], state->heading[2]); 
+	b_log("position (%f, %f, %f)", state->position[0], state->position[1], state->position[2]); 
+	b_log("goal_vec (%f, %f, %f)", goal_vec[0], goal_vec[1], goal_vec[2]); 
 	b_log("%f", p);	
 	b_log("steering: %d", act.steering);
-
+*/
 	//if(fabs(LAST_S - act.steering) < 5) sleep(1);
 	LAST_S = act.steering;
-*/
+	act.throttle = 122;
+
 	return act;
 }
 
@@ -131,6 +137,7 @@ void sig_handler(int sig)
 	b_log("Caught signal %d", sig);	
 	raw_action_t act = { 117, 117 };
 	pwm_set_action(&act);
+	pwm_set_echo(0x6);
 	exit(0);
 }
 
@@ -172,11 +179,12 @@ int main(int argc, char* const argv[])
 	raw_example_t ex = {};
 
 	//pwm_reset();
-	pwm_set_echo(PWM_CHANNEL_MSK);
 
 	b_log("Waiting...");
 	read(INPUT_FD, &ex, sizeof(ex)); // block for the first sample
 	b_log("OK");
+
+	pwm_set_echo(PWM_CHANNEL_MSK);
 
 	while(1)
 	{
