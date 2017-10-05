@@ -1,9 +1,12 @@
 #!/usr/bin/python
 
 from flask import * 
+from threading import Thread
 import os
+
 app = Flask(__name__)
 
+CURRENT_THREAD = None
 
 def view(params=None):
 	return render_template('index.html', model=params)
@@ -19,13 +22,21 @@ def model(request):
 
 	return model
 
+def collector():
+	os.system('collector -r -m/media/training')
+
+def predictor(pwm_msk):
+	os.system('collector -i -a | predictor -r /media/training/0.route -m' + str(pwm_msk))
+	
+
 @app.route('/')
 def index():
 	return view(params=model(request)) 
 
 @app.route('/route')
 def route():
-	os.system('collector -r -m/media/training')
+	CURRENT_THREAD = Thread(target=collector)
+	CURRENT_THREAD.start()
 	return view(params=model(request)) 
 
 @app.route('/training')
@@ -47,10 +58,16 @@ def run():
 		pwm_msk &= 0x4
 
 	print(str(pwm_msk))
-
-	os.system('collector -i -a | predictor -r /media/training/0.route -m' + str(pwm_msk))
+	CURRENT_THREAD = Thread(target=predictor, args=(pwm_msk,))
+	CURRENT_THREAD.start()
 
 	return view(params=m) 
+
+@app.route('/stop')
+def stop():
+	os.system('killall collector predictor')
+
+	return view(params=model(request)) 
 
 app.run(host='0.0.0.0')
 url_for('static', filename='bootstrap.min.css')
