@@ -30,7 +30,6 @@ void* pose_estimator(void* params)
 	float distance_rolled = 0;
 	int LAST_D_ODO_CYCLE = 0;
 	int last_odo = 0;
-	int got_first_heading = 0;
 	vec3 last_heading;
 
 	if(READ_ACTION)
@@ -92,21 +91,11 @@ void* pose_estimator(void* params)
 		quat q = { iq.x / m, iq.y / m, iq.z / m, iq.w / m };
 		quat_mul_vec3(heading, q, forward);
 		heading[2] = 0;
+		vec3_norm(heading, heading);
 
-		vec3_norm(ex->state.heading, heading);
-
-		if(got_first_heading)
-		{
-			if(vec3_mul_inner(last_heading, ex->state.heading) < 0.99)
-			{
-				vec3_copy(ex->state.heading, last_heading);
-			}
-
-		}
-
-		vec3_copy(last_heading, ex->state.heading);
-		got_first_heading = 1;
-	
+		// Essentially, apply a lowpass filter
+		float p = (vec3_mul_inner(heading, ex->state.heading) + 1) / 2;
+		vec3_lerp(ex->state.heading, ex->state.heading, heading, p);
 
 		vec3_scale(heading, heading, delta);
 		vec3_add(ex->state.position, ex->state.position, heading);

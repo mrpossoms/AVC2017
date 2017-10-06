@@ -1,0 +1,14 @@
+[Unit]
+Description=Flask web app for controlling basic bot functions
+Requires=network.target
+
+[Service]
+Type=idle
+PIDFile=/run/bot.controller.pid
+Environment=FLASK_APP=/home/pi/src/controller/controller.py
+ExecStart=/usr/local/bin/flask run
+ExecStop=killall flask
+TimeoutSec=infinity
+
+[Install]
+WantedBy=multi-user.target
