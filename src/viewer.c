@@ -132,12 +132,13 @@ int main(int argc, char* argv[])
 
 	vec3 positions[1024];
 	int pos_idx = 0;
-
+	int use_sleep = 0;
 	int img_fd = 0;
 
 	if(argc >= 2)
 	{
 		img_fd = open(argv[1], O_RDONLY);
+		//use_sleep = 1;
 	}
 
 	dataset_header_t hdr = {};
@@ -173,6 +174,7 @@ int main(int argc, char* argv[])
 
 			next_example(img_fd, &ex);
 			vec3_copy(positions[pos_idx++], ex.state.position);
+			if(pos_idx == 1024) printf("ROLLOVER\n");
 			pos_idx %= 1024;
 			yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
 		}
@@ -219,7 +221,7 @@ int main(int argc, char* argv[])
 		glfwPollEvents();
 		glfwSwapBuffers(WIN);
 
-		usleep(1000 * 250);
+		if(use_sleep) usleep(1000 * 250);
 	}
 
 	return 0;
