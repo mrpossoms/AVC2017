@@ -81,6 +81,7 @@ void proc_opts(int argc, char* const *argv)
 float LAST_S=117;
 raw_action_t predict(raw_state_t* state, waypoint_t goal)
 {
+
 	quat q = { 0, 0, sin(M_PI / 4), cos(M_PI / 4) };
 	raw_action_t act = { 117, 117 };
 	vec3 goal_vec, dist_vec = {};
@@ -104,8 +105,19 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	float coincidence = vec3_mul_inner(state->heading, goal_vec);
 	float p = (vec3_mul_inner(left, goal_vec) + 1) / 2;
 
+	for(int r = FRAME_H; r--;)
+	for(int c = FRAME_W / 2; c--;)
+	{
+		if(r < FRAME_H / 2) continue;
 
-	
+		chroma_t cro = state->view.chroma[r * (FRAME_W / 2) + c];
+		if(cro.cb > 200 && abs(cro.cr - 128) < 16)
+		{
+			//state->view.luma[r * FRAME_W + (c << 1)] = 0;
+			//state->view.luma[r * FRAME_W + (c << 1) + 1] = 0;
+			p = 0.15;
+		}
+	}
 
 	// If pointing away, steer all the way to the right or left, so
 	// p will be either 1 or 0
@@ -148,8 +160,6 @@ int near_waypoint(raw_state_t* state)
 
 	vec3_sub(diff, state->position, NEXT_WPT->position);
 	float len = vec3_len(diff);
-
-	b_log("%f", len);
 
 	return vec3_len(diff) < 1 ? 1 : 0; 
 }

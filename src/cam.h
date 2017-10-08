@@ -6,9 +6,11 @@
 #include <inttypes.h>
 #include <sys/types.h>
 
+#define GET_CHROMA_FROM_VIEW(view, r, c) (view).chroma[((r) * FRAME_W >> 1) + ((r) >> 1)]
+
 typedef struct {
 	int width, height;
-	
+	int frame_rate;	
 } cam_settings_t;
 
 typedef struct {

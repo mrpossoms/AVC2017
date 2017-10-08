@@ -95,7 +95,13 @@ void* pose_estimator(void* params)
 
 		// Essentially, apply a lowpass filter
 		float p = (vec3_mul_inner(heading, ex->state.heading) + 1) / 2;
-		vec3_lerp(ex->state.heading, ex->state.heading, heading, p);
+
+		if(vec3_len(ex->state.heading) < 0.9f)
+		{
+			p = 1;
+		}
+
+		vec3_lerp(ex->state.heading, ex->state.heading, heading, powf(p, 64));
 
 		vec3_scale(heading, heading, delta);
 		vec3_add(ex->state.position, ex->state.position, heading);
