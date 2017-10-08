@@ -105,18 +105,35 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	float coincidence = vec3_mul_inner(state->heading, goal_vec);
 	float p = (vec3_mul_inner(left, goal_vec) + 1) / 2;
 
-	for(int r = FRAME_H; r--;)
-	for(int c = FRAME_W / 2; c--;)
-	{
-		if(r < FRAME_H / 2) continue;
 
-		chroma_t cro = state->view.chroma[r * (FRAME_W / 2) + c];
+	const int CHROMA_W = FRAME_W / 2;
+	int red_hist[FRAME_W / 2] = {};
+	for(int r = FRAME_H; r--;)
+	for(int c = CHROMA_W; c--;)
+	{
+		if(r < CHROMA_W) continue;
+
+		chroma_t cro = state->view.chroma[r * CHROMA_W + c];
 		if(cro.cb > 200 && abs(cro.cr - 128) < 16)
 		{
-			//state->view.luma[r * FRAME_W + (c << 1)] = 0;
-			//state->view.luma[r * FRAME_W + (c << 1) + 1] = 0;
-			p = 0.15;
+			red_hist[c] += 1;
 		}
+	}
+
+	int biggest_idx = CHROMA_W >> 1;
+	int biggest = red_hist[biggest_idx];
+	for(int i = CHROMA_W; i--;)
+	{
+		if(red_hist[i] > biggest)
+		{
+			biggest_idx = i;
+			biggest = red_hist[i];
+		}
+	}
+
+	if(biggest > 16)
+	{
+		p = 1 - (biggest / (float)CHROMA_W);
 	}
 
 	// If pointing away, steer all the way to the right or left, so
