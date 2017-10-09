@@ -11,13 +11,17 @@ waypoint_t* NEXT_WPT;
 
 calib_t CAL;
 uint8_t PWM_CHANNEL_MSK = 0x6; // all echo 
+int FORWARD_STATE = 0;
 
 void proc_opts(int argc, char* const *argv)
 {
 	int c;
-	while((c = getopt(argc, argv, "r:sm:")) != -1)
+	while((c = getopt(argc, argv, "fr:sm:")) != -1)
 	switch(c)
 	{	
+		case 'f':
+			FORWARD_STATE = 1;
+			break;
 		case 'm':
 			// Explicit PWM channel masking
 			PWM_CHANNEL_MSK = atoi(optarg);
@@ -105,37 +109,78 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	float coincidence = vec3_mul_inner(state->heading, goal_vec);
 	float p = (vec3_mul_inner(left, goal_vec) + 1) / 2;
 
-
 	const int CHROMA_W = FRAME_W / 2;
 	int red_hist[FRAME_W / 2] = {};
-	for(int r = FRAME_H; r--;)
+	float hist_sum = 0;
+
 	for(int c = CHROMA_W; c--;)
 	{
-		if(r < CHROMA_W) continue;
+		int col_sum = 0;
 
-		chroma_t cro = state->view.chroma[r * CHROMA_W + c];
-		if(cro.cb > 200 && abs(cro.cr - 128) < 16)
+		for(int r = FRAME_H; r--;)
 		{
-			red_hist[c] += 1;
+			//if(r < CHROMA_W) continue;
+
+			chroma_t cro = state->view.chroma[r * CHROMA_W + c];
+			if(cro.cb > 170 && abs(cro.cr - 128) < 40)
+			{
+				col_sum += 1;
+				//p = 0;
+				state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
+			}
+		}
+
+		if(col_sum > 16)
+		{
+			hist_sum += col_sum;
+			red_hist[c] = col_sum;
 		}
 	}
 
-	int biggest_idx = CHROMA_W >> 1;
+	int biggest_idx = 0;//CHROMA_W >> 1;
 	int biggest = red_hist[biggest_idx];
 	for(int i = CHROMA_W; i--;)
 	{
+		biggest_idx += i * (red_hist[i] / hist_sum);
+
+		//continue;
 		if(red_hist[i] > biggest)
 		{
-			biggest_idx = i;
+			//biggest_idx = i;
 			biggest = red_hist[i];
 		}
 	}
 
-	if(biggest > 16)
+	for(int i = FRAME_H; i--;)
 	{
-		p = 1 - (biggest / (float)CHROMA_W);
+		state->view.luma[i * FRAME_W + (biggest_idx << 1)] = 0;
 	}
 
+	if(biggest > 8)
+	{
+		float weight = biggest / (float)FRAME_H;
+		float fp = (biggest_idx / (float)CHROMA_W);
+		static float ap;
+
+		weight = MIN(weight + 0.5, 1);
+
+		// 1 / (1 + 4(x - 0.5)^2)
+		if(fp > 0.5)
+		{
+			fp = 1 / (1 + 4 * powf(fp - 0.5, 2));
+		}
+		else
+		{
+			fp = 1 - 1 / (1 + 4 * powf(fp - 0.5, 2));
+		}
+
+		ap = ap * 0.9 + fp * 0.1;
+
+		p = (1 - weight) * p + weight * ap;	
+	}
+
+	
+	
 	// If pointing away, steer all the way to the right or left, so
 	// p will be either 1 or 0
 	if(coincidence < 0)
@@ -204,12 +249,22 @@ int main(int argc, char* const argv[])
 	proc_opts(argc, argv);
 		
 	raw_example_t ex = {};
+	
 
 	//pwm_reset();
 
 	b_log("Waiting...");
+
+	dataset_header_t hdr = {};
+	read(INPUT_FD, &hdr, sizeof(hdr));
 	read(INPUT_FD, &ex, sizeof(ex)); // block for the first sample
 	b_log("OK");
+
+	if(FORWARD_STATE)
+	{
+		write(1, &hdr, sizeof(hdr));
+		write(1, &ex, sizeof(ex));
+	}
 
 	pwm_set_echo(PWM_CHANNEL_MSK);
 
@@ -247,6 +302,11 @@ int main(int argc, char* const argv[])
 			{
 				sig_handler(0);
 			}		
+
+			if(FORWARD_STATE) 
+			{
+				write(1, &ex, sizeof(ex));
+			}
 		}
 		else // timeout
 		{

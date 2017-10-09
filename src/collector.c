@@ -9,10 +9,6 @@
 #include "linmath.h"
 #include "deadreckon.h"
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
-
 typedef enum {
 	COL_MODE_NORMAL = 0,
 	COL_MODE_ACT_CAL,
@@ -131,22 +127,7 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 		}
 	}
 
-/*
-	for(int i = LUMA_PIXELS; i--;)
-	{
 
-		int d_l = new_frame.view.luma[i] - state->view.luma[i];
-		int d_cr = new_frame.view.chroma[i].cr - state->view.chroma[i].cr;
-		int d_cb = new_frame.view.chroma[i].cb - state->view.chroma[i].cb;	
-	
-		if(d_l * d_l + d_cr * d_cr + d_cb * d_cb > 512)
-		{
-			state->view.luma[i] = new_frame.view.luma[i];
-		}
-	}
-*/
-
-	
 	return 0;
 }
 
@@ -255,7 +236,10 @@ int route()
 
 		vec3 diff = {};
 		vec3_sub(diff, ex.state.position, last_pos);
-		if(vec3_len(diff) >= 0.25)
+
+		int is_finished = ex.state.vel == 0 && WAIT_FOR_MOVEMENT;
+
+		if(vec3_len(diff) >= 0.25 || is_finished)
 		{
 
 
@@ -284,7 +268,7 @@ int route()
 		}
 
 	
-		if(ex.state.vel == 0 && WAIT_FOR_MOVEMENT)
+		if(is_finished)
 		{
 			exit(0);
 		}	
@@ -371,15 +355,15 @@ int collection(cam_t* cam)
 
 int main(int argc, const char* argv[])
 {
+	PROC_NAME = argv[0];
+	proc_opts(argc, argv);
+
 	int res;
 	cam_settings_t cfg = {
 		.width  = 160,
-		.height = 120
+		.height = 120,
+		.frame_rate = FRAME_RATE,
 	};
-
-	PROC_NAME = argv[0];
-
-	proc_opts(argc, argv);
 
 	b_log("Sensors...");
 
