@@ -9,10 +9,6 @@
 #include "linmath.h"
 #include "deadreckon.h"
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
-
 typedef enum {
 	COL_MODE_NORMAL = 0,
 	COL_MODE_ACT_CAL,
@@ -25,16 +21,32 @@ int NORM_VIDEO;
 col_mode_t MODE;
 int WAIT_FOR_MOVEMENT = 1;
 int READ_ACTION = 1;
+int FRAME_RATE = 30;
 calib_t CAL;
 float VEL;
 
 
 void proc_opts(int argc, const char ** argv)
 {
+	int no_opts = 1;
+
+	const char* cmds = "cnm:riaf:";
+	const char* flag_desc[] = {
+		"Calibrate action vector (steering and throttle)",
+		"Normalize video frames",
+		"Set recording media for training data and routes",
+		"Record route",
+		"Start immediately, don't wait for movement",
+		"disable polling of PWM action values",
+		"set framerate in frames/second",
+	};
+
 	for(;;)
 	{
-		int c = getopt(argc, (char *const *)argv, "aircnm:");
+		int c = getopt(argc, (char *const *)argv, cmds);
 		if(c == -1) break;
+
+		no_opts = 0;
 
 		switch (c) 
 		{
@@ -59,7 +71,23 @@ void proc_opts(int argc, const char ** argv)
 			case 'a':
 				READ_ACTION = 0;
 				break;
+			case 'f':
+				FRAME_RATE = atoi(optarg);
+				break;
 		}
+	}
+
+	if(no_opts)
+	{
+		int cmd_idx = 0;
+		for(int i = 0; i < strlen(cmds); i++)
+		{
+			if(cmds[i] == ':') continue;
+			printf("-%c\t%s\n", cmds[i], flag_desc[cmd_idx]);
+			cmd_idx++;
+		}
+
+		exit(-1);
 	}
 }
 
@@ -75,6 +103,7 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	float cr_mu = 0;
 	float cb_mu = 0;
 
+	raw_state_t new_frame = {};
 
 	// Downsample the intensity resolution to match that of
 	// the chroma
@@ -95,51 +124,6 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 			chroma_row[i].cr = (row[i] >> 8) & 0xFF;
 			chroma_row[i].cb = (row[i] >> 24) & 0xFF;
 
-			if(NORM_VIDEO)
-			{
-				for(int k = 2; k--;)
-				{
-					luma_range.min = MIN(luma_range.min, luma_row[li + i + k]);
-					luma_range.max = MAX(luma_range.max, luma_row[li + i + k]);
-					luma_mu += luma_row[li + i + k];
-				}		
-
-
-				cr_range.min = MIN(cr_range.min, chroma_row[i].cr);
-				cr_range.max = MAX(cr_range.max, chroma_row[i].cr);
-				cb_range.min = MIN(cb_range.min, chroma_row[i].cb);
-				cb_range.max = MAX(cb_range.max, chroma_row[i].cb);
-
-				cr_mu += chroma_row[i].cr;
-				cb_mu += chroma_row[i].cb;
-			}
-		}
-	}
-
-	if(NORM_VIDEO)
-	{
-		luma_mu /= (FRAME_W * FRAME_H);
-		cr_mu /= (FRAME_W / 2) * FRAME_H;
-		cb_mu /= (FRAME_W / 2) * FRAME_H;
-		float luma_spread = luma_range.max - luma_range.min;
-		float cr_spread = cr_range.max - cr_range.min;
-		float cb_spread = cb_range.max - cb_range.min;
-
-		int bi = cams[0].buffer_info.index;
-
-		for(int j = FRAME_H; j--;)
-		{
-			uint32_t* row = cams[0].frame_buffers[bi] + (j * FRAME_W * 2);
-			uint8_t* luma_row = state->view.luma + (j * FRAME_W);
-			chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
-			
-			for(int i = FRAME_W / 2; i--;)
-			{
-				int li = i << 1;
-
-				luma_row[li + 0] = 255 * (luma_row[li + 0] - luma_range.min) / luma_spread;
-				luma_row[li + 1] = 255 * (luma_row[li + 1] - luma_range.min) / luma_spread;
-			}
 		}
 	}
 
@@ -252,7 +236,10 @@ int route()
 
 		vec3 diff = {};
 		vec3_sub(diff, ex.state.position, last_pos);
-		if(vec3_len(diff) >= 0.25)
+
+		int is_finished = ex.state.vel == 0 && WAIT_FOR_MOVEMENT;
+
+		if(vec3_len(diff) >= 0.25 || is_finished)
 		{
 
 
@@ -281,7 +268,7 @@ int route()
 		}
 
 	
-		if(ex.state.vel == 0 && WAIT_FOR_MOVEMENT)
+		if(is_finished)
 		{
 			exit(0);
 		}	
@@ -368,15 +355,15 @@ int collection(cam_t* cam)
 
 int main(int argc, const char* argv[])
 {
+	PROC_NAME = argv[0];
+	proc_opts(argc, argv);
+
 	int res;
 	cam_settings_t cfg = {
 		.width  = 160,
-		.height = 120
+		.height = 120,
+		.frame_rate = FRAME_RATE,
 	};
-
-	PROC_NAME = argv[0];
-
-	proc_opts(argc, argv);
 
 	b_log("Sensors...");
 

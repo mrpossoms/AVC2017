@@ -175,7 +175,7 @@ int cam_config(int fd, cam_settings_t* cfg)
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	parm.parm.capture.timeperframe.numerator = 1;
-	parm.parm.capture.timeperframe.denominator = 15;
+	parm.parm.capture.timeperframe.denominator = cfg->frame_rate;
 
 	res = ioctl(fd, VIDIOC_S_PARM, &parm);
 
