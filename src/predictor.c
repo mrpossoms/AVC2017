@@ -82,6 +82,105 @@ void proc_opts(int argc, char* const *argv)
 	}	
 }
 
+float avoider(raw_state_t* state, float* confidence)
+{
+	const int CHROMA_W = FRAME_W / 2;
+	int red_hist[FRAME_W / 2] = {};
+	float hist_sum = 0;
+	int biggest = 0;
+
+	for(int c = CHROMA_W; c--;)
+	{
+		int col_sum = 0;
+
+		for(int r = FRAME_H; r--;)
+		{
+			//if(r < CHROMA_W) continue;
+
+			chroma_t cro = state->view.chroma[r * CHROMA_W + c];
+			if(cro.cb > 160 && abs(cro.cr - 128) < 40)
+			{
+				col_sum += 1;
+				//p = 0;
+				state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
+			}
+		}
+
+		if(col_sum > 16)
+		{
+			hist_sum += col_sum;
+			red_hist[c] = col_sum;
+		}
+	}
+
+	int cont_r[2] = { CHROMA_W, CHROMA_W };
+	int cont_start = CHROMA_W;
+	for(int i = CHROMA_W; i--;)
+	{
+		if(red_hist[i] > 8 || i == 0)
+		{
+			if((cont_start - i) > (cont_r[1] - cont_r[0]))
+			{
+				cont_r[0] = i;
+				cont_r[1] = cont_start;
+			}
+			cont_start = i;
+
+			if(red_hist[i] > biggest)
+			{
+				biggest = red_hist[i];
+			}
+		}
+	}
+	
+
+	for(int j = cont_r[0]; j < cont_r[1]; ++j)
+	{
+		for(int i = FRAME_H; i--;)
+		{
+			state->view.chroma[i * CHROMA_W + j].cb -= 64;
+			state->view.chroma[i * CHROMA_W + j].cr -= 64;
+		}
+	}
+
+	int cont_width = (cont_r[1] - cont_r[0]);
+	int target_idx;
+
+	if(cont_r[0] > 0 && cont_r[1] == CHROMA_W)
+	{
+		target_idx = cont_r[0] + cont_width * 0.75f;
+	}
+	else if(cont_r[0] == 0 && cont_r[1] < CHROMA_W)
+	{
+		target_idx = cont_r[0] + cont_width * 0.25f;
+	}
+	else
+	{
+		target_idx = cont_width >> 1;	
+	}
+
+	for(int i = FRAME_H; i--;)
+	{
+		state->view.luma[i * FRAME_W + (target_idx << 1)] = 0;
+	}
+
+	//if(biggest > 8)
+	{
+		float weight = biggest / (float)FRAME_H;
+		float fp = (target_idx / (float)CHROMA_W);
+		static float ap;
+
+		weight = MIN(weight + 0.5, 1);
+
+		ap =  0.8 * ap + 0.2 * (1 - fp);
+
+		*confidence = weight;
+		return ap;
+	}
+
+	return 0.5;
+}
+
 float LAST_S=117;
 raw_action_t predict(raw_state_t* state, waypoint_t goal)
 {
@@ -108,77 +207,6 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	// remap range to [0, 1] 
 	float coincidence = vec3_mul_inner(state->heading, goal_vec);
 	float p = (vec3_mul_inner(left, goal_vec) + 1) / 2;
-
-	const int CHROMA_W = FRAME_W / 2;
-	int red_hist[FRAME_W / 2] = {};
-	float hist_sum = 0;
-
-	for(int c = CHROMA_W; c--;)
-	{
-		int col_sum = 0;
-
-		for(int r = FRAME_H; r--;)
-		{
-			//if(r < CHROMA_W) continue;
-
-			chroma_t cro = state->view.chroma[r * CHROMA_W + c];
-			if(cro.cb > 170 && abs(cro.cr - 128) < 40)
-			{
-				col_sum += 1;
-				//p = 0;
-				state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
-			}
-		}
-
-		if(col_sum > 16)
-		{
-			hist_sum += col_sum;
-			red_hist[c] = col_sum;
-		}
-	}
-
-	int biggest_idx = 0;//CHROMA_W >> 1;
-	int biggest = red_hist[biggest_idx];
-	for(int i = CHROMA_W; i--;)
-	{
-		biggest_idx += i * (red_hist[i] / hist_sum);
-
-		//continue;
-		if(red_hist[i] > biggest)
-		{
-			//biggest_idx = i;
-			biggest = red_hist[i];
-		}
-	}
-
-	for(int i = FRAME_H; i--;)
-	{
-		state->view.luma[i * FRAME_W + (biggest_idx << 1)] = 0;
-	}
-
-	if(biggest > 8)
-	{
-		float weight = biggest / (float)FRAME_H;
-		float fp = (biggest_idx / (float)CHROMA_W);
-		static float ap;
-
-		weight = MIN(weight + 0.5, 1);
-
-		// 1 / (1 + 4(x - 0.5)^2)
-		if(fp > 0.5)
-		{
-			fp = 1 / (1 + 4 * powf(fp - 0.5, 2));
-		}
-		else
-		{
-			fp = 1 - 1 / (1 + 4 * powf(fp - 0.5, 2));
-		}
-
-		ap = ap * 0.9 + fp * 0.1;
-
-		p = (1 - weight) * p + weight * ap;	
-	}
-
 	
 	
 	// If pointing away, steer all the way to the right or left, so
@@ -187,6 +215,12 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	{
 		p = roundf(p); 
 	}
+
+
+	float conf = 0;
+	float avd_p = avoider(state, &conf);
+
+	p = (1 - conf) * p + conf * avd_p;	
 
 	// Lerp between right and left.
 	act.steering = CAL.steering.max * (1 - p) + CAL.steering.min * p;
@@ -224,6 +258,47 @@ int near_waypoint(raw_state_t* state)
 	float len = vec3_len(diff);
 
 	return vec3_len(diff) < 1 ? 1 : 0; 
+}
+
+
+waypoint_t* best_waypoint(raw_state_t* state)
+{
+	waypoint_t* best = NEXT_WPT;
+	waypoint_t* next = NEXT_WPT;
+	float lowest_cost = 1E10;
+
+	while(next)
+	{
+		vec3 delta;  // difference between car pos and waypoint pos
+		vec3 dir;    // unit vector direction to waypoint from car pos
+		float cost;
+		float co;    // coincidence with heading
+		float dist;
+	
+		vec3_sub(delta, next->position, state->position);
+		vec3_norm(dir, delta);
+		co = vec3_mul_inner(dir, state->heading);
+		dist = vec3_len(delta);
+
+		cost = dist + (2 - (co + 1));
+		
+		if(dist > 0.5)
+		{
+			if(cost < lowest_cost)
+			{
+				best = next;
+				lowest_cost = cost;	
+			}
+		}
+		else if(next->next == NULL)
+		{
+			return NULL;
+		}
+
+		next = next->next; // lol
+	}
+
+	return best;
 }
 
 
@@ -292,9 +367,10 @@ int main(int argc, char* const argv[])
 
 			pwm_set_action(&act);
 
-			if(near_waypoint(&ex.state))
+			waypoint_t* next = best_waypoint(&ex.state);
+			if(next != NEXT_WPT)
 			{
-				NEXT_WPT = NEXT_WPT->next;
+				NEXT_WPT = next;
 				b_log("next waypoint: %lx", (unsigned int)NEXT_WPT);
 			}
 
