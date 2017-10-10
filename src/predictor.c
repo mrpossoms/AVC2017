@@ -12,6 +12,7 @@ waypoint_t* NEXT_WPT;
 calib_t CAL;
 uint8_t PWM_CHANNEL_MSK = 0x6; // all echo 
 int FORWARD_STATE = 0;
+int I2C_BUS;
 
 void proc_opts(int argc, char* const *argv)
 {
@@ -101,7 +102,6 @@ float avoider(raw_state_t* state, float* confidence)
 			if(cro.cb > 160 && abs(cro.cr - 128) < 40)
 			{
 				col_sum += 1;
-				//p = 0;
 				state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
 			}
 		}
@@ -190,7 +190,7 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	vec3 goal_vec, dist_vec = {};
 	vec3 left, proj;
 
-	if(vec3_len(state->heading) == 0)
+	if(vec3_len(state->heading) == 0 && I2C_BUS > -1)
 	{
 		return act;
 	}
@@ -317,7 +317,8 @@ int main(int argc, char* const argv[])
 	if(i2c_init("/dev/i2c-1"))
 	{
 		b_log("Failed to init i2c bus");
-		return -2;
+		I2C_BUS = -1;
+		//return -2;
 	}
 
 
@@ -341,7 +342,10 @@ int main(int argc, char* const argv[])
 		write(1, &ex, sizeof(ex));
 	}
 
-	pwm_set_echo(PWM_CHANNEL_MSK);
+	if(I2C_BUS > -1)
+	{
+		pwm_set_echo(PWM_CHANNEL_MSK);
+	}
 
 	while(1)
 	{
@@ -365,7 +369,10 @@ int main(int argc, char* const argv[])
 
 			raw_action_t act = predict(&ex.state, *NEXT_WPT); 
 
-			pwm_set_action(&act);
+			if(I2C_BUS > -1)
+			{
+				pwm_set_action(&act);
+			}
 
 			waypoint_t* next = best_waypoint(&ex.state);
 			if(next != NEXT_WPT)
@@ -387,7 +394,10 @@ int main(int argc, char* const argv[])
 		else // timeout
 		{
 			b_log("timeout");
-			break;
+			if(I2C_BUS > -1)
+			{
+				break;
+			}
 		}
 
 	}

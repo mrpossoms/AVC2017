@@ -37,6 +37,12 @@ void* pose_estimator(void* params)
 		act_ptr = &action;
 	}
 
+	// terminate if the I2C bus isn't open
+	if(I2C_BUS < 0)
+	{
+		return -1;
+	}
+
 	while(1)
 	{
 		timegate_open(&tg);

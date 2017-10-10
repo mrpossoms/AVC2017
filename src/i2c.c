@@ -131,7 +131,12 @@ int i2c_init(const char* path)
 	I2C_bno055.delay_msec= BNO055_delay_msec;
 	I2C_bno055.dev_addr  = BNO055_I2C_ADDR1;
 
-	bno055_init(&I2C_bno055);
+	if(bno055_init(&I2C_bno055) != BNO055_SUCCESS)
+	{
+		return -1;
+	}
+
+
 	bno055_set_power_mode(BNO055_POWER_MODE_NORMAL);
 	//bno055_set_operation_mode(BNO055_OPERATION_MODE_IMUPLUS);//NDOF);
 	bno055_set_operation_mode(BNO055_OPERATION_MODE_NDOF);

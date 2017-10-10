@@ -377,6 +377,10 @@ int main(int argc, const char* argv[])
 	if((res = i2c_init("/dev/i2c-1")))
 	{
 		b_log("I2C init failed (%d)", res);
+
+		close(I2C_BUS);
+		I2C_BUS = -1;
+
 		//return -1;
 	}
 	
