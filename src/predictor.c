@@ -83,6 +83,7 @@ void proc_opts(int argc, char* const *argv)
 	}	
 }
 
+
 float avoider(raw_state_t* state, float* confidence)
 {
 	const int CHROMA_W = FRAME_W / 2;
@@ -106,29 +107,39 @@ float avoider(raw_state_t* state, float* confidence)
 			}
 		}
 
-		if(col_sum > 16)
+		//if(col_sum > 16)
 		{
 			hist_sum += col_sum;
 			red_hist[c] = col_sum;
 		}
 	}
 
+	int best = hist_sum;
 	int cont_r[2] = { CHROMA_W, CHROMA_W };
-	int cont_start = CHROMA_W;
-	for(int i = CHROMA_W; i--;)
-	{
-		if(red_hist[i] > 8 || i == 0)
-		{
-			if((cont_start - i) > (cont_r[1] - cont_r[0]))
-			{
-				cont_r[0] = i;
-				cont_r[1] = cont_start;
-			}
-			cont_start = i;
 
-			if(red_hist[i] > biggest)
+	for(int j = CHROMA_W; j--;)
+	{
+		int cost = 0;
+		int cont_start = j;
+
+		for(int i = j; i--;)
+		{
+			cost += red_hist[i];
+
+			//if(red_hist[i] > 8 || i == 0)
+			if((cost - (j - i)) < best)
 			{
-				biggest = red_hist[i];
+				//if((cont_start - i) > (cont_r[1] - cont_r[0]))
+				{
+					cont_r[0] = i;
+					cont_r[1] = cont_start;
+					best = cost - (j - i);
+				}
+
+				if(red_hist[i] > biggest)
+				{
+					biggest = red_hist[i];
+				}
 			}
 		}
 	}
@@ -156,7 +167,7 @@ float avoider(raw_state_t* state, float* confidence)
 	}
 	else
 	{
-		target_idx = cont_width >> 1;	
+		target_idx = cont_r[0] + (cont_width >> 1);	
 	}
 
 	for(int i = FRAME_H; i--;)

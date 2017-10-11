@@ -11,6 +11,7 @@ VIEWER_LINK=
 MASSEUSE_SRC=src/curves.c
 MASSEUSE_MAIN=src/masseuse.c
 BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c botd.c
+BAD_SRC=sys.c bad.c
 TST_SRC=masseuse_falloff masseuse_bucket
 
 ifeq ($(OS),Darwin)
@@ -46,6 +47,9 @@ collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o)) 
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
+
+bad: $(addprefix obj/,$(BAD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
