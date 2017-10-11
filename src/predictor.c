@@ -17,6 +17,7 @@ int I2C_BUS;
 
 typedef struct {
 	chroma_t min, max;
+	int badness;
 } color_range_t;
 
 
@@ -95,7 +96,7 @@ void proc_opts(int argc, char* const *argv)
 }
 
 
-color_range_t* load_colors(const char* path, int* color_count)
+color_range_t* load_colors(const char* path, int* color_count, int is_good)
 {
 	DIR* dir = opendir(path);
 	color_range_t* colors = NULL;
@@ -107,8 +108,11 @@ color_range_t* load_colors(const char* path, int* color_count)
 		return NULL;
 	}
 
+	// Get our starting position so we can return after
+	// the number of color files has been determined
 	long start = telldir(dir);
 
+	// count all files except for . and ..
 	struct dirent* ent;
 	while((ent = readdir(dir)))
 	{
@@ -116,6 +120,7 @@ color_range_t* load_colors(const char* path, int* color_count)
 		++*color_count;
 	}
 
+	// allocate array for all the colors we found
 	colors = calloc(sizeof(color_range_t), *color_count );
 	if(!colors)
 	{
@@ -124,6 +129,8 @@ color_range_t* load_colors(const char* path, int* color_count)
 		return NULL;
 	}
 
+	// return to the beginning now load each file into our
+	// array we allocated above.
 	seekdir(dir, start);
 	color_range_t* color = colors;
 	while((ent = readdir(dir)))
@@ -142,8 +149,15 @@ color_range_t* load_colors(const char* path, int* color_count)
 			return NULL;
 		}
 
-		read(fd, color, sizeof(color_range_t));
+		read(fd, color, sizeof(chroma_t) << 1);
 		close(fd);
+
+		// set the 'badness' of the color based on the filename
+		// the more positive, the 'badder' the color. Colors with
+		// high badness are avoided. Conversly, the more negative color
+		// the 'gooder' it is, which leads to seeking behavior
+		color->badness = atoi(ent->d_name);
+		if(is_good) color->badness *= -1;
 
 		b_log("color: %s [%d-%d], [%d-%d]", 
 			buf, 
@@ -154,6 +168,7 @@ color_range_t* load_colors(const char* path, int* color_count)
 		color++;
 	}
 
+	// cleanup
 	closedir(dir);
 
 	return colors;
@@ -167,32 +182,34 @@ float avoider(raw_state_t* state, float* confidence)
 	float hist_sum = 0;
 	int biggest = 0;
 
+	// Here we compute the histogram of badness values
 	for(int c = CHROMA_W; c--;)
 	{
 		int col_sum = 0;
 
+		// For each column, we count the 'badness' by checking for good or
+		// bad pixel colors and summing up their 'badness' values
 		for(int r = FRAME_H; r--;)
 		{
-			//if(r < CHROMA_W) continue;
-
 			chroma_t cro = state->view.chroma[r * CHROMA_W + c];
-			//if(cro.cb > 160 && abs(cro.cr - 128) < 40)
 			color_range_t* bad = BAD_COLORS;
+			color_range_t* good = GOOD_COLORS;
 
+			// We check the current pixel against all the bad colors
+			// accumulating that bad color's 'badness' if it's a match
 			for(int col = BAD_COUNT; col--;)
 			{
 				if(bad->min.cr <= cro.cr && cro.cr <= bad->max.cr) 
 				if(bad->min.cb <= cro.cb && cro.cb <= bad->max.cb)
 				{	
-					col_sum += 1;
+					col_sum += bad->badness;
 					state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
 				}
 				
 				bad++;
 			}
 
-			color_range_t* good = GOOD_COLORS;
-
+			// Same as above, but for good colors.
 			for(int col = GOOD_COUNT; col--;)
 			{
 				if(good->min.cr <= cro.cr && cro.cr <= good->max.cr) 
@@ -206,6 +223,7 @@ float avoider(raw_state_t* state, float* confidence)
 			}
 		}
 
+		// Try to reduce noise by ignoring columns with a badness below 16
 		if(col_sum > 16)
 		{
 			hist_sum += col_sum;
@@ -216,24 +234,29 @@ float avoider(raw_state_t* state, float* confidence)
 	int best = hist_sum;
 	int cont_r[2] = { CHROMA_W, CHROMA_W };
 
+	// Here we pick the best, most contigious horizontal range of
+	// the frame with the smallest sum of 'bad' colors, or the
+	// largest sum of good colors if they are present.
 	for(int j = CHROMA_W + 1; j--;)
 	{
 		int cost = 0;
 		int cont_start = j;
 
+		// From the current column, slide all the way to the left.
 		for(int i = j; i--;)
 		{
+			// Accumulate cost for this region
 			cost += red_hist[i];
 
-			//if(red_hist[i] > 8 || i == 0)
+			// The score for this region also factors in the width
+			// so as the region grows without accumulating badness
+			// it becomes more attractive. If it is found to have a better
+			// score than the best, then set it as the new best.
 			if((cost - (j - i)) < best)
 			{
-				//if((cont_start - i) > (cont_r[1] - cont_r[0]))
-				{
-					cont_r[0] = i;
-					cont_r[1] = cont_start;
-					best = cost - (j - i);
-				}
+				cont_r[0] = i;
+				cont_r[1] = cont_start;
+				best = cost - (j - i);
 
 				if(red_hist[i] > biggest)
 				{
@@ -244,18 +267,10 @@ float avoider(raw_state_t* state, float* confidence)
 	}
 	
 
-	for(int j = cont_r[0]; j < cont_r[1]; ++j)
-	{
-		for(int i = FRAME_H; i--;)
-		{
-			state->view.chroma[i * CHROMA_W + j].cb -= 64;
-			state->view.chroma[i * CHROMA_W + j].cr -= 64;
-		}
-	}
-
 	int cont_width = (cont_r[1] - cont_r[0]);
 	int target_idx;
 
+	// Decide which place in the region we should steer toward
 	if(cont_r[0] > 0 && cont_r[1] == CHROMA_W)
 	{
 		target_idx = cont_r[0] + cont_width * 0.75f;
@@ -269,26 +284,34 @@ float avoider(raw_state_t* state, float* confidence)
 		target_idx = cont_r[0] + (cont_width >> 1);	
 	}
 
-	for(int i = FRAME_H; i--;)
+	if(FORWARD_STATE)
 	{
-		state->view.luma[i * FRAME_W + (target_idx << 1)] = 0;
+		// Draw a black line down the frame where we are steering
+		for(int i = FRAME_H; i--;)
+		{
+			state->view.luma[i * FRAME_W + (target_idx << 1)] = 0;
+		}
+
+		// Tint the contiguous region green before forwarding the frame
+		for(int j = cont_r[0]; j < cont_r[1]; ++j)
+		{
+			for(int i = FRAME_H; i--;)
+			{
+				state->view.chroma[i * CHROMA_W + j].cb -= 64;
+				state->view.chroma[i * CHROMA_W + j].cr -= 64;
+			}
+		}
 	}
 
-	//if(biggest > 8)
-	{
-		float weight = biggest / (float)FRAME_H;
-		float fp = (target_idx / (float)CHROMA_W);
-		static float ap;
+	float weight = biggest / (float)FRAME_H;
+	float fp = (target_idx / (float)CHROMA_W);
+	static float ap;
 
-		weight = MIN(weight + 0.5, 1);
+	*confidence = MIN(weight + 0.5, 1);
+	ap =  0.8 * ap + 0.2 * (1 - fp);
 
-		ap =  0.8 * ap + 0.2 * (1 - fp);
+	return ap;
 
-		*confidence = weight;
-		return ap;
-	}
-
-	return 0.5;
 }
 
 float LAST_S=117;
@@ -437,10 +460,10 @@ int main(int argc, char* const argv[])
 	raw_example_t ex = {};
 	
 	b_log("\t\033[0;32mGOOD\033[0m");
-	GOOD_COLORS = load_colors("/var/predictor/color/good", &GOOD_COUNT);
+	GOOD_COLORS = load_colors("/var/predictor/color/good", &GOOD_COUNT, 1);
 
 	b_log("\t\033[0;31mBAD\033[0m");
-	BAD_COLORS = load_colors("/var/predictor/color/bad", &BAD_COUNT);
+	BAD_COLORS = load_colors("/var/predictor/color/bad", &BAD_COUNT, 0);
 
 	//pwm_reset();
 

@@ -20,8 +20,14 @@ int pwm_get_action(raw_action_t* action)
 
 int pwm_set_echo(uint8_t is_echo_flags)
 {
-	i2c_write(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0, is_echo_flags);
+	if(i2c_write(I2C_BUS_FD, PWM_LOGGER_ADDR, 0x0, is_echo_flags))
+	{
+		return 1;
+	}
+
 	usleep(50000); // wait 2 PWM cycles
+
+	return 0;
 }
 
 

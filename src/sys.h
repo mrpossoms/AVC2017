@@ -1,23 +1,23 @@
 #ifndef AVC_SYS
 #define AVC_SYS
 
-#include <limits.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <inttypes.h>
-#include <pthread.h>
+#include <limits.h>
 #include <math.h>
 #include <assert.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <getopt.h>
 #include <sched.h>
 #include <pthread.h>
-#include <sys/stat.h>
 
 #include "structs.h"
 
@@ -26,7 +26,7 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-extern char* PROC_NAME;
+extern const char* PROC_NAME;
 
 typedef struct {	
 	struct timeval start;

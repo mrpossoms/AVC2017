@@ -1,9 +1,5 @@
 #include "sys.h"
 
-#include <unistd.h>
-#include <stdio.h>
-#include <stdarg.h>
-
 
 void timegate_open(timegate_t* tg)
 {
@@ -59,14 +55,14 @@ int calib_load(const char* path, calib_t* cal)
 	return 0;
 }
 
-char* PROC_NAME;
+const char* PROC_NAME;
 void b_log(const char* fmt, ...)
 {
 	char buf[1024];
 	va_list ap;
 	
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	vsnprintf(buf, (size_t)sizeof(buf), fmt, ap);
 	va_end(ap);
 	fprintf(stderr, "[%s] %s (%d)\n", PROC_NAME, buf, errno); 
 }

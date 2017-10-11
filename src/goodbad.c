@@ -2,6 +2,7 @@
 #include "structs.h"
 #include "dataset_hdr.h"
 
+long COLOR_NAME;
 
 chroma_t at_center(raw_state_t* state)
 {
@@ -10,9 +11,28 @@ chroma_t at_center(raw_state_t* state)
 	return state->view.chroma[i];
 }
 
+
+void proc_opts(int argc, const char ** argv)
+{
+	for(;;)
+	{
+		int c = getopt(argc, (char *const *)argv, "n:");
+		if(c == -1) break;
+
+		switch (c) {
+			case 'n':
+				COLOR_NAME = atoi(optarg);
+				break;
+		}
+	}
+}
+
 int main(int argc, const char* argv[])
 {
 	PROC_NAME = argv[0];
+	COLOR_NAME = time(NULL);
+
+	proc_opts(argc, argv);
 
 	dataset_header_t hdr = {};
 	raw_example_t ex = {};
@@ -32,8 +52,6 @@ int main(int argc, const char* argv[])
 
 	chroma_t c = at_center(&ex.state);
 	chroma_t min = c, max = c;
-
-	time_t name = time(NULL);
 
 	while(1)
 	{
@@ -73,7 +91,7 @@ int main(int argc, const char* argv[])
 			b_log("cb [ %d - %d ]", min.cb, max.cb);
 
 			char path[256];
-			snprintf(path, sizeof(path), "/var/predictor/color/%s/%ld", argv[0], name);
+			snprintf(path, (size_t)sizeof(path), "/var/predictor/color/%s/%ld", argv[0], COLOR_NAME);
 			b_log("writing to '%s'", path);
 			int fd = open(path, O_CREAT | O_WRONLY, 0666);
 
