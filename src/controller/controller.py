@@ -29,6 +29,8 @@ def collector():
 def predictor(pwm_msk):
 	os.system('collector -i -a | predictor -r/media/training/0.route -m' + str(pwm_msk))
 	
+def cal_color(goodbad)
+	os.system('collector -i -a | %s' % goodbad)
 
 @app.route('/')
 def index():
@@ -43,6 +45,21 @@ def route():
 @app.route('/training')
 def training():
 	return redirect('/') 
+
+
+@app.route('/calgood')
+def good():
+    CURRENT_THREAD = Thread(target=cal_color, args=('good',))
+    CURRENT_THREAD.start()
+    return redirect('/')
+
+
+@app.route('/calbad')
+def bad():
+    CURRENT_THREAD = Thread(target=cal_color, args=('bad',))
+    CURRENT_THREAD.start()
+    return redirect('/')
+
 
 @app.route('/run')
 def run():
@@ -71,7 +88,7 @@ def reboot():
 
 @app.route('/stop')
 def stop():
-	os.system('killall -s2 collector predictor')
+	os.system('killall -s2 collector predictor good bad')
 
 	return redirect('/') 
 

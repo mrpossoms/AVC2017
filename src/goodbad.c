@@ -33,6 +33,8 @@ int main(int argc, const char* argv[])
 	chroma_t c = at_center(&ex.state);
 	chroma_t min = c, max = c;
 
+	time_t name = time(NULL);
+
 	while(1)
 	{
 		read(0, &ex, sizeof(ex));
@@ -69,6 +71,20 @@ int main(int argc, const char* argv[])
 		{
 			b_log("cr [ %d - %d ]", min.cr, max.cr);
 			b_log("cb [ %d - %d ]", min.cb, max.cb);
+
+			char path[256];
+			snprintf(path, sizeof(path), "/var/predictor/color/%s/%ld", argv[0], name);
+			b_log("writing to '%s'", path);
+			int fd = open(path, O_CREAT | O_WRONLY, 0666);
+
+			if(fd < 0)
+			{
+				b_log("Error creating '%s'", path);
+				return -2;
+			}
+
+		       	write(fd, &min, sizeof(min) << 1);
+			close(fd);	
 		}
 
 		write(1, &ex, sizeof(ex));

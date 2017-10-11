@@ -1,3 +1,4 @@
+#include <dirent.h>
 #include "sys.h"
 #include "structs.h"
 #include "dataset_hdr.h"
@@ -13,6 +14,16 @@ calib_t CAL;
 uint8_t PWM_CHANNEL_MSK = 0x6; // all echo 
 int FORWARD_STATE = 0;
 int I2C_BUS;
+
+typedef struct {
+	chroma_t min, max;
+} color_range_t;
+
+
+color_range_t *BAD_COLORS;
+color_range_t *GOOD_COLORS;
+int BAD_COUNT, GOOD_COUNT;
+
 
 void proc_opts(int argc, char* const *argv)
 {
@@ -84,6 +95,71 @@ void proc_opts(int argc, char* const *argv)
 }
 
 
+color_range_t* load_colors(const char* path, int* color_count)
+{
+	DIR* dir = opendir(path);
+	color_range_t* colors = NULL;
+	*color_count = 0;
+
+	if(!dir)
+	{
+		b_log("opendir() failed on '%s'", path);
+		return NULL;
+	}
+
+	long start = telldir(dir);
+
+	struct dirent* ent;
+	while((ent = readdir(dir)))
+	{
+		if(ent->d_name[0] == '.') continue;
+		++*color_count;
+	}
+
+	colors = calloc(sizeof(color_range_t), *color_count );
+	if(!colors)
+	{
+		b_log("calloc() failed for %d colors", *color_count);
+		closedir(dir);
+		return NULL;
+	}
+
+	seekdir(dir, start);
+	color_range_t* color = colors;
+	while((ent = readdir(dir)))
+	{
+		if(ent->d_name[0] == '.') continue;
+
+		char buf[256];
+		snprintf(buf, sizeof(buf), "%s/%s", path, ent->d_name);
+		int fd = open(buf, O_RDONLY);
+	
+		if(fd < 0)
+		{
+			b_log("open() failed on '%s'", buf);
+			free(colors);
+			closedir(dir);
+			return NULL;
+		}
+
+		read(fd, color, sizeof(color_range_t));
+		close(fd);
+
+		b_log("color: %s [%d-%d], [%d-%d]", 
+			buf, 
+			color->min.cr, color->max.cr,
+			color->min.cb, color->max.cb
+		);
+
+		color++;
+	}
+
+	closedir(dir);
+
+	return colors;
+}
+
+
 float avoider(raw_state_t* state, float* confidence)
 {
 	const int CHROMA_W = FRAME_W / 2;
@@ -100,14 +176,37 @@ float avoider(raw_state_t* state, float* confidence)
 			//if(r < CHROMA_W) continue;
 
 			chroma_t cro = state->view.chroma[r * CHROMA_W + c];
-			if(cro.cb > 160 && abs(cro.cr - 128) < 40)
+			//if(cro.cb > 160 && abs(cro.cr - 128) < 40)
+			color_range_t* bad = BAD_COLORS;
+
+			for(int col = BAD_COUNT; col--;)
 			{
-				col_sum += 1;
-				state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
+				if(bad->min.cr <= cro.cr && cro.cr <= bad->max.cr) 
+				if(bad->min.cb <= cro.cb && cro.cb <= bad->max.cb)
+				{	
+					col_sum += 1;
+					state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
+				}
+				
+				bad++;
+			}
+
+			color_range_t* good = GOOD_COLORS;
+
+			for(int col = GOOD_COUNT; col--;)
+			{
+				if(good->min.cr <= cro.cr && cro.cr <= good->max.cr) 
+				if(good->min.cb <= cro.cb && cro.cb <= good->max.cb)
+				{	
+					col_sum -= 1;
+					state->view.luma[(c << 1) + (r * FRAME_W)] = 255;
+				}
+				
+				good++;
 			}
 		}
 
-		//if(col_sum > 16)
+		if(col_sum > 16)
 		{
 			hist_sum += col_sum;
 			red_hist[c] = col_sum;
@@ -117,7 +216,7 @@ float avoider(raw_state_t* state, float* confidence)
 	int best = hist_sum;
 	int cont_r[2] = { CHROMA_W, CHROMA_W };
 
-	for(int j = CHROMA_W; j--;)
+	for(int j = CHROMA_W + 1; j--;)
 	{
 		int cost = 0;
 		int cont_start = j;
@@ -337,6 +436,11 @@ int main(int argc, char* const argv[])
 		
 	raw_example_t ex = {};
 	
+	b_log("\t\033[0;32mGOOD\033[0m");
+	GOOD_COLORS = load_colors("/var/predictor/color/good", &GOOD_COUNT);
+
+	b_log("\t\033[0;31mBAD\033[0m");
+	BAD_COLORS = load_colors("/var/predictor/color/bad", &BAD_COUNT);
 
 	//pwm_reset();
 

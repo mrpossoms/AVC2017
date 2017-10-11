@@ -11,7 +11,7 @@ VIEWER_LINK=
 MASSEUSE_SRC=src/curves.c
 MASSEUSE_MAIN=src/masseuse.c
 BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c botd.c
-BAD_SRC=sys.c bad.c
+BAD_SRC=sys.c goodbad.c
 TST_SRC=masseuse_falloff masseuse_bucket
 
 ifeq ($(OS),Darwin)
@@ -52,13 +52,25 @@ predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
 bad: $(addprefix obj/,$(BAD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
+good: $(addprefix obj/,$(BAD_SRC:.c=.o))
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
+
+
 botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
 
-install-bot: predictor collector structsize 
+/var/predictor/color/bad:
+	mkdir -p $@
+	chmod -R 777 $@
+
+/var/predictor/color/good:
+	mkdir -p $@
+	chmod -R 777 $@
+
+install-bot: predictor collector structsize bad good /var/predictor/color/bad /var/predictor/color/good
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
 
 install-tools: masseuse viewer structsize
