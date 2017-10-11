@@ -96,7 +96,7 @@ void proc_opts(int argc, char* const *argv)
 }
 
 
-color_range_t* load_colors(const char* path, int* color_count, int is_good)
+color_range_t* load_colors(const char* path, int* color_count)
 {
 	DIR* dir = opendir(path);
 	color_range_t* colors = NULL;
@@ -157,7 +157,6 @@ color_range_t* load_colors(const char* path, int* color_count, int is_good)
 		// high badness are avoided. Conversly, the more negative color
 		// the 'gooder' it is, which leads to seeking behavior
 		color->badness = atoi(ent->d_name);
-		if(is_good) color->badness *= -1;
 
 		b_log("color: %s [%d-%d], [%d-%d]", 
 			buf, 
@@ -215,7 +214,7 @@ float avoider(raw_state_t* state, float* confidence)
 				if(good->min.cr <= cro.cr && cro.cr <= good->max.cr) 
 				if(good->min.cb <= cro.cb && cro.cb <= good->max.cb)
 				{	
-					col_sum -= 1;
+					col_sum -= good->badness;
 					state->view.luma[(c << 1) + (r * FRAME_W)] = 255;
 				}
 				
@@ -460,10 +459,10 @@ int main(int argc, char* const argv[])
 	raw_example_t ex = {};
 	
 	b_log("\t\033[0;32mGOOD\033[0m");
-	GOOD_COLORS = load_colors("/var/predictor/color/good", &GOOD_COUNT, 1);
+	GOOD_COLORS = load_colors("/var/predictor/color/good", &GOOD_COUNT);
 
 	b_log("\t\033[0;31mBAD\033[0m");
-	BAD_COLORS = load_colors("/var/predictor/color/bad", &BAD_COUNT, 0);
+	BAD_COLORS = load_colors("/var/predictor/color/bad", &BAD_COUNT);
 
 	//pwm_reset();
 
@@ -534,7 +533,9 @@ int main(int argc, char* const argv[])
 			b_log("timeout");
 			if(I2C_BUS > -1)
 			{
-				break;
+				// stop everything 
+				raw_action_t act = { 117, 117 };
+				pwm_set_action(&act);
 			}
 		}
 
