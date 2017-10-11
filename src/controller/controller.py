@@ -29,7 +29,7 @@ def collector():
 def predictor(pwm_msk):
 	os.system('collector -i -a | predictor -r/media/training/0.route -m' + str(pwm_msk))
 	
-def cal_color(goodbad)
+def cal_color(goodbad):
 	os.system('collector -i -a | %s' % goodbad)
 
 @app.route('/')
@@ -92,14 +92,17 @@ def stop():
 
 	return redirect('/') 
 
-os.chdir('/root')
+try:
+    os.chdir('/root')
 
-with open('/sys/class/leds/led0/brightness', 'a', 0) as fp:
-	for _ in range(1, 10):
-		fp.write('1')
-		time.sleep(0.25)
-		fp.write('0')
-		time.sleep(0.25)
+    with open('/sys/class/leds/led0/brightness', 'a', 0) as fp:
+            for _ in range(1, 10):
+                    fp.write('1')
+                    time.sleep(0.25)
+                    fp.write('0')
+    time.sleep(0.25)
+except PermissionError:
+    print("Couldn't cd to /root")
 
 app.run(host='0.0.0.0')
 url_for('static', filename='bootstrap.min.css')

@@ -6,9 +6,9 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
-<body>
+<body class="bg-dark">
 	<form>
-	<section class="row">
+	<section class="row" style="color:#eee">
 		<label class="col-6">
 		<input type="checkbox" {% if model.throttle %}checked{%endif%}  name="throttle">Control Throttle</input>
 		</label>
@@ -18,13 +18,13 @@
 	</section>
 
 	<section class="row">
-		<button class="btn btn-primary form-control col-md-12" formaction="/route">Route</button>
-		<button class="btn btn-secondary form-control col-md-12" formaction="/training">Training</button>
-		<button class="btn btn-primary form-control col-md-12" formaction="/run">Run</button>
-		<button class="btn btn-secondary form-control col-md-12" formaction="/calgood">Set Good Colors</button>
-		<button class="btn btn-primary form-control col-md-12" formaction="/calbad">Set Bad Colors</button>
-		<button class="btn btn-warning form-control col-md-12" formaction="/stop">Stop</button>
-		<button class="btn btn-danger form-control col-md-12" formaction="/reboot">Reboot</button>
+		<button class="btn btn-primary form-control col-sm-12 col-md-3" formaction="/route">Route</button>
+		<button class="btn btn-secondary form-control col-sm-12" formaction="/training">Training</button>
+		<button class="btn btn-primary form-control col-sm-12" formaction="/run">Run</button>
+		<button class="btn btn-secondary form-control col-sm-12" formaction="/calgood">Set Good Colors</button>
+		<button class="btn btn-primary form-control col-sm-12" formaction="/calbad">Set Bad Colors</button>
+		<button class="btn btn-warning form-control col-sm-12" formaction="/stop">Stop</button>
+		<button class="btn btn-danger form-control col-sm-12" formaction="/reboot">Reboot</button>
 	</section>
 	</form>	
 </body>
