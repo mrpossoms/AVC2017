@@ -108,9 +108,10 @@ void* pose_estimator(void* params)
 		}
 
 		vec3_lerp(ex->state.heading, ex->state.heading, heading, powf(p, 64));
-
 		vec3_scale(heading, heading, delta);
 		vec3_add(ex->state.position, ex->state.position, heading);
+
+		ex->state.distance += delta;
 
 		pthread_mutex_unlock(&STATE_LOCK);
 

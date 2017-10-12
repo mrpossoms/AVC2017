@@ -73,7 +73,7 @@ typedef struct {
 	int16_t  rot_rate[3];
 	int16_t  acc[3];
 	float    vel;
-	uint32_t distance;
+	float    distance;
 	vec3     heading;
 	vec3     position;
 	struct {
