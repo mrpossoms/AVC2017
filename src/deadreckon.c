@@ -40,7 +40,7 @@ void* pose_estimator(void* params)
 	// terminate if the I2C bus isn't open
 	if(I2C_BUS < 0)
 	{
-		return -1;
+		return (void*)-1;
 	}
 
 	while(1)
@@ -109,7 +109,7 @@ void* pose_estimator(void* params)
 
 		vec3_lerp(ex->state.heading, ex->state.heading, heading, powf(p, 64));
 
-		vec3_scale(heading, heading, delta);
+		vec3_scale(heading, ex->state.heading, delta);
 		vec3_add(ex->state.position, ex->state.position, heading);
 
 		pthread_mutex_unlock(&STATE_LOCK);
