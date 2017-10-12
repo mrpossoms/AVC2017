@@ -101,7 +101,8 @@ int main(int argc, const char* argv[])
 				return -2;
 			}
 
-		       	write(fd, &min, sizeof(min) << 1);
+		       	write(fd, &min, sizeof(min));
+		       	write(fd, &max, sizeof(max));
 			close(fd);	
 		}
 
