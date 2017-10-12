@@ -4,6 +4,7 @@
 #include "dataset_hdr.h"
 #include "i2c.h"
 #include "drv_pwm.h"
+#include "pid.h"
 
 int INPUT_FD = 0;
 
@@ -15,6 +16,12 @@ uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
 int FORWARD_STATE = 0;
 int I2C_BUS;
 
+PID_t PID_THROTTLE = {
+	.p = 0.01,
+	.i = 0.1,
+	.d = 0.1,
+};
+
 typedef struct {
 	chroma_t min, max;
 	int badness;
@@ -24,7 +31,6 @@ typedef struct {
 color_range_t *BAD_COLORS;
 color_range_t *GOOD_COLORS;
 int BAD_COUNT, GOOD_COUNT;
-
 
 void proc_opts(int argc, char* const *argv)
 {
@@ -313,7 +319,6 @@ float avoider(raw_state_t* state, float* confidence)
 
 }
 
-float LAST_S=117;
 raw_action_t predict(raw_state_t* state, waypoint_t goal)
 {
 
@@ -351,22 +356,15 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 
 	float conf = 0;
 	float avd_p = avoider(state, &conf);
+	float inv_conf = 1 - conf;
 
-	p = (1 - conf) * p + conf * avd_p;	
+	p = inv_conf * p + conf * avd_p;	
 
 	// Lerp between right and left.
 	act.steering = CAL.steering.max * (1 - p) + CAL.steering.min * p;
-/*
-	b_log("left (%f, %f, %f)", left[0], left[1], left[2]); 
-	b_log("heading (%f, %f, %f)", state->heading[0], state->heading[1], state->heading[2]); 
-	b_log("position (%f, %f, %f)", state->position[0], state->position[1], state->position[2]); 
-	b_log("goal_vec (%f, %f, %f)", goal_vec[0], goal_vec[1], goal_vec[2]); 
-	b_log("%f", p);	
-	b_log("steering: %d", act.steering);
-*/
-	//if(fabs(LAST_S - act.steering) < 5) sleep(1);
-	LAST_S = act.steering;
-	act.throttle = 122;
+
+	// Use a pid controller to regulate the throttle to match the speed driven
+	act.throttle = PID_control(&PID_THROTTLE, NEXT_WPT->velocity * inv_conf, state->vel) * 122;
 
 	return act;
 }
