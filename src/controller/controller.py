@@ -8,7 +8,7 @@ import time
 app = Flask(__name__)
 
 CURRENT_THREAD = None
-MEDIA='/var/training/0.route'
+MEDIA='/var/training'
 
 def view(params=None):
 	return render_template('index.html', model=params)
@@ -28,7 +28,7 @@ def collector():
 	os.system('collector -r -m%s' % MEDIA)
 
 def predictor(pwm_msk):
-	os.system('collector -i -a | predictor -r%s -m%d' % (MEDIA, str(pwm_msk)))
+	os.system('collector -i -a | predictor -r%s/0.route -m%s' % (MEDIA, str(pwm_msk)))
 	
 def cal_color(goodbad, name):
 	os.system('collector -i -a | %s -n%s' % (goodbad, name))
