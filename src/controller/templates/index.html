@@ -17,15 +17,32 @@
 		</label>
 	</section>
 
-	<section class="row">
-		<button class="btn btn-primary form-control col-sm-12 col-md-3" formaction="/route">Route</button>
+		<button class="btn btn-primary form-control col-sm-12" formaction="/route">Route</button>
 		<button class="btn btn-secondary form-control col-sm-12" formaction="/training">Training</button>
 		<button class="btn btn-primary form-control col-sm-12" formaction="/run">Run</button>
-		<button class="btn btn-secondary form-control col-sm-12" formaction="/calgood">Set Good Colors</button>
-		<button class="btn btn-primary form-control col-sm-12" formaction="/calbad">Set Bad Colors</button>
+		<div class="row">
+			<button class="btn btn-secondary form-control col-9" formaction="/calgood">Set Good Colors</button>
+			<select class="col-2 form-control" name="goodness">
+				<option selected value="1">1</option>
+				<option value="2">2</option>
+				<option value="4">4</option>
+				<option value="16">16</option>
+			</select>
+		</div>
+		<div class="row">
+			<button class="btn btn-primary form-control col-9" formaction="/calbad">Set Bad Colors</button>
+			<select class="col-2 form-control" name="badness">
+				<option selected value="1">1</option>
+				<option value="2">2</option>
+				<option value="4">4</option>
+				<option value="16">16</option>
+			</select>
+		</div>
 		<button class="btn btn-warning form-control col-sm-12" formaction="/stop">Stop</button>
-		<button class="btn btn-danger form-control col-sm-12" formaction="/reboot">Reboot</button>
-	</section>
+		<div class="row">
+			<button class="btn btn-danger form-control col-6" formaction="/reboot">Reboot</button>
+			<button class="btn btn-danger form-control col-6" formaction="/shutdown">Shutdown</button>
+		</div>
 	</form>	
 </body>
 

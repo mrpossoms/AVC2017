@@ -93,7 +93,7 @@ int main(int argc, const char* argv[])
 			char path[256];
 			snprintf(path, (size_t)sizeof(path), "/var/predictor/color/%s/%ld", argv[0], COLOR_NAME);
 			b_log("writing to '%s'", path);
-			int fd = open(path, O_CREAT | O_WRONLY, 0666);
+			int fd = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0666);
 
 			if(fd < 0)
 			{

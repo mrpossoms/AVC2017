@@ -8,6 +8,7 @@ import time
 app = Flask(__name__)
 
 CURRENT_THREAD = None
+MEDIA='/var/training/0.route'
 
 def view(params=None):
 	return render_template('index.html', model=params)
@@ -15,7 +16,7 @@ def view(params=None):
 def model(request):
 	model = {}
 
-	for prop in ['steering', 'throttle']:
+	for prop in ['steering', 'throttle', 'goodness', 'badness']:
 		try:
 			model[prop] = request.args.get(prop, '')
 		except NameError:
@@ -24,13 +25,13 @@ def model(request):
 	return model
 
 def collector():
-	os.system('collector -r -m/media/training')
+	os.system('collector -r -m%s' % MEDIA)
 
 def predictor(pwm_msk):
-	os.system('collector -i -a | predictor -r/media/training/0.route -m' + str(pwm_msk))
+	os.system('collector -i -a | predictor -r%s -m%d' % (MEDIA, str(pwm_msk)))
 	
-def cal_color(goodbad):
-	os.system('collector -i -a | %s' % goodbad)
+def cal_color(goodbad, name):
+	os.system('collector -i -a | %s -n%s' % (goodbad, name))
 
 @app.route('/')
 def index():
@@ -49,16 +50,34 @@ def training():
 
 @app.route('/calgood')
 def good():
-    CURRENT_THREAD = Thread(target=cal_color, args=('good',))
+    m = model(request)
+    name = m['goodness']
+    CURRENT_THREAD = Thread(target=cal_color, args=('good', name))
     CURRENT_THREAD.start()
     return redirect('/')
 
 
 @app.route('/calbad')
 def bad():
-    CURRENT_THREAD = Thread(target=cal_color, args=('bad',))
+    m = model(request)
+    name = m['badness']
+    CURRENT_THREAD = Thread(target=cal_color, args=('bad', name))
     CURRENT_THREAD.start()
     return redirect('/')
+
+
+@app.route('/clearbad')
+def clear_bad():
+	os.system('rm -rf /var/predictor/color/bad')
+	os.system('mkdir /var/predictor/color/bad')
+	return redirect('/')
+
+
+@app.route('/cleargood')
+def clear_good():
+	os.system('rm -rf /var/predictor/color/good')
+	os.system('mkdir /var/predictor/color/good')
+	return redirect('/')
 
 
 @app.route('/run')
@@ -81,10 +100,18 @@ def run():
 
 	return redirect('/') 
 
+
 @app.route('/reboot')
 def reboot():
 	os.system('reboot 1 &')
 	return redirect('/') 
+
+
+@app.route('/shutdown')
+def shutdown():
+	os.system('shutdown 0 &')
+	return redirect('/') 
+
 
 @app.route('/stop')
 def stop():

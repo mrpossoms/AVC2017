@@ -18,7 +18,7 @@ int I2C_BUS;
 int USE_DEADRECKONING = 1;
 
 PID_t PID_THROTTLE = {
-	.p = 1,
+	.p = 2,
 	.i = 0.25,
 	.d = 2,
 };
@@ -379,8 +379,8 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	act.steering = CAL.steering.max * (1 - p) + CAL.steering.min * p;
 
 	// Use a pid controller to regulate the throttle to match the speed driven
-	act.throttle = 117 + PID_control(&PID_THROTTLE, NEXT_WPT->velocity * inv_conf, state->vel);
-	act.throttle = MAX(117, act.throttle);
+	int throttle_temp = 117 + PID_control(&PID_THROTTLE, NEXT_WPT->velocity * inv_conf, state->vel);
+	act.throttle = MAX(117, throttle_temp);
 
 	//time_t now = time(NULL);
 	//if(LAST_SECOND != now)
@@ -405,36 +405,54 @@ void sig_handler(int sig)
 
 waypoint_t* best_waypoint(raw_state_t* state)
 {
-	waypoint_t* best = NEXT_WPT;
 	waypoint_t* next = NEXT_WPT;
-	float lowest_cost = 1E10;
+	waypoint_t* best = NEXT_WPT;
+	float dist_sum = 0;
 
 	while(next)
 	{
 		vec3 delta;  // difference between car pos and waypoint pos
-		vec3 dir;    // unit vector direction to waypoint from car pos
-		float cost;
-		float co;    // coincidence with heading
-		float dist;
-	
-		vec3_sub(delta, next->position, state->position);
-		vec3_norm(dir, delta);
-		co = vec3_mul_inner(dir, state->heading);
-		dist = vec3_len(delta);
 
-		cost = dist + (2 - (co + 1));
-		
-		if(dist > 0.5)
+		if(USE_DEADRECKONING)
 		{
-			if(cost < lowest_cost)
+			vec3 dir;    // unit vector direction to waypoint from car pos
+			float cost;
+			float co;    // coincidence with heading
+			float dist;
+			float lowest_cost = 1E10;
+	
+			vec3_sub(delta, next->position, state->position);
+			vec3_norm(dir, delta);
+			co = vec3_mul_inner(dir, state->heading);
+			dist = vec3_len(delta);
+
+			cost = dist + (2 - (co + 1));
+			
+			if(dist > 0.5)
 			{
-				best = next;
-				lowest_cost = cost;	
+				if(cost < lowest_cost)
+				{
+					best = next;
+					lowest_cost = cost;	
+				}
 			}
+			else if(next->next == NULL)
+			{
+				return NULL;
+			}
+
 		}
-		else if(next->next == NULL)
+		else
 		{
-			return NULL;
+			if(!next->next) return NULL;
+
+			vec3_sub(delta, next->position, next->next->position);
+			dist_sum += vec3_len(delta);
+
+			if(dist_sum > state->distance)
+			{
+				return next;
+			} 
 		}
 
 		next = next->next; // lol
@@ -478,22 +496,6 @@ int main(int argc, char* const argv[])
 	b_log("\t\033[0;31mBAD\033[0m");
 	BAD_COLORS = load_colors("/var/predictor/color/bad", &BAD_COUNT);
 
-	// If we are opting out of using deadreckoning, then figure out how
-	// far we expect to travel, so we know when to terminate.
-	if(!USE_DEADRECKONING)
-	{
-		while(NEXT_WPT)
-		{
-			waypoint_t* wpt = NEXT_WPT->next;
-			vec3 delta;
-
-			if(!wpt) break;
-
-			vec3_sub(delta, wpt->position, NEXT_WPT->position);
-			TOTAL_DISTANCE += vec3_len(delta);
-		}
-	}
-
 	b_log("Waiting...");
 
 	dataset_header_t hdr = {};
@@ -534,26 +536,16 @@ int main(int argc, char* const argv[])
 				pwm_set_action(&act);
 			}
 
-			if(USE_DEADRECKONING)
+			waypoint_t* next = best_waypoint(&ex.state);
+			if(next != NEXT_WPT)
 			{
-				waypoint_t* next = best_waypoint(&ex.state);
-				if(next != NEXT_WPT)
-				{
-					NEXT_WPT = next;
-					b_log("next waypoint: %lx", (unsigned int)NEXT_WPT);
-				}
+				NEXT_WPT = next;
+				b_log("next waypoint: %lx", (unsigned int)NEXT_WPT);
+			}
 
-				if(NEXT_WPT == NULL)
-				{
-					sig_handler(0);
-				}
-			}		
-			else
+			if(NEXT_WPT == NULL)
 			{
-				if(ex.state.distance >= TOTAL_DISTANCE)
-				{
-					sig_handler(0);
-				}
+				sig_handler(0);
 			}
 
 			if(FORWARD_STATE) 
