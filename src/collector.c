@@ -383,8 +383,12 @@ int main(int argc, const char* argv[])
 
 		//return -1;
 	}
-	
-	pwm_set_echo(0x6);
+
+	if(READ_ACTION)
+	{	
+		pwm_set_echo(0x6);
+	}
+
 	pwm_reset_soft();
 	b_log("OK");
 
