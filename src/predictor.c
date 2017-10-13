@@ -18,9 +18,9 @@ int I2C_BUS;
 int USE_DEADRECKONING = 1;
 
 PID_t PID_THROTTLE = {
-	.p = 0.01,
-	.i = 0.1,
-	.d = 0.1,
+	.p = 1,
+	.i = 0.25,
+	.d = 2,
 };
 
 typedef struct {
@@ -324,6 +324,7 @@ float avoider(raw_state_t* state, float* confidence)
 
 }
 
+time_t LAST_SECOND;
 raw_action_t predict(raw_state_t* state, waypoint_t goal)
 {
 
@@ -378,7 +379,15 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	act.steering = CAL.steering.max * (1 - p) + CAL.steering.min * p;
 
 	// Use a pid controller to regulate the throttle to match the speed driven
-	act.throttle = PID_control(&PID_THROTTLE, NEXT_WPT->velocity * inv_conf, state->vel) * 122;
+	act.throttle = 117 + PID_control(&PID_THROTTLE, NEXT_WPT->velocity * inv_conf, state->vel);
+	act.throttle = MAX(117, act.throttle);
+
+	//time_t now = time(NULL);
+	//if(LAST_SECOND != now)
+	{
+		b_log("throttle: %d", act.throttle);
+	//	LAST_SECOND = now;
+	}
 
 	return act;
 }
@@ -441,13 +450,14 @@ int main(int argc, char* const argv[])
 
 	signal(SIGINT, sig_handler);
 
-	proc_opts(argc, argv);
 
 	if(calib_load(ACTION_CAL_PATH, &CAL))
 	{
 		b_log("Failed to load '%s'", ACTION_CAL_PATH);
 		return -1;
 	}
+
+	proc_opts(argc, argv);
 
 	if(i2c_init("/dev/i2c-1"))
 	{
@@ -458,8 +468,8 @@ int main(int argc, char* const argv[])
 	else
 	{
 		pwm_set_echo(PWM_CHANNEL_MSK);
-	}
-	
+	}	
+
 	raw_example_t ex = {};
 	
 	b_log("\t\033[0;32mGOOD\033[0m");
@@ -519,7 +529,7 @@ int main(int argc, char* const argv[])
 
 			raw_action_t act = predict(&ex.state, *NEXT_WPT); 
 
-			if(I2C_BUS > -1)
+			//if(I2C_BUS > -1)
 			{
 				pwm_set_action(&act);
 			}
