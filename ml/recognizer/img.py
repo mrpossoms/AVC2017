@@ -8,7 +8,8 @@ from bs4 import BeautifulSoup
 
 
 def img_search(subject):
-    query='/search?q=%s&tbm=isch&gbv=1&sei=GHCdWuawI8SV_QaYvonYBQ' % subject
+    # search for images, full color, 'medium' size
+    query='/search?q=%s&tbm=isch&gbv=1&tbs=isz:m,ic:color&sei=GHCdWuawI8SV_QaYvonYBQ' % subject
     return 'www.google.com' + query
 
 
@@ -41,6 +42,9 @@ while examples_found < m:
     for img in page.find_all('img', attrs={'alt': 'Image result for %s' % alt_name}):
         print(img['src'])
         examples_found += 1
+
+        if examples_found >= m:
+            break
 
     search_url = 'www.google.com' + page.find('a', attrs={'style':'text-align:left'})['href']
     sys.stderr.write(search_url)
