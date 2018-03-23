@@ -14,6 +14,7 @@ def activation_map(model, img_path):
     for y in range(0, h - 32):
         for x in range(0, w - 32):
             patch = img_array[x:x+32, y:y+32].flatten().reshape((1, 3072))
+            patch = (patch / 256.0) - 0.5
 
             if model:
                 act_map[x, y] = model.predict(patch)[0] * 255
@@ -123,7 +124,7 @@ for i in range(y_.size):
     if shown_positive and shown_negative:
         break
 
-activation_map(model, "imgs/hay-test.jpg")
+activation_map(model, "hay-test.jpg")
 
 X, Y = minibatch(real_test_filenames_labels(), 0, size=2)
 print('Real set score: %f' % model.score(X, Y))
