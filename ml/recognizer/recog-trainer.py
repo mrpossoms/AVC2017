@@ -8,6 +8,18 @@ import time
 def activation_map(model, img_path):
     img = Image.open(img_path).convert('RGB')
     img_array = np.array(img)
+    w, h, d = img_array.shape
+    act_map = np.zeros((w - 32, h - 32))
+
+    for y in range(0, h - 32):
+        for x in range(0, w - 32):
+            patch = img_array[x:x+32, y:y+32].flatten().reshape((1, 3072))
+
+            if model:
+                act_map[x, y] = model.predict(patch)[0] * 255
+
+    Image.fromarray(act_map.astype(np.uint8)).save("act_map.jpg", "JPEG")
+
 
 
 def filenames_labels():
@@ -111,6 +123,9 @@ for i in range(y_.size):
     if shown_positive and shown_negative:
         break
 
+activation_map(model, "imgs/hay-test.jpg")
+
 X, Y = minibatch(real_test_filenames_labels(), 0, size=2)
 print('Real set score: %f' % model.score(X, Y))
 print(model.predict(X))
+
