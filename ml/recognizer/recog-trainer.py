@@ -5,6 +5,10 @@ from random import shuffle
 import os
 import time
 
+def activation_map(model, img_path):
+    img = Image.open(img_path).convert('RGB')
+    img_array = np.array(img)
+
 
 def filenames_labels():
     files_labels = []
