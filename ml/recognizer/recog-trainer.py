@@ -26,11 +26,11 @@ def activation_map(model, img_path):
 def filenames_labels():
     files_labels = []
 
-    for positive in os.listdir('imgs/hay'):
-        files_labels += [('imgs/hay/' + positive, 1)]
+    for positive in os.listdir('imgs/pos'):
+        files_labels += [('imgs/pos/' + positive, 1)]
 
-    for negative in os.listdir('imgs/not-hay'):
-        files_labels += [('imgs/not-hay/' + negative, 0)]
+    for negative in os.listdir('imgs/neg'):
+        files_labels += [('imgs/neg/' + negative, 0)]
 
     shuffle(files_labels)
 
@@ -88,7 +88,7 @@ model = nn.MLPClassifier(hidden_layer_sizes=[256, 256, 256],
                          max_iter=2,
                          warm_start=True)
 
-for _ in range(2):
+for _ in range(100):
     for i in range(ts_batches):
         X, Y = minibatch(training_set, i)
         model.fit(X, Y)
@@ -124,7 +124,7 @@ for i in range(y_.size):
     if shown_positive and shown_negative:
         break
 
-activation_map(model, "hay-test.jpg")
+activation_map(model, "test0.png")
 
 X, Y = minibatch(real_test_filenames_labels(), 0, size=2)
 print('Real set score: %f' % model.score(X, Y))
