@@ -9,8 +9,6 @@ import time
 
 random.seed(time.time())
 
-print(">>>>>")
-
 def name():
     return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
 
@@ -32,15 +30,17 @@ while True:
     if len(path) == 0:
         break
 
-    print('[[' + path + ']]')
     img = Image.open(path)
 
-    w, h = 64, 64
+    w, h = 32, 32
 
     i += 1
+    print(i)
 
-    for _ in range(6):
+    for _ in range(12):
         x_range = img.width - w
         y_range = img.height - h
         x, y = int(random.random() * x_range), int(random.random() * y_range)
-        img.crop([x, y, x + 64, y + 64]).save('imgs/%s/%s' % (sys.argv[1], name()), 'PNG')
+        img.crop([x, y, x + w, y + h]).save('imgs/%s/%s' % (sys.argv[1], name()), 'PNG')
+
+    os.unlink(path)
