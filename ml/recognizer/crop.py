@@ -32,15 +32,23 @@ while True:
 
     img = Image.open(path)
 
+    img_w, img_h = (img.width, img.height)
+    print("\n%dx%d" % (img.width, img.height))
+
+    img.save("before.png", "PNG");
+
+    if sys.argv[2] == 'no-sky':
+        img_h //= 2
+
     w, h = 32, 32
 
     i += 1
-    print(i)
 
     for _ in range(12):
         x_range = img.width - w
-        y_range = img.height - h
-        x, y = int(random.random() * x_range), int(random.random() * y_range)
-        img.crop([x, y, x + w, y + h]).save('imgs/%s/%s' % (sys.argv[1], name()), 'PNG')
+        y_range = img_h - h
+        x, y = int(random.random() * x_range), int(random.random() * y_range) + (img.height - img_h)
+        bounds = [x, y, x + w, y + h]
+        img.crop(bounds).save('imgs/%s/%s' % (sys.argv[1], name()), 'PNG')
 
     os.unlink(path)
