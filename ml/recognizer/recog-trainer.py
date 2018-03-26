@@ -11,6 +11,11 @@ IS_TRAINING = True
 
 def handle_sig_done(*args):
     global IS_TRAINING
+
+    if not IS_TRAINING:
+        print("Cancelled")
+        exit(0)
+
     IS_TRAINING = False
     print("Ending training")
 
@@ -31,7 +36,7 @@ def activation_map(model, in_path, out_path):
         for x in range(0, w - 32):
             patch = img_array[x:x+32, y:y+32]
             flat_patch = (patch.flatten().reshape((1, 3072)) / 255.0) - 0.5
-        
+
             _y = model.predict(flat_patch)[0]
             color = np.array([[[1, 1, 1]]])
 
@@ -102,10 +107,17 @@ def main(argv):
     #     'epochs': -1             # -1: only stops at SIGINT
     # })
 
+    # train({
+    #     'layer_sizes': [394, 394],
+    #     'learning_rate': 0.0005215789056879548,
+    #     'l2_reg_term': 0.0013,
+    #     'epochs': -1
+    #     })
+
     hyper_parameter_search({
-        'layer_sizes': ([64, 512], 1, 5),
-        'learning_rate': (0.0, 0.0001, 0.001),
-        'l2_reg_term': (0.0, 0.0001, 0.001)
+       'layer_sizes': ([256, 512], 1, 3),
+       'learning_rate': (0.0, 0.0006, 0.001),
+       'l2_reg_term': (0.0, 0.0001, 0.01)
     })
 
 
@@ -118,7 +130,7 @@ def hyper_parameter_search(ranges, candidates=100):
 
         for param in ranges:
             t, low, high = ranges[param]
-            rnd = low + np.random.random() * (high - low)
+            rnd = low + (np.random.random() * (high - low))
 
             if type(t) is int:
                 rnd = int(rnd)
@@ -137,12 +149,21 @@ def hyper_parameter_search(ranges, candidates=100):
     best = 0
     for hp in hyper_param_set:
         print('%d/100 evaluated' % i)
-        hp['dev_score'] = train(hp)
+        ts_score, ds_score = train(hp)
+
+        score = 2 / ((1 / ts_score) + (1 / ds_score))
+        hp['score'] = score
         i += 1
 
-        if hp['dev_score'] > best:
-            best = hp['dev_score']
+        if hp['score'] > best:
+            best = hp['score']
             print(hp)
+
+    def score_key(param):
+        return param['score']
+
+    hyper_param_set = sorted(hyper_param_set, key=score_key, reverse=True)
+    print(hyper_param_set[0:3])
 
 
 def train(hyper_params):
@@ -166,8 +187,11 @@ def train(hyper_params):
                              max_iter=2,
                              warm_start=True)
 
+    ds_X, ds_Y = minibatch(dev_set, 0, size=100)
     epochs = hyper_params['epochs']
-    while IS_TRAINING or epochs == 0:
+    ts_score = 0
+
+    while IS_TRAINING and epochs != 0:
         epochs -= 1
         for i in range(ts_batches):
             if not IS_TRAINING:
@@ -176,16 +200,16 @@ def train(hyper_params):
             X, Y = minibatch(training_set, i, size=n)
             model.fit(X, Y)
 
-            if i % 10 == 0:
-                print(model.score(X, Y))
+            if i % 40 == 0:
+                ts_score = model.score(X, Y)
+                print("TS: %f - DS: %f" % (ts_score, model.score(ds_X, ds_Y)))
 
+    ds_score = model.score(ds_X, ds_Y)
+    print('Dev set score: %f' % ds_score)
 
-    ds_X, ds_Y = minibatch(dev_set, 0, size=100)
-    score = model.score(ds_X, ds_Y)
-    print('Dev set score: %f' % score)
-
-    # activation_map(model, "test0.png", "act_map0.png")
-    # activation_map(model, "test1.png", "act_map1.png")
+    if epochs < 0:
+        for i in range(3):
+            activation_map(model, "test%d.png" % i, "act_map%d.png" % i)
 
     #X, Y = minibatch(real_test_filenames_labels(), 0, size=2)
     #print('Real set score: %f' % model.score(X, Y))
@@ -194,8 +218,7 @@ def train(hyper_params):
     # print('Real set score: %f' % model.score(X, Y))
     # print(model.predict(X))
 
-    return score
+    return ts_score, ds_score
 
 if __name__ == '__main__':
     main(sys.argv)
-
