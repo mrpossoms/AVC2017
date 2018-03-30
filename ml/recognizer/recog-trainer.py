@@ -107,18 +107,13 @@ def main(argv):
     #     'epochs': -1             # -1: only stops at SIGINT
     # })
 
-    # train({
-    #     'layer_sizes': [394, 394],
-    #     'learning_rate': 0.0005215789056879548,
-    #     'l2_reg_term': 0.0013,
-    #     'epochs': -1
-    #     })
+    train({'layer_sizes': [512, 512], 'learning_rate': 0.0009, 'l2_reg_term': 0.009, 'epochs': -1, 'score': 0.81375921375921378})
 
-    hyper_parameter_search({
-       'layer_sizes': ([256, 512], 1, 3),
-       'learning_rate': (0.0, 0.0006, 0.001),
-       'l2_reg_term': (0.0, 0.0001, 0.01)
-    })
+    # hyper_parameter_search({
+    #    'layer_sizes': ([256, 512], 1, 3),
+    #    'learning_rate': (0.0, 0.0006, 0.001),
+    #    'l2_reg_term': (0.0, 0.0001, 0.01)
+    # })
 
 
 def hyper_parameter_search(ranges, candidates=100):
