@@ -16,6 +16,7 @@ int main(int argc, const char* argv[])
 	seen::CustomPass bale_pass, bale_tess_pass;
 	Quat q_bale_ori;
 	vec3_t light_dir = { 1, 0, 1 };
+	vec3_t tint;
 
 	srand(time(NULL));
 
@@ -52,24 +53,30 @@ int main(int argc, const char* argv[])
 		mat3x3_t rot;
 		vec3 axis = { 0.0, 1.0, 0.0 };
 		vec3_t tex_control = { 0, 0, 4 };
+		const vec3_t tints[2] = {
+			{ 228 / 255.f, 158 / 255.f, 68 / 255.f },
+			{ 215 / 255.f, 187 / 255.f, 134 / 255.f }
+		};
 
 		// glClear(GL_DEPTH_BUFFER_BIT);
 
 		if (argc > 2)
 		{
 			uv_rot = seen::rf(0, 2 * M_PI);
+			tint = lerp(tints, seen::rf());
 
 			vec3_norm(axis, axis);
 			quat_from_axis_angle(q_bale_ori.v, axis[0], axis[1], axis[2], seen::rf(0, 2 * M_PI));
-			camera.fov(M_PI / seen::rf(1,3));
+			camera.fov(M_PI / seen::rf(2,3));
 
 			tex_control.x = seen::rf(-1, 1);
 			tex_control.y = seen::rf(-1, 1);
-			tex_control.z = seen::rf(4, 8);
+			tex_control.z = seen::rf(2, 8);
 		}
 		else
 		{
 			uv_rot += 0.0001f;
+			tint = tints[0];
 		}
 
 		seen::ShaderProgram& shader = *seen::Shaders[bale_shader]->use();
@@ -92,7 +99,8 @@ int main(int argc, const char* argv[])
 		shader["u_world_matrix"] << world;
 		shader["u_normal_matrix"] << rot;
 
-		vec3_t tint = { 0.75, 0.75, 0.75 };
+		vec3_t inner_tint;
+		vec3_scale(inner_tint.v, tint.v, 0.75f);
 
 		shader["u_light_dir"] << light_dir;
 		shader["u_texcoord_rotation"] << uv_rot;
@@ -100,7 +108,7 @@ int main(int argc, const char* argv[])
 		shader["u_tex_control"] << tex_control;
 		shader["TessLevelInner"] << 1.0f;
 		shader["TessLevelOuter"] << 1.0f;
-		shader["u_tint"] << tint;
+		shader["u_tint"] << inner_tint;
 		// glDisable(GL_CULL_FACE);
 	};
 
@@ -110,9 +118,7 @@ int main(int argc, const char* argv[])
 
 		shader["us_displacement"] << displacement_tex;
 
-		vec3_t tint = { 1.0, 1.0, 1.0 };
-
-		shader["u_displacement_weight"] << 0.5f;
+		shader["u_displacement_weight"] << 0.125f;
 		shader["TessLevelInner"] << 5.0f;
 		shader["TessLevelOuter"] << 13.0f;
 		shader["u_tint"] << tint;

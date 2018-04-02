@@ -96,7 +96,10 @@ def minibatch(files_labels, index, size=100):
 
     m = len(X)
 
-    return (np.array(X).reshape((m, 3072)) / 256.0 - 0.5), np.array(Y).reshape((m, 3))
+    X = np.array(X).reshape((m, 3720)) / 256.0
+    X = X - np.average(X, axis=(0, 1))
+
+    return (X, np.array(Y).reshape((m, 3))
 
 
 def main(argv):
@@ -179,7 +182,7 @@ def train(hyper_params):
                              learning_rate_init=hyper_params['learning_rate'],
                              alpha=hyper_params['l2_reg_term'],
                              solver='adam',
-                             max_iter=2,
+                             max_iter=10,
                              warm_start=True)
 
     ds_X, ds_Y = minibatch(dev_set, 0, size=100)

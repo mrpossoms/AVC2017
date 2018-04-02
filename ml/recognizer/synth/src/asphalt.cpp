@@ -2,6 +2,18 @@
 #include <png.h>
 #include <sstream>
 
+static vec3_t lerp(const vec3_t v[2], float p)
+{
+	float p1 = 1 - p;
+	vec3_t o = {
+		v[0].x * p1 + v[1].x * p,
+		v[0].y * p1 + v[1].y * p,
+		v[0].z * p1 + v[1].z * p,
+	};
+
+	return o;
+}
+
 int main(int argc, const char* argv[])
 {
 	seen::RendererGL renderer("./data/", argv[0], 256, 256);
@@ -16,6 +28,7 @@ int main(int argc, const char* argv[])
 	seen::CustomPass bale_pass, bale_tess_pass;
 	Quat q_bale_ori;
 	Quat q_cam_ori;
+	vec3_t tint;
 
 	q_cam_ori.from_axis_angle(VEC3_LEFT.v[0], VEC3_LEFT.v[1], VEC3_LEFT.v[2], M_PI / 4);
 	camera.orientation(q_cam_ori);
@@ -63,11 +76,11 @@ int main(int argc, const char* argv[])
 
 			tex_control.x = seen::rf(-1, 1);
 			tex_control.y = seen::rf(-1, 1);
-			tex_control.z = seen::rf(4, 16);
+			tex_control.z = seen::rf(16, 32);
 
 			vec3_norm(axis, axis);
 			quat_from_axis_angle(q_bale_ori.v, axis[0], axis[1], axis[2], seen::rf(0, 2 * M_PI));
-			camera.fov(M_PI / seen::rf(1,3));
+			camera.fov(M_PI / seen::rf(2,3));
 		}
 		else
 		{
@@ -92,8 +105,6 @@ int main(int argc, const char* argv[])
 		shader["u_world_matrix"] << world;
 		shader["u_normal_matrix"] << rot;
 
-		vec3_t tint = { 0.75, 0.75, 0.75 };
-
 		shader["u_light_dir"] << light_dir;
 		shader["u_texcoord_rotation"] << uv_rot;
 		shader["u_displacement_weight"] << 0.0f;
@@ -110,7 +121,12 @@ int main(int argc, const char* argv[])
 
 		shader["us_displacement"] << displacement_tex;
 
-		vec3_t tint = { 1.0, 1.0, 1.0 };
+		const vec3_t tints[2] = {
+			{ 1, 1, 1 },
+			{ 0.5, 0.5, 0.5 }
+		};
+
+		tint = lerp(tints, seen::rf());
 
 		shader["u_displacement_weight"] << 0.25f;
 		shader["TessLevelInner"] << 5.0f;
