@@ -9,6 +9,8 @@ import signal
 
 IS_TRAINING = True
 
+X_SIZE = 3 * (32 ** 2)
+
 def handle_sig_done(*args):
     global IS_TRAINING
 
@@ -20,6 +22,11 @@ def handle_sig_done(*args):
     print("Ending training")
 
 signal.signal(signal.SIGINT, handle_sig_done)
+
+def process_example(x):
+    mu = np.average(x, axis=(0, 1))
+    return (np.array(list(x.flatten()) + list(mu.flatten())) / 255.0) - 0.5
+
 
 def activation_map(model, in_path, out_path):
     img = Image.open(in_path).convert('RGB')
@@ -35,9 +42,9 @@ def activation_map(model, in_path, out_path):
 
         for x in range(0, w - 32):
             patch = img_array[x:x+32, y:y+32]
-            flat_patch = (patch.flatten().reshape((1, 3072)) / 255.0) - 0.5
+            flat_patch = process_example(patch)
 
-            _y = model.predict(flat_patch)[0]
+            _y = model.predict(flat_patch.reshape((1, 3075)))[0]
             color = np.array([[[1, 1, 1]]])
 
             if _y[1] == 1:
@@ -80,7 +87,7 @@ def array_from_file(path):
 
 
 def show_example(X, i, title=None):
-    test = Image.fromarray(((X[i] + 0.5) * 256).reshape((32, 32, 3)).astype(np.uint8))
+    test = Image.fromarray(((X[i]) * 256).reshape((32, 32, 3)).astype(np.uint8))
     test.show(title=title)
 
 
@@ -91,15 +98,14 @@ def minibatch(files_labels, index, size=100):
         img_array = array_from_file(file)
         assert(img_array.size == 3 * 32**2)
 
-        X += [img_array.flatten()]
+        X += [process_example(img_array)]
         Y += [label]
 
     m = len(X)
 
-    X = np.array(X).reshape((m, 3720)) / 256.0
-    X = X - np.average(X, axis=(0, 1))
+    X = np.array(X).reshape((m, 3075))
 
-    return (X, np.array(Y).reshape((m, 3))
+    return (X, np.array(Y).reshape((m, 3)))
 
 
 def main(argv):
@@ -182,7 +188,7 @@ def train(hyper_params):
                              learning_rate_init=hyper_params['learning_rate'],
                              alpha=hyper_params['l2_reg_term'],
                              solver='adam',
-                             max_iter=10,
+                             max_iter=1,
                              warm_start=True)
 
     ds_X, ds_Y = minibatch(dev_set, 0, size=100)
