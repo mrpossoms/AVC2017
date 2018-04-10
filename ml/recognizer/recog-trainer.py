@@ -9,7 +9,8 @@ import signal
 
 IS_TRAINING = True
 
-X_SIZE = 3 * (32 ** 2)
+PATCH_SIDE = 32
+X_SIZE = (3 * (PATCH_SIDE ** 2)) + 3
 
 def handle_sig_done(*args):
     global IS_TRAINING
@@ -32,19 +33,22 @@ def activation_map(model, in_path, out_path):
     img = Image.open(in_path).convert('RGB')
     img_array = np.array(img)
     w, h, d = img_array.shape
-    act_map = np.zeros((w - 32, h - 32, 3))
+    stride = 32
 
-    px_h = h - 32
+    act_map = np.zeros(((w) // stride, (h) // stride, 3))
 
-    for y in range(0, px_h):
+    px_h = h - PATCH_SIDE
+    px_w = w - PATCH_SIDE
+
+    for y in range(0, px_h, stride):
         if (y * 100 // px_h) % 10 == 0:
             print(str(int(100 * y / px_h)) + '%')
 
-        for x in range(0, w - 32):
-            patch = img_array[x:x+32, y:y+32]
+        for x in range(0, px_w, stride):
+            patch = img_array[x:x+PATCH_SIDE, y:y+PATCH_SIDE]
             flat_patch = process_example(patch)
 
-            _y = model.predict(flat_patch.reshape((1, 3075)))[0]
+            _y = model.predict(flat_patch.reshape((1, X_SIZE)))[0]
             color = np.array([[[1, 1, 1]]])
 
             if _y[1] == 1:
@@ -52,7 +56,7 @@ def activation_map(model, in_path, out_path):
             if _y[2] == 1:
                 color = np.array([[[0, 1, 0]]])
 
-            act_map[x, y] = patch[16, 16] * color
+            act_map[x // stride, y // stride] = patch[PATCH_SIDE//2, PATCH_SIDE//2] * color
 
     Image.fromarray(act_map.astype(np.uint8)).save(out_path, "PNG")
 
@@ -83,11 +87,11 @@ def real_test_filenames_labels():
 
 def array_from_file(path):
     img = Image.open(path).convert('RGB')
-    return np.array(img)
+    return np.array(img)[0:PATCH_SIDE,0:PATCH_SIDE,:]
 
 
 def show_example(X, i, title=None):
-    test = Image.fromarray(((X[i]) * 256).reshape((32, 32, 3)).astype(np.uint8))
+    test = Image.fromarray(((X[i]) * 256).reshape((PATCH_SIDE, PATCH_SIDE, 3)).astype(np.uint8))
     test.show(title=title)
 
 
@@ -96,14 +100,14 @@ def minibatch(files_labels, index, size=100):
 
     for file, label in files_labels[index * size: index * size + size]:
         img_array = array_from_file(file)
-        assert(img_array.size == 3 * 32**2)
+        assert(img_array.size == X_SIZE - 3)
 
         X += [process_example(img_array)]
         Y += [label]
 
     m = len(X)
 
-    X = np.array(X).reshape((m, 3075))
+    X = np.array(X).reshape((m, X_SIZE))
 
     return (X, np.array(Y).reshape((m, 3)))
 

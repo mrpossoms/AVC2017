@@ -16,7 +16,7 @@ static vec3_t lerp(const vec3_t v[2], float p)
 
 int main(int argc, const char* argv[])
 {
-	seen::RendererGL renderer("./data/", argv[0], 256, 256);
+	seen::RendererGL renderer("./data/", argv[0], 128, 128);
 	seen::ListScene scene;
 	seen::Camera camera(M_PI / 2, renderer.width, renderer.height);
 	seen::Model* bale = seen::MeshFactory::get_model("asphalt.obj");
@@ -76,7 +76,7 @@ int main(int argc, const char* argv[])
 
 			tex_control.x = seen::rf(-1, 1);
 			tex_control.y = seen::rf(-1, 1);
-			tex_control.z = seen::rf(16, 32);
+			tex_control.z = seen::rf(32, 64);
 
 			vec3_norm(axis, axis);
 			quat_from_axis_angle(q_bale_ori.v, axis[0], axis[1], axis[2], seen::rf(0, 2 * M_PI));
@@ -122,7 +122,7 @@ int main(int argc, const char* argv[])
 		shader["us_displacement"] << displacement_tex;
 
 		const vec3_t tints[2] = {
-			{ 1, 1, 1 },
+			{ 1, 1, 1.2 },
 			{ 0.5, 0.5, 0.5 }
 		};
 

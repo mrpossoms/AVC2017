@@ -2,11 +2,23 @@
 #include <png.h>
 #include <sstream>
 
+static vec3_t lerp(const vec3_t v[2], float p)
+{
+	float p1 = 1 - p;
+	vec3_t o = {
+		v[0].x * p1 + v[1].x * p,
+		v[0].y * p1 + v[1].y * p,
+		v[0].z * p1 + v[1].z * p,
+	};
+
+	return o;
+}
+
 int main(int argc, const char* argv[])
 {
-	seen::RendererGL renderer("./data/", argv[0], 256, 256);//, 256, 256);
+	seen::RendererGL renderer("./data/", argv[0], 64, 64);//, 256, 256);
 	seen::ListScene scene;
-	seen::Camera camera(M_PI / 2, renderer.width, renderer.height);
+	seen::Camera camera(M_PI / 4, renderer.width, renderer.height);
 	seen::Model* bale = seen::MeshFactory::get_model("cube.obj");
 	seen::Material* bale_mat = seen::TextureFactory::get_material("hay");
 
@@ -15,7 +27,7 @@ int main(int argc, const char* argv[])
 	seen::Tex displacement_tex = seen::TextureFactory::load_texture(disp_name);
 	seen::CustomPass bale_pass, bale_tess_pass;
 	Quat q_bale_ori;
-	vec3_t light_dir = { 1, 0, 1 };
+	vec3_t light_dir = { 0, 0, -1 };
 	vec3_t tint;
 
 	srand(time(NULL));
@@ -55,7 +67,7 @@ int main(int argc, const char* argv[])
 		vec3_t tex_control = { 0, 0, 4 };
 		const vec3_t tints[2] = {
 			{ 228 / 255.f, 158 / 255.f, 68 / 255.f },
-			{ 215 / 255.f, 187 / 255.f, 134 / 255.f }
+			{ 229 / 255.f, 203 / 255.f, 181 / 255.f }
 		};
 
 		// glClear(GL_DEPTH_BUFFER_BIT);
@@ -67,16 +79,16 @@ int main(int argc, const char* argv[])
 
 			vec3_norm(axis, axis);
 			quat_from_axis_angle(q_bale_ori.v, axis[0], axis[1], axis[2], seen::rf(0, 2 * M_PI));
-			camera.fov(M_PI / seen::rf(2,3));
+			camera.fov(M_PI / seen::rf(4,4));
 
 			tex_control.x = seen::rf(-1, 1);
 			tex_control.y = seen::rf(-1, 1);
-			tex_control.z = seen::rf(2, 8);
+			tex_control.z = seen::rf(1, 8);
 		}
 		else
 		{
 			uv_rot += 0.0001f;
-			tint = tints[0];
+			tint = tints[1];
 		}
 
 		seen::ShaderProgram& shader = *seen::Shaders[bale_shader]->use();
@@ -87,7 +99,7 @@ int main(int argc, const char* argv[])
 
 		if (argc > 2)
 		{
-			mat4x4_translate_in_place(world.v, seen::rf(-1, 1), seen::rf(-1, 1), seen::rf(1, 1));
+			mat4x4_translate_in_place(world.v, seen::rf(-0.1, 0.1), seen::rf(-0.1, 0.1), seen::rf(0.1, 0.1));
 		}
 
 		for(int i = 3; i--;)
@@ -131,7 +143,7 @@ int main(int argc, const char* argv[])
 	bale_tess_pass.drawables = new std::vector<seen::Drawable*>();
 	bale_tess_pass.drawables->push_back(bale);
 
-	for(int i = 5; i--;)
+	for(int i = 1; i--;)
 	{
 		scene.drawables().push_back(&bale_pass);
 		scene.drawables().push_back(&bale_tess_pass);
@@ -145,7 +157,7 @@ int main(int argc, const char* argv[])
 		if (argc > 2)
 		{
 			light_dir.x = seen::rf(-1, 1);
-			light_dir.z = seen::rf(-1, 1);
+			// light_dir.z = seen::rf(-1, 1);
 		}
 
 		renderer.draw(&camera, &scene);

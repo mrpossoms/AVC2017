@@ -15,17 +15,21 @@ typedef enum {
 	COL_MODE_ROUTE,
 } col_mode_t;
 
-char* MEDIA_PATH;
 int I2C_BUS;
 int NORM_VIDEO;
-col_mode_t MODE;
 int WAIT_FOR_MOVEMENT = 1;
 int READ_ACTION = 1;
 int FRAME_RATE = 30;
+char* MEDIA_PATH;
 calib_t CAL;
+col_mode_t MODE;
 float VEL;
 
-
+/**
+ * @brief Sets program state according to specified command line flags
+ * @param argc - number of arguments
+ * @param argv - array of character pointers to arguments.
+ */
 void proc_opts(int argc, const char ** argv)
 {
 	int no_opts = 1;
@@ -91,7 +95,12 @@ void proc_opts(int argc, const char ** argv)
 	}
 }
 
-
+/**
+ * @brief Waits for the camera to finish capturing a frame.
+ * @param state - Pointer to the raw state vector of the platform
+ * @param cams - Array of cameras to poll.
+ * @return 0 on success
+ */
 int poll_vision(raw_state_t* state, cam_t* cams)
 {
 	cam_wait_frame(cams);
@@ -131,7 +140,11 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 	return 0;
 }
 
-
+/**
+ * @brief Gets the min and max throttle and steering values. Saves updated 
+ *        max and min values automatically.
+ * @returns 0 on success
+ */
 int calibration(cam_settings_t cfg)
 {
 	raw_action_t action = {};
@@ -141,7 +154,7 @@ int calibration(cam_settings_t cfg)
 	CAL.throttle.min = CAL.throttle.max = action.throttle;
 	CAL.steering.min = CAL.steering.max = action.steering;
 
-	for(;;)
+	for(int i = 1000; i--;)
 	{
 		poll_i2c_devs(NULL, &action, NULL);
 		calib_t last_cal = CAL;
@@ -161,20 +174,34 @@ int calibration(cam_settings_t cfg)
 
 			// save the calibration profile
 			int fd = open(ACTION_CAL_PATH, O_CREAT | O_WRONLY, 0666);
+
+			if (fd < 0)
+			{
+				return -2;
+			}
+
 			write(fd, &CAL, sizeof(CAL));
 			close(fd);
 		}
 
 		usleep(500000);
 	}
+
+	return 0;
 }
 
-
+/**
+ * @brief opens a new file to record into
+ * @param fd - Pointer to an int to be used as the file descriptor
+ * @param now - timestamp, and name of the file
+ * @param ext - extension to be appended onto the timestamp
+ * return 0 on success
+ */
 int set_recording_media(int* fd, time_t name, const char* ext)
 {
 	if(MEDIA_PATH)
 	{
-		char path_buf[PATH_MAX];
+		char path_buf[PATH_MAX] = {};
 
 		snprintf(path_buf, sizeof(path_buf), "%s/%ld.%s", MEDIA_PATH, name, ext);
 
@@ -190,6 +217,7 @@ int set_recording_media(int* fd, time_t name, const char* ext)
 
 	return 0;
 }
+
 
 
 int start_pose_thread(raw_example_t* ex)
