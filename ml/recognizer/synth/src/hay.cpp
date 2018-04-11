@@ -66,24 +66,30 @@ int main(int argc, const char* argv[])
 		vec3 axis = { 0.0, 1.0, 0.0 };
 		vec3_t tex_control = { 0, 0, 4 };
 		const vec3_t tints[2] = {
-			{ 228 / 255.f, 158 / 255.f, 68 / 255.f },
-			{ 229 / 255.f, 203 / 255.f, 181 / 255.f }
+			{ 229 / 255.f, 203 / 255.f, 181 / 255.f },
+			{ 1, 1.1, 1.1 }
 		};
 
 		// glClear(GL_DEPTH_BUFFER_BIT);
 
 		if (argc > 2)
 		{
+			Quat pitch;
+
 			uv_rot = seen::rf(0, 2 * M_PI);
 			tint = lerp(tints, seen::rf());
 
 			vec3_norm(axis, axis);
 			quat_from_axis_angle(q_bale_ori.v, axis[0], axis[1], axis[2], seen::rf(0, 2 * M_PI));
+			pitch.from_axis_angle(VEC3_LEFT.v[0], VEC3_LEFT.v[1], VEC3_LEFT.v[2], seen::rf(-1, 1) * 0.01);
+			
+			q_bale_ori = pitch * q_bale_ori;
+			
 			camera.fov(M_PI / seen::rf(4,4));
 
 			tex_control.x = seen::rf(-1, 1);
 			tex_control.y = seen::rf(-1, 1);
-			tex_control.z = seen::rf(1, 8);
+			tex_control.z = seen::rf(1, 4);
 		}
 		else
 		{

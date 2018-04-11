@@ -34,9 +34,8 @@ def activation_map(model, in_path, out_path):
     w, h, d = img_array.shape
     stride = 8
 
-    act_w = (w - PATCH_SIDE + 1) // stride
-    act_h = (h - PATCH_SIDE + 1) // stride
-
+    act_w = ((w - PATCH_SIDE) + 1) // stride
+    act_h = ((h - PATCH_SIDE) + 1) // stride
 
     px_h = act_h * stride
     px_w = act_w * stride
@@ -77,14 +76,12 @@ def activation_map(model, in_path, out_path):
         i += 1
 
         _y = single_prediction['probabilities']
-        _y /= _y.max()
+        # _y /= _y.max()
 
-        color = np.array([[[1, 1, 1]]])
+        color = np.array([[[1, 1, 1]]], dtype=np.float32)
 
-        if _y[1] == 1:
-            color = np.array([[[1, 0, 0]]])
-        if _y[2] == 1:
-            color = np.array([[[0, 1, 0]]])
+
+        color *= np.array(_y)
 
         ix = x * stride
         iy = y * stride
@@ -212,7 +209,7 @@ def model(features, labels, mode):
     conv1 = tf.layers.conv2d(
         inputs=input_layer,
         filters=32,
-        kernel_size=[5, 5],
+        kernel_size=[7, 7],
         padding="same",
         activation=tf.nn.relu)
 
@@ -296,7 +293,7 @@ def train(hyper_params):
         num_epochs=None,
         shuffle=True)
 
-    texture_classifier.train(my_input_fn, [logging_hook], 10)
+    texture_classifier.train(my_input_fn, [logging_hook], 1000)
 
     ds_X, ds_Y = minibatch(dev_set, 0, size=100)
     epochs = hyper_params['epochs']

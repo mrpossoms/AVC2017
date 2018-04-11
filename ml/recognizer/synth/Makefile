@@ -13,10 +13,10 @@ else
 	CFLAGS += -D_XOPEN_SOURCE=500 -D_GNU_SOURCE -DGL_GLEXT_PROTOTYPES
 endif
 
-hay:
+hay: src/hay.cpp
 	$(CXX) $(CFLAGS) $(INC) src/$@.cpp -o $@ $(LINK)
 
-asphalt:
+asphalt: src/asphalt.cpp
 	$(CXX) $(CFLAGS) $(INC) src/$@.cpp -o $@ $(LINK)
 
 clean:
