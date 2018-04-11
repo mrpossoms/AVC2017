@@ -88,3 +88,43 @@ void nn_mat_mul(mat_t* R, mat_t* A, mat_t* B)
 		e2f(R, ar, bc) = dot;
 	}
 }
+
+
+void nn_mat_mul_e(mat_t* R, mat_t* A, mat_t* B)
+{
+	assert(R._size == A._size);
+	assert(A._size == B._size);
+	assert(A.dims[0] == B.dims[0] && A.dims[1] == B.dims[1]);
+
+	for (int r = A.dims[0]; r--;)
+	for (int c = A.dims[1]; c--;)
+	{
+		e2f(R, r, c) = e2f(A, r, c) * e2f(B, r, c);
+	}
+}
+
+void nn_mat_add_e(mat_t* R, mat_t* A, mat_t* B)
+{
+	assert(R._size == A._size);
+	assert(A._size == B._size);
+	assert(A.dims[0] == B.dims[0] && A.dims[1] == B.dims[1]);
+
+	for (int r = A.dims[0]; r--;)
+	for (int c = A.dims[1]; c--;)
+	{
+		e2f(R, r, c) = e2f(A, r, c) * e2f(B, r, c);
+	}
+}
+
+void nn_mat_scl_e(mat_t* R, mat_t* M, mat_value_t s)
+{
+	assert(R._size == M._size);
+	assert(M._size == R._size);
+	assert(R.dims[0] == M.dims[0] && R.dims[1] == M.dims[1]);
+
+	for (int r = M.dims[0]; r--;)
+	for (int c = M.dims[1]; c--;)
+	{
+		e2f(R, r, c) = e2f(M, r, c) * s.f;
+	}
+}
