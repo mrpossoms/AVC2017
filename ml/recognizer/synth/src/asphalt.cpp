@@ -16,9 +16,8 @@ static vec3_t lerp(const vec3_t v[2], float p)
 
 int main(int argc, const char* argv[])
 {
-	seen::RendererGL renderer("./data/", argv[0], 128, 128);
-	seen::ListScene scene;
-	seen::Camera camera(M_PI / 2, renderer.width, renderer.height);
+	#include "setup.cpp"
+
 	seen::Model* bale = seen::MeshFactory::get_model("asphalt.obj");
 	seen::Material* bale_mat = seen::TextureFactory::get_material("asphalt");
 
@@ -30,20 +29,8 @@ int main(int argc, const char* argv[])
 	Quat q_cam_ori;
 	vec3_t tint;
 
-	q_cam_ori.from_axis_angle(VEC3_LEFT.v[0], VEC3_LEFT.v[1], VEC3_LEFT.v[2], M_PI / 4);
+	q_cam_ori.from_axis_angle(VEC3_LEFT.v[0], VEC3_LEFT.v[1], VEC3_LEFT.v[2], M_PI / 6);
 	camera.orientation(q_cam_ori);
-
-	srand(time(NULL));
-
-	seen::ShaderConfig bale_shader = {
-		.vertex = "displacement.vsh",
-		.tessalation = {
-			.control = "displacement.tcs",
-			.evaluation = "displacement.tes",
-		},
-		.geometry = "",
-		.fragment = "basic.fsh"
-	};
 
 	camera.position(0, -1, 0);
 
@@ -81,6 +68,8 @@ int main(int argc, const char* argv[])
 			vec3_norm(axis, axis);
 			quat_from_axis_angle(q_bale_ori.v, axis[0], axis[1], axis[2], seen::rf(0, 2 * M_PI));
 			camera.fov(M_PI / seen::rf(2,3));
+			camera.position(0, seen::rf(-0.25, -1), 0);
+
 		}
 		else
 		{
@@ -90,7 +79,7 @@ int main(int argc, const char* argv[])
 		light_dir.x = seen::rf(-1, 1);
 		light_dir.z = seen::rf(-1, 1);
 
-		seen::ShaderProgram& shader = *seen::Shaders[bale_shader]->use();
+		seen::ShaderProgram& shader = *seen::Shaders[disp_shader]->use();
 
 		shader << bale_mat; //->use(&shader.draw_params.material_uniforms.tex);
 
@@ -117,16 +106,26 @@ int main(int argc, const char* argv[])
 
 	bale_tess_pass.preparation_function = [&]()
 	{
-		seen::ShaderProgram& shader = *seen::Shaders[bale_shader]->use();
+		seen::ShaderProgram& shader = *seen::Shaders[disp_shader]->use();
 
 		shader["us_displacement"] << displacement_tex;
 
-		const vec3_t tints[2] = {
-			{ 1, 1, 1.2 },
-			{ 0.5, 0.5, 0.5 }
+		const vec3_t tints[] = {
+			{ 1, 1, 1.1 },
+			{ 0.5, 0.5, 0.5 },
+			{ 1.1, 1, 1 },
+			{ 0.5, 0.5, 0.5 },
 		};
 
-		tint = lerp(tints, seen::rf());
+		// tint between blue and red hued pavement
+		if (rand() % 2)
+		{
+			tint = lerp(tints, seen::rf());
+		}
+		else
+		{
+			tint = lerp(tints + 2, seen::rf());
+		}
 
 		shader["u_displacement_weight"] << 0.25f;
 		shader["TessLevelInner"] << 5.0f;

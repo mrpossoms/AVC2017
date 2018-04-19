@@ -6,6 +6,7 @@ import sys
 import io
 import os
 import time
+import sym
 
 random.seed(time.time())
 
@@ -19,8 +20,13 @@ str_buf = ''
 
 #buf = io.BytesIO(sys.stdin.buffer)
 
+symli = sym.Li("Slices larger images up into smaller images")
 
-os.makedirs('imgs/{}'.format(sys.argv[1]), exist_ok=True)
+symli.optional('no-sky', 'This flag will clip the top half of the image off')\
+     .required('class', 'Specifies the directory to save into. i.e. imgs/[class]/')
+
+
+os.makedirs('imgs/{}'.format(symli['class'][0]), exist_ok=True)
 i = 0
 
 while True:
@@ -37,11 +43,10 @@ while True:
 
     img.save("before.png", "PNG");
 
-    if sys.argv[2] == 'no-sky':
+    if symli['no-sky']:
         img_h //= 2
 
     w, h = 32, 32
-
     i += 1
 
     for _ in range(12):
@@ -49,6 +54,6 @@ while True:
         y_range = img_h - h
         x, y = int(random.random() * x_range), int(random.random() * y_range) + (img.height - img_h)
         bounds = [x, y, x + w, y + h]
-        img.crop(bounds).save('imgs/%s/%s' % (sys.argv[1], name()), 'PNG')
+        img.crop(bounds).save('imgs/%s/%s' % (symli['class'][0], name()), 'PNG')
 
     os.unlink(path)

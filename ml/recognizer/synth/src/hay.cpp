@@ -16,9 +16,8 @@ static vec3_t lerp(const vec3_t v[2], float p)
 
 int main(int argc, const char* argv[])
 {
-	seen::RendererGL renderer("./data/", argv[0], 64, 64);//, 256, 256);
-	seen::ListScene scene;
-	seen::Camera camera(M_PI / 4, renderer.width, renderer.height);
+	#include "setup.cpp"
+
 	seen::Model* bale = seen::MeshFactory::get_model("cube.obj");
 	seen::Material* bale_mat = seen::TextureFactory::get_material("hay");
 
@@ -27,20 +26,10 @@ int main(int argc, const char* argv[])
 	seen::Tex displacement_tex = seen::TextureFactory::load_texture(disp_name);
 	seen::CustomPass bale_pass, bale_tess_pass;
 	Quat q_bale_ori;
-	vec3_t light_dir = { 0, 0, -1 };
+	vec3_t light_dir = { -1, 0, rand() % 2 ? -1.0f : 1.0f };
 	vec3_t tint;
 
-	srand(time(NULL));
 
-	seen::ShaderConfig bale_shader = {
-		.vertex = "displacement.vsh",
-		.tessalation = {
-			.control = "displacement.tcs",
-			.evaluation = "displacement.tes",
-		},
-		.geometry = "",
-		.fragment = "basic.fsh"
-	};
 
 	camera.position(0, 0, -3);
 
@@ -89,7 +78,7 @@ int main(int argc, const char* argv[])
 
 			tex_control.x = seen::rf(-1, 1);
 			tex_control.y = seen::rf(-1, 1);
-			tex_control.z = seen::rf(1, 4);
+			tex_control.z = seen::rf(0.25, 3);
 		}
 		else
 		{
@@ -97,7 +86,7 @@ int main(int argc, const char* argv[])
 			tint = tints[1];
 		}
 
-		seen::ShaderProgram& shader = *seen::Shaders[bale_shader]->use();
+		seen::ShaderProgram& shader = *seen::Shaders[disp_shader]->use();
 
 		shader << bale_mat; //->use(&shader.draw_params.material_uniforms.tex);
 
@@ -132,7 +121,7 @@ int main(int argc, const char* argv[])
 
 	bale_tess_pass.preparation_function = [&]()
 	{
-		seen::ShaderProgram& shader = *seen::Shaders[bale_shader]->use();
+		seen::ShaderProgram& shader = *seen::Shaders[disp_shader]->use();
 
 		shader["us_displacement"] << displacement_tex;
 
@@ -163,7 +152,7 @@ int main(int argc, const char* argv[])
 		if (argc > 2)
 		{
 			light_dir.x = seen::rf(-1, 1);
-			// light_dir.z = seen::rf(-1, 1);
+			light_dir.z = rand() % 3 == 0 ? 1.0f : -1.0f;
 		}
 
 		renderer.draw(&camera, &scene);

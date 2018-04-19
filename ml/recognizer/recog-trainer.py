@@ -26,7 +26,7 @@ signal.signal(signal.SIGINT, handle_sig_done)
 
 def process_example(x):
     # mu = np.average(x, axis=(0, 1))
-    return (np.array(x.flatten(), dtype=np.float32) / 255.0) - 0.5
+    return (np.array((x).flatten(), dtype=np.float32) / 255.0) - 0.5
 
 def activation_map(model, in_path, out_path):
     img = Image.open(in_path).convert('RGB')
@@ -209,7 +209,7 @@ def model(features, labels, mode):
     conv1 = tf.layers.conv2d(
         inputs=input_layer,
         filters=32,
-        kernel_size=[7, 7],
+        kernel_size=[3, 3],
         padding="same",
         activation=tf.nn.relu)
 
@@ -219,15 +219,24 @@ def model(features, labels, mode):
     # Convolutional Layer #2 and Pooling Layer #2
     conv2 = tf.layers.conv2d(
         inputs=pool1,
-        filters=32,
-        kernel_size=[5, 5],
+        filters=64,
+        kernel_size=[3, 3],
         padding="same",
         activation=tf.nn.relu)
     pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
 
+    # Convolutional Layer #2 and Pooling Layer #2
+    conv3 = tf.layers.conv2d(
+        inputs=pool2,
+        filters=128,
+        kernel_size=[3, 3],
+        padding="same",
+        activation=tf.nn.relu)
+    pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
+
     # Dense Layer
-    pool2_flat = tf.reshape(pool2, [-1, 8 * 8 * 32])
-    dense = tf.layers.dense(inputs=pool2_flat, units=300, activation=tf.nn.relu)
+    pool_flat = tf.reshape(pool3, [-1, 4 * 4 * 128])
+    dense = tf.layers.dense(inputs=pool_flat, units=256, activation=tf.nn.relu)
     # dropout = tf.layers.dropout(
     #     inputs=dense, rate=0.4, training=mode == tf.estimator.ModeKeys.TRAIN)
 
@@ -293,7 +302,7 @@ def train(hyper_params):
         num_epochs=None,
         shuffle=True)
 
-    texture_classifier.train(my_input_fn, [logging_hook], 1000)
+    texture_classifier.train(my_input_fn, [logging_hook], 10000)
 
     ds_X, ds_Y = minibatch(dev_set, 0, size=100)
     epochs = hyper_params['epochs']
