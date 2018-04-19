@@ -12,6 +12,7 @@
 #include <assert.h>
 
 #include "structs.h"
+#include "sys.h"
 #include "cam.h"
 
 #define CAM_FPS 5
@@ -24,7 +25,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 
 	if(fd < 0)
 	{
-		fprintf(stderr, "Error opening video device '%s'\n", path);
+		b_bad("Error opening video device '%s'", path);
 		//exit(-1);
 
 		cam_t empty = {};
@@ -35,19 +36,19 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	res = ioctl(fd, VIDIOC_QUERYCAP, &cap);
 	if(res < 0)
 	{
-		fprintf(stderr, "Error: %d querying '%s' for capabilities (%d)\n", res, path, errno);
+		b_bad("Error: %d querying '%s' for capabilities (%d)", res, path, errno);
 		exit(-2);
 	}
 
 	if(!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE))
 	{
-		fprintf(stderr, "Error: '%s' lacks V4L2_CAP_VIDEO_CAPTURE capability\n", path);
+		b_bad("Error: '%s' lacks V4L2_CAP_VIDEO_CAPTURE capability", path);
 	}
 
 	res = cam_config(fd, cfg);
 	if(res < 0)
 	{
-		fprintf(stderr, "Error: %d configuring '%s' (%d)\n", res, path, errno);
+		b_bad("Error: %d configuring '%s' (%d)", res, path, errno);
 		exit(-3);
 	}
 
@@ -59,14 +60,14 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 
 	if(ioctl(fd, VIDIOC_REQBUFS, &bufrequest) < 0)
 	{
-		fprintf(stderr, "VIDIOC_REQBUFS\n");
+		b_bad("VIDIOC_REQBUFS");
 		exit(-4);
 	}
 
 
 	if(bufrequest.count < 2)
 	{
-		fprintf(stderr, "Not enough memory\n");
+		b_bad("Not enough memory");
 		exit(-5);
 	}
 
@@ -81,7 +82,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 
 		if(ioctl(fd, VIDIOC_QUERYBUF, &bufferinfo) < 0)
 		{
-			fprintf(stderr, "VIDIOC_QUERYBUF\n");
+			b_bad("VIDIOC_QUERYBUF");
 			exit(-5);
 		}
 
@@ -96,7 +97,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 
 		if(fbs[i] == MAP_FAILED)
 		{
-			fprintf(stderr, "mmap failed\n");
+			b_bad("mmap failed");
 			exit(-6);
 		}
 
@@ -116,7 +117,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 	int type = bufferinfo.type;
 	if(ioctl(fd, VIDIOC_STREAMON, &type) < 0)
 	{
-		fprintf(stderr, "Error starting streaming\n");
+		b_bad("Error starting streaming");
 		exit(-7);
 	}
 
@@ -146,7 +147,7 @@ int cam_config(int fd, cam_settings_t* cfg)
 
 	if(!cfg)
 	{
-		fprintf(stderr, "Error: null configuration provided\n");
+		b_bad("Error: null configuration provided");
 		return -1;
 	}
 
@@ -154,7 +155,7 @@ int cam_config(int fd, cam_settings_t* cfg)
 	res = ioctl(fd, VIDIOC_G_FMT, &format);
 	if(res < 0)
 	{
-		fprintf(stderr, "Error: failed retrieving camera settings (%d)\n", errno);
+		b_bad("Error: failed retrieving camera settings (%d)", errno);
 		return -2;
 	}
 */
@@ -166,7 +167,7 @@ int cam_config(int fd, cam_settings_t* cfg)
 
 	if(ioctl(fd, VIDIOC_S_FMT, &format) < 0)
 	{
-		fprintf(stderr, "Error: failed applying camera settings\n");
+		b_bad("Error: failed applying camera settings");
 		return -3;
 	}
 

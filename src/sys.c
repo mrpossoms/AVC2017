@@ -66,3 +66,27 @@ void b_log(const char* fmt, ...)
 	va_end(ap);
 	fprintf(stderr, "[%s] %s (%d)\n", PROC_NAME, buf, errno); 
 }
+
+
+void b_good(const char* fmt, ...)
+{
+	char buf[1024];
+	va_list ap;
+	
+	va_start(ap, fmt);
+	vsnprintf(buf, (size_t)sizeof(buf), fmt, ap);
+	va_end(ap);
+	fprintf(stderr, AVC_TERM_GREEN "[%s]" AVC_TERM_COLOR_OFF " %s (%d)\n", PROC_NAME, buf, errno); 
+}
+
+
+void b_bad(const char* fmt, ...)
+{
+	char buf[1024];
+	va_list ap;
+	
+	va_start(ap, fmt);
+	vsnprintf(buf, (size_t)sizeof(buf), fmt, ap);
+	va_end(ap);
+	fprintf(stderr, AVC_TERM_RED "[%s]" AVC_TERM_COLOR_OFF " %s (%d)\n", PROC_NAME, buf, errno); 
+}
