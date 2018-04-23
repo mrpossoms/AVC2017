@@ -24,6 +24,7 @@ char* MEDIA_PATH;
 calib_t CAL;
 col_mode_t MODE;
 float VEL;
+pthread_mutex_t STATE_LOCK;
 
 /**
  * @brief Sets program state according to specified command line flags
@@ -34,40 +35,46 @@ void proc_opts(int argc, const char ** argv)
 {
 	int no_opts = 1;
 
-	const char* cmds = "cnm:riaf:";
+	const char* cmds = "?cniaf:";
+	const char* prog_desc = "Collects data from sensors, compiles them into system state packets. Then forwards them over stdout";
 	const char* flag_desc[] = {
+		"Show this help",
 		"Calibrate action vector (steering and throttle)",
 		"Normalize video frames",
-		"Set recording media for training data and routes",
-		"Record route",
 		"Start immediately, don't wait for movement",
 		"disable polling of PWM action values",
 		"set framerate in frames/second",
 	};
 
-	for(;;)
+	for (;;)
 	{
 		int c = getopt(argc, (char *const *)argv, cmds);
-		if(c == -1) break;
-
-		no_opts = 0;
+		if (c == -1) break;
 
 		switch (c) 
 		{
+			case '?': // Display usage help
+			{
+				int cmd_idx = 0;
+				
+				printf("%s\n", argv[0]);
+				printf("%s\n", prog_desc);
+
+				for (int i = 0; i < strlen(cmds); i++)
+				{
+					if (cmds[i] == ':') continue;
+					printf("-%c\t%s\n", cmds[i], flag_desc[cmd_idx]);
+					cmd_idx++;
+				}
+
+				exit(0);
+			}
 			case 'c': // Calibrate
 				MODE = COL_MODE_ACT_CAL;
 				b_log("Calibrating action vector");
 				break;
 			case 'n': // Normalize video
 				NORM_VIDEO = 1;
-				break;
-			case 'm': // Set recording media
-				b_log("Using media: '%s'", optarg);
-				MEDIA_PATH = optarg;
-				break;
-			case 'r': // Record route
-				b_log("Recording route");
-				MODE = COL_MODE_ROUTE;
 				break;
 			case 'i': // Start immediately
 				WAIT_FOR_MOVEMENT = 0;
@@ -79,19 +86,6 @@ void proc_opts(int argc, const char ** argv)
 				FRAME_RATE = atoi(optarg);
 				break;
 		}
-	}
-
-	if(no_opts)
-	{
-		int cmd_idx = 0;
-		for(int i = 0; i < strlen(cmds); i++)
-		{
-			if(cmds[i] == ':') continue;
-			printf("-%c\t%s\n", cmds[i], flag_desc[cmd_idx]);
-			cmd_idx++;
-		}
-
-		exit(-1);
 	}
 }
 
@@ -116,14 +110,14 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 
 	// Downsample the intensity resolution to match that of
 	// the chroma
-	for(int j = FRAME_H; j--;)
+	for (int j = FRAME_H; j--;)
 	{
 		int bi = cams[0].buffer_info.index;
 		uint32_t* row = cams[0].frame_buffers[bi] + (j * (FRAME_W << 1));
 		uint8_t* luma_row = state->view.luma + (j * FRAME_W);
 		chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
 		
-		for(int i = FRAME_W / 2; i--;)
+		for (int i = FRAME_W / 2; i--;)
 		{
 			int li = i << 1;
 
@@ -154,18 +148,22 @@ int calibration(cam_settings_t cfg)
 	CAL.throttle.min = CAL.throttle.max = action.throttle;
 	CAL.steering.min = CAL.steering.max = action.steering;
 
-	for(int i = 1000; i--;)
+	for (int i = 1000; i--;)
 	{
 		poll_i2c_devs(NULL, &action, NULL);
 		calib_t last_cal = CAL;
 
-		if(action.steering > CAL.steering.max) CAL.steering.max = action.steering;
-		if(action.throttle > CAL.throttle.max) CAL.throttle.max = action.throttle;
+		if (action.steering > CAL.steering.max)
+			CAL.steering.max = action.steering;
+		if (action.throttle > CAL.throttle.max)
+			CAL.throttle.max = action.throttle;
 
-		if(action.steering < CAL.steering.min) CAL.steering.min = action.steering;
-		if(action.throttle < CAL.throttle.min) CAL.throttle.min = action.throttle;
+		if (action.steering < CAL.steering.min)
+			CAL.steering.min = action.steering;
+		if (action.throttle < CAL.throttle.min)
+			CAL.throttle.min = action.throttle;
 
-		if(memcmp(&last_cal, &CAL, sizeof(CAL)))
+		if (memcmp(&last_cal, &CAL, sizeof(CAL)))
 		{
 			b_log("throttle: [%f - %f]\nsteering: [%f - %f]",
 					CAL.throttle.min, CAL.throttle.max,
@@ -190,124 +188,25 @@ int calibration(cam_settings_t cfg)
 	return 0;
 }
 
+
 /**
- * @brief opens a new file to record into
- * @param fd - Pointer to an int to be used as the file descriptor
- * @param now - timestamp, and name of the file
- * @param ext - extension to be appended onto the timestamp
- * return 0 on success
+ * @brief Spawns a new position estimation thread
+ * @param ex - Pointer to raw example pointer
+ * @return 0 on success
  */
-int set_recording_media(int* fd, time_t name, const char* ext)
-{
-	if(MEDIA_PATH)
-	{
-		char path_buf[PATH_MAX] = {};
-
-		snprintf(path_buf, sizeof(path_buf), "%s/%ld.%s", MEDIA_PATH, name, ext);
-
-		*fd = open(path_buf, O_CREAT | O_TRUNC | O_WRONLY, 0666);
-		b_log("Writing data to '%s'", path_buf);
-
-		if(*fd < 0)
-		{
-			b_log("Error: couldn't open/create %s", path_buf);
-			exit(-1);
-		}
-	}
-
-	return 0;
-}
-
-
-
 int start_pose_thread(raw_example_t* ex)
 {
 	pthread_t pose_thread;
 	return pthread_create(&pose_thread, NULL, pose_estimator, (void*)ex);
 }
 
-
-pthread_mutex_t STATE_LOCK;
-
-int route()
-{
-	int res = 0, fd = 1;
-	time_t now;
-	int started = 0;
-	dataset_header_t hdr = { MAGIC, 2 };
-
-	pthread_mutex_init(&STATE_LOCK, NULL);
-
-	set_recording_media(&fd, 0, "route");
-
-	// write the header first
-	write(fd, &hdr, sizeof(hdr));
-
-	now = time(NULL);
-	raw_example_t ex = { };
-	start_pose_thread(&ex);
-
-	// wait for the bot to start moving
-	if(WAIT_FOR_MOVEMENT)
-	while(ex.state.vel <= 0)
-	{
-		usleep(100000);
-	}
-
-	
-	vec3 last_pos;
-	vec3_copy(last_pos, ex.state.position);
-
-	for(;;)
-	{
-		pthread_mutex_lock(&STATE_LOCK);
-
-		vec3 diff = {};
-		vec3_sub(diff, ex.state.position, last_pos);
-
-		int is_finished = ex.state.vel == 0 && WAIT_FOR_MOVEMENT;
-
-		if(vec3_len(diff) >= 0.25 || is_finished)
-		{
-
-
-			waypoint_t wp = {
-				.velocity = ex.state.vel
-			};
-
-			vec3_copy(wp.position, ex.state.position);
-			vec3_copy(wp.heading, ex.state.heading);
-
-
-			b_log("(%f %f %f) %fm/s",
-				ex.state.position[0],
-				ex.state.position[1],
-				ex.state.position[2],
-				ex.state.vel
-			);
-
-			if(write(fd, &wp, sizeof(wp)) != sizeof(wp))
-			{
-				b_log("Error writing waypoint sample");
-				return -3;
-			}
-
-			vec3_copy(last_pos, wp.position);
-		}
-
-	
-		if(is_finished)
-		{
-			exit(0);
-		}	
-
-		pthread_mutex_unlock(&STATE_LOCK);
-
-		usleep(1000 * 100);
-	}
-}
-
-
+/**
+ * @brief Collects training data, pairing sensor input with human driver output
+ *        recording does not begin until wheel movement is detected. Collection
+ *        ends and the program is terminated when movement stops.
+ * @param cam - pointer to v4l2 camera instance
+ * @return 0 on success 
+ */
 int collection(cam_t* cam)
 {
 	int res = 0, fd = 1;
@@ -317,9 +216,7 @@ int collection(cam_t* cam)
 
 	pthread_mutex_init(&STATE_LOCK, NULL);
 
-	set_recording_media(&fd, time(NULL), "train");
-
-	if(READ_ACTION)
+	if (READ_ACTION)
 	{
 		//pwm_set_echo(0x6);
 	}
@@ -332,20 +229,20 @@ int collection(cam_t* cam)
 	start_pose_thread(&ex);
 
 	// wait for the bot to start moving
-	if(WAIT_FOR_MOVEMENT)
-	while(ex.state.vel <= 0)
+	if (WAIT_FOR_MOVEMENT)
+	while (ex.state.vel <= 0)
 	{
 		usleep(100000);
 	}
 
-	for(;;)
+	for (;;)
 	{
 		cam_request_frame(cam);
 
 		// Do something while we wait for our
 		// next frame to come in...
 		++updates;
-		if(now != time(NULL))
+		if (now != time(NULL))
 		{
 			b_log("%dHz (%f %f %f) %fm/s",
 				updates,
@@ -358,22 +255,22 @@ int collection(cam_t* cam)
 			now = time(NULL);
 		}
 
-		if(poll_vision(&ex.state, cam))
+		if (poll_vision(&ex.state, cam))
 		{
-			b_log("Error capturing frame");
+			b_bad("Error capturing frame");
 			return -2;
 		}
 
 		pthread_mutex_lock(&STATE_LOCK);
-		if(write(fd, &ex, sizeof(ex)) != sizeof(ex))
+		if (write(fd, &ex, sizeof(ex)) != sizeof(ex))
 		{
-			b_log("Error writing state-action pair");
+			b_bad("Error writing state-action pair");
 			return -3;
 		}
 		pthread_mutex_unlock(&STATE_LOCK);
 
 	
-		if(ex.state.vel == 0 && WAIT_FOR_MOVEMENT)
+		if (ex.state.vel == 0 && WAIT_FOR_MOVEMENT)
 		{
 			exit(0);
 		}	
@@ -402,23 +299,23 @@ int main(int argc, const char* argv[])
 
 	ioctl(cam[0].fd, VIDIOC_S_PRIORITY, V4L2_PRIORITY_RECORD);
 
-	if((res = i2c_init("/dev/i2c-1")))
+	if ((res = i2c_init("/dev/i2c-1")))
 	{
-		b_log("I2C init failed (%d)", res);
+		b_bad("I2C init failed (%d)", res);
 
 		close(I2C_BUS);
 		I2C_BUS = -1;
 
-		//return -1;
+		return -1;
 	}
 
-	if(READ_ACTION)
+	if (READ_ACTION)
 	{	
 		pwm_set_echo(0x6);
 	}
 
 	pwm_reset_soft();
-	b_log("OK");
+	b_good("OK");
 
 	// Use the round-robin real-time scheduler
 	// with a high priority
@@ -431,26 +328,17 @@ int main(int argc, const char* argv[])
 	// exists. If not, switch to calibration mode. Otherwise
 	// load the calibration values
 	struct stat st;
-	if(stat(ACTION_CAL_PATH, &st))
+	if (stat(ACTION_CAL_PATH, &st))
 	{
 		MODE = COL_MODE_ACT_CAL;
-		b_log("No %s file found. Calibrating...", ACTION_CAL_PATH);
+		b_bad("No %s file found. Calibrating...", ACTION_CAL_PATH);
 	}
 	else
 	{
 		assert(calib_load(ACTION_CAL_PATH, &CAL) == 0);
 	}
 	
-	switch(MODE)
-	{
-		case COL_MODE_ACT_CAL:
-			calibration(cfg);
-			break;
-		case COL_MODE_ROUTE:
-			route();
-		default:
-			res = collection(cam);
-	}
+	res = collection(cam);
 
 
 	return res;

@@ -21,6 +21,10 @@
 
 #include "structs.h"
 
+#define AVC_TERM_GREEN "\033[0;32m"
+#define AVC_TERM_RED "\033[1;31m"
+#define AVC_TERM_COLOR_OFF "\033[0m"
+
 #define ACTION_CAL_PATH "actions.cal"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -34,6 +38,8 @@ typedef struct {
 } timegate_t;
 
 void b_log(const char* fmt, ...);
+void b_good(const char* fmt, ...);
+void b_bad(const char* fmt, ...);
 
 long diff_us(struct timeval then, struct timeval now);
 void timegate_open(timegate_t* tg);
