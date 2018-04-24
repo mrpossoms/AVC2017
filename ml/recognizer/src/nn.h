@@ -27,7 +27,7 @@ struct mat_t {
 	 *        orthoganal dimension. Must be null terminated
 	 */
 	int dims[NN_MAT_MAX_DIMS];
-	
+
 	/**
 	 * @brief Optional: Uses this function to initialize each value
 	 *                  of the matrix
@@ -37,13 +37,22 @@ struct mat_t {
 	/**
 	 * @brief number of dimensions, this will be filled in automatically
 	 */
+	unsigned int _rank;
+
+	/**
+	 * @brief total number of elements
+	 */
 	unsigned int _size;
 
 	/**
 	 * @brief Raw pointer to a contiguous array used
 	 *        to store the matrix's data
 	 */
-	void* _data;
+	union {
+		void* ptr;
+		float* f;
+		double* d;
+	} _data;
 };
 typedef struct mat_t mat_t;
 
@@ -87,8 +96,10 @@ void nn_mat_scl_e(mat_t* R, mat_t* M, mat_value_t s);
  * @brief Performs element-wise addition A + B storing the result in R
  * @param R - Resulting matrix of the addition. It's dimensions must be valid
  * @param A - Left hand of the addition
- * @param B - Right hand of the addition 
+ * @param B - Right hand of the addition
  */
 void nn_mat_add_e(mat_t* R, mat_t* A, mat_t* B);
+
+void nn_mat_f(mat_t* R, mat_t* M, mat_value_t (*func)(mat_value_t));
 
 #endif

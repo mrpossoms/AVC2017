@@ -21,11 +21,14 @@ void* pose_estimator(void* params)
 	raw_example_t* ex = (raw_example_t*)params;
 	raw_action_t action, *act_ptr = NULL;	
 
+#ifdef __LINUX__
+#warning "Using CPU affinity"
 	// Run exclusively on the 4th core
 	cpu_set_t* pose_cpu = CPU_ALLOC(1);
 	CPU_SET(3, pose_cpu);
 	size_t pose_cpu_size = CPU_ALLOC_SIZE(1);
 	assert(sched_setaffinity(0, pose_cpu_size, pose_cpu) == 0);
+#endif
 
 	float distance_rolled = 0;
 	int LAST_D_ODO_CYCLE = 0;

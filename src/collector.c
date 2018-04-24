@@ -297,7 +297,6 @@ int main(int argc, const char* argv[])
 		//cam_open("/dev/video1", &cfg),
 	};
 
-	ioctl(cam[0].fd, VIDIOC_S_PRIORITY, V4L2_PRIORITY_RECORD);
 
 	if ((res = i2c_init("/dev/i2c-1")))
 	{

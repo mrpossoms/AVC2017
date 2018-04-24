@@ -2,9 +2,12 @@
 #define AVC_CAM
 
 #include <time.h>
+
+#ifdef __LINUX__
 #include <linux/videodev2.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#endif
 
 #define GET_CHROMA_FROM_VIEW(view, r, c) (view).chroma[((r) * FRAME_W >> 1) + ((r) >> 1)]
 
@@ -16,7 +19,9 @@ typedef struct {
 typedef struct {
 	int fd;
 	void** frame_buffers;
+#ifdef __LINUX
 	struct v4l2_buffer buffer_info;
+#endif
 } cam_t;
 
 // Set when cam_config is called

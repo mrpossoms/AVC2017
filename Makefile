@@ -29,37 +29,40 @@ obj:
 	mkdir obj
 	mkdir obj/BNO055_driver
 
+bin:
+	mkdir bin
+
 obj/%.o: src/%.c magic obj
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) -c $< -o $@
 
 all: viewer collector masseuse
 
-magic: src/structs.h
+magic: src/structs.h bin
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
-structsize:
+bin/structsize: bin
 	$(CC) $(CFLAGS) $(INC) src/size.c -o structsize
 
-viewer: $(addprefix src/,$(VIEWER_SRC)) magic 
+bin/viewer: $(addprefix src/,$(VIEWER_SRC)) magic
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $< -o viewer $(VIEWER_LINK) $(LINK)
 
-collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
+bin/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o)) 
+bin/predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-bad: $(addprefix obj/,$(BAD_SRC:.c=.o))
+bin/bad: $(addprefix obj/,$(BAD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-good: $(addprefix obj/,$(BAD_SRC:.c=.o))
+bin/good: $(addprefix obj/,$(BAD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 
-botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
+bin/botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
+bin/masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
 
 /var/predictor/color/bad:
@@ -70,10 +73,10 @@ masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	mkdir -p $@
 	chmod -R 777 $@
 
-install-bot: predictor collector structsize bad good /var/predictor/color/bad /var/predictor/color/good
+install-bot: bin/predictor bin/collector bin/structsize bin/bad bin/good /var/predictor/color/bad /var/predictor/color/good
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
 
-install-tools: masseuse viewer structsize
+install-tools: bin/masseuse bin/viewer bin/structsize
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
 
 
