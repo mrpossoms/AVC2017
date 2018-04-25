@@ -85,10 +85,9 @@ int main(int argc, const char* argv[])
 
 		mat4x4_from_quat(world.v, q_bale_ori.v);
 
-		for(int i = 3; i--;)
-		for(int j = 3; j--;)
+		for(int i = 9; i--;)
 		{
-			rot.v[i][j] = world.v[i][j];
+			rot.v[i % 3][i / 3] = world.v[i % 3][i / 3];
 		}
 
 		shader["u_world_matrix"] << world;

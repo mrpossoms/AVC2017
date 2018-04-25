@@ -1,10 +1,12 @@
 $(eval OS := $(shell uname))
 
 CC=gcc
-CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 
+CXX=g++
+CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
+CXXFLAGS=--std=c++11 -g
 COLLECTOR_SRC=deadreckon.c sys.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c collector.c i2c.c drv_pwm.c cam.c curves.c
 PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c
-INC=-I./src -I./src/BNO055_driver -I./src/linmath
+INC=-I./src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src
 LINK=-lm -lpthread
 VIEWER_SRC=viewer.c
 VIEWER_LINK=
@@ -13,6 +15,9 @@ MASSEUSE_MAIN=src/masseuse.c
 BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c botd.c
 BAD_SRC=sys.c goodbad.c
 TST_SRC=masseuse_falloff masseuse_bucket
+
+SIM_SRC=src/sim.cpp src/seen/demos/src/sky.cpp
+SIM_INC=-Isrc/seen/demos/src/
 
 ifeq ($(OS),Darwin)
 	VIEWER_LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
@@ -32,12 +37,23 @@ obj:
 bin:
 	mkdir bin
 
+bin/data: bin
+	ln -sf $(shell pwd)/src/seen/demos/data/ bin/data
+
 obj/%.o: src/%.c magic obj
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) -c $< -o $@
 
 all: viewer collector masseuse
 
-magic: src/structs.h bin
+src/linmath.h:
+	git clone https://github.com/mrpossoms/linmath.h src/linmath.h
+	make -C src/linmath.h install
+
+src/seen:
+	git clone https://github.com/mrpossoms/Seen src/seen
+	make -C src/seen static
+
+magic: src/structs.h src/linmath.h src/seen bin/data
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 bin/structsize: bin
@@ -65,6 +81,9 @@ bin/botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
 bin/masseuse: magic $(MASSEUSE_SRC) $(MASSEUSE_MAIN)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(MASSEUSE_SRC) $(MASSEUSE_MAIN)  -o masseuse
 
+bin/sim: magic
+	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(SIM_INC) $(SIM_SRC) -o $@ $(VIEWER_LINK) $(LINK) -lpng src/seen/lib/libseen.a
+
 /var/predictor/color/bad:
 	mkdir -p $@
 	chmod -R 777 $@
@@ -91,4 +110,4 @@ test: tests
 
 clean:
 	@rm -rf obj
-	@rm collector viewer masseuse
+	@rm -rf bin
