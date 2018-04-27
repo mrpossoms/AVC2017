@@ -6,7 +6,7 @@ CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
 CXXFLAGS=--std=c++11 -g
 COLLECTOR_SRC=deadreckon.c sys.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c collector.c i2c.c drv_pwm.c cam.c curves.c
 PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c
-INC=-I./src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src
+INC=-I./src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src -I./src/json
 LINK=-lm -lpthread
 VIEWER_SRC=viewer.c
 VIEWER_LINK=
@@ -45,6 +45,10 @@ obj/%.o: src/%.c magic obj
 
 all: viewer collector masseuse
 
+src/json:
+	mkdir -p src/json
+	wget https://raw.githubusercontent.com/nlohmann/json/master/single_include/nlohmann/json.hpp --output-document src/json/json.hpp
+
 src/linmath.h:
 	git clone https://github.com/mrpossoms/linmath.h src/linmath.h
 	make -C src/linmath.h install
@@ -53,7 +57,7 @@ src/seen:
 	git clone https://github.com/mrpossoms/Seen src/seen
 	make -C src/seen static
 
-magic: src/structs.h src/linmath.h src/seen bin/data
+magic: src/structs.h src/linmath.h src/seen src/json bin/data
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 bin/structsize: bin

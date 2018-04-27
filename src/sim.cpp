@@ -1,14 +1,15 @@
 #include "seen.hpp"
 #include "sky.hpp"
+#include "json.hpp"
 
-#define SURFACE_SHADER {                  \
-	.vertex = "displacement.vsh",         \
-	.tessalation = {                      \
+#define SURFACE_SHADER {                          \
+	.vertex = "displacement.vsh",             \
+	.tessalation = {                          \
 		.control = "displacement.tcs",    \
 		.evaluation = "displacement.tes", \
-	},                                    \
-	.geometry = "",                       \
-	.fragment = "basic.fsh" }             \
+	},                                        \
+	.geometry = "",                           \
+	.fragment = "basic.fsh" }                 \
 
 
 using namespace seen;
@@ -21,7 +22,6 @@ static vec3_t tex_control = { 0, 0, 16 };
 
 
 class Asphalt : public Drawable {
-private:
 	mat4x4_t _world;
 	mat3x3_t _rot;
 public:
@@ -60,6 +60,40 @@ public:
 	}
 };
 
+class HayBale : public Drawable {
+	Model* _model;
+	Material* _mat;
+	Tex _disp_tex;
+	mat4x4_t _world;
+
+public:
+	HayBale()
+	{
+		_model = MeshFactory::get_model("spherized_cube.obj");
+		_mat = TextureFactory::get_material("hay");
+		_disp_tex = TextureFactory::load_texture("hay.displacement.png");
+	}
+
+	void draw(Viewer* viewer)
+	{
+		mat3x3_t _rot;
+		for(int i = 9; i--;)
+		{
+			_rot.v[i % 3][i / 3] = _world.v[i % 3][i / 3];
+		}
+
+		vec3_t tex_control = { 0, 0, 2 };
+		ShaderProgram& shader = *ShaderProgram::active();
+		shader["u_normal_matrix"] << _rot;
+		shader["u_world_matrix"] << _world;
+
+		shader["u_tex_control"] << tex_control;
+
+		shader << _mat;
+
+		_model->draw(viewer);
+	}	
+};
 
 int main (int argc, char* argv[])
 {
@@ -98,22 +132,40 @@ int main (int argc, char* argv[])
 	scene.drawables().push_back(&sky_pass);
 	scene.drawables().push_back(&surface_pass);
 
+	float t = 0;
 	renderer.key_pressed = [&](int key) {
 		Quat q = camera.orientation();
 		Quat delta;
+		float speed = 0;
+		float turn_speed = 0.1;
 
 		switch (key) {
 			case GLFW_KEY_LEFT:
-				quat_from_axis_angle(delta.v, 0, 1, 0, -0.1);
+				quat_from_axis_angle(delta.v, 0, 1, 0, -turn_speed);
+				t += -turn_speed;
 				break;
 			case GLFW_KEY_RIGHT:
-				quat_from_axis_angle(delta.v, 0, 1, 0, 0.1);
+				quat_from_axis_angle(delta.v, 0, 1, 0, turn_speed);
+				t += turn_speed;
+				break;
+			case GLFW_KEY_UP:
+			{
+				speed = 0.1;
+			}
+				break;
+			case GLFW_KEY_DOWN:
+			{
+				speed = -0.1;
+			}
 				break;
 		}
 
+		Vec3 pos = camera.position();
+		Vec3 heading(cos(t + M_PI / 2) * speed, 0, sin(t + M_PI / 2) * speed);
+		pos = pos + heading;
+		camera.position(pos);
 
 		q = delta * q;
-
 		camera.orientation(q);
 	};
 
