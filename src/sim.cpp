@@ -13,12 +13,28 @@
 
 
 using namespace seen;
+using namespace nlohmann;
 
 static vec3_t one = { 1, 1, 1 };
 
 static vec4_t material = { 0.1, 0.01, 1, 0.01 };
 static vec3_t light_dir = { 1, -1, 1 };
 static vec3_t tex_control = { 0, 0, 16 };
+
+
+void printm(mat4x4_t m)
+{
+	for (int r = 0; r < 4; ++r)
+	{
+		for (int c = 0; c < 4; ++c)
+		{
+			if (c == 0) printf("| ");
+			printf("%0.3f ", m.v[r][c]);
+			if (c == 3) printf("|");
+		}
+		printf("\n");
+	}
+}
 
 
 class Asphalt : public Drawable {
@@ -53,6 +69,7 @@ public:
 		shader["u_world_matrix"] << _world;
 
 		shader["u_tex_control"] << tex_control;
+		shader["us_displacement"] << disp_tex;
 
 		shader << mat;
 
@@ -64,12 +81,12 @@ class HayBale : public Drawable {
 	Model* _model;
 	Material* _mat;
 	Tex _disp_tex;
-	mat4x4_t _world;
-
 public:
+	mat4x4_t world;
+
 	HayBale()
 	{
-		_model = MeshFactory::get_model("spherized_cube.obj");
+		_model = MeshFactory::get_model("cube.obj");
 		_mat = TextureFactory::get_material("hay");
 		_disp_tex = TextureFactory::load_texture("hay.displacement.png");
 	}
@@ -79,28 +96,74 @@ public:
 		mat3x3_t _rot;
 		for(int i = 9; i--;)
 		{
-			_rot.v[i % 3][i / 3] = _world.v[i % 3][i / 3];
+			_rot.v[i % 3][i / 3] = world.v[i % 3][i / 3];
 		}
 
 		vec3_t tex_control = { 0, 0, 2 };
 		ShaderProgram& shader = *ShaderProgram::active();
 		shader["u_normal_matrix"] << _rot;
-		shader["u_world_matrix"] << _world;
+		auto param = shader["u_world_matrix"];
+		param << world;
 
+		shader["u_displacement_weight"] << 0.25f;
 		shader["u_tex_control"] << tex_control;
+		shader["us_displacement"] << _disp_tex;
 
 		shader << _mat;
 
 		_model->draw(viewer);
-	}	
+	}
 };
+
+
+mat4x4_t mat_from_json(json& obj)
+{
+	mat4x4_t tmp;
+	auto matrix = obj["matrix"];
+	for (int i = 16; i--;)
+	{
+		tmp.v[i % 4][i / 4] = matrix[i];
+	}
+
+	return tmp;
+}
+
+void populate_scene(CustomPass& pass, json& obj, mat4x4_t world)
+{
+	for (auto child : obj["children"])
+	{
+		mat4x4_t tmp, my_world;
+
+		tmp = mat_from_json(obj);
+		mat4x4_mul(my_world.v, tmp.v, world.v);
+
+		if (child["type"] == "Mesh")
+		{
+			mat4x4_t child_mat = mat_from_json(child);
+			mat4x4_mul(tmp.v, child_mat.v, my_world.v);
+
+			auto bale = new HayBale();
+			mat4x4_transpose(bale->world.v, tmp.v);
+			pass.drawables.push_back(bale);
+		}
+		else {
+			populate_scene(pass, child, my_world);
+		}
+	}
+}
+
 
 int main (int argc, char* argv[])
 {
+	std::ifstream i("scene.json");
+
 	RendererGL renderer("./data", "Sim");
 	Camera camera(M_PI / 2, renderer.width, renderer.height);
 
 	ListScene scene;
+
+	json scene_json;
+	i >> scene_json;
 
 	// Sky setup
 	Sky sky;
@@ -127,6 +190,11 @@ int main (int argc, char* argv[])
 		shader["u_tint"] << one;
 
 	}, &asphalt, NULL);
+
+	mat4x4_t I;
+	mat4x4_identity(I.v);
+	auto root = scene_json["object"];
+	populate_scene(surface_pass, root, I);
 
 	camera.position(0, -1, 0);
 	scene.drawables().push_back(&sky_pass);
