@@ -1,0 +1,85 @@
+
+mat4x4_t mat_from_json(json& obj)
+{
+	mat4x4_t tmp, M;
+	auto matrix = obj["matrix"];
+	for (int i = 16; i--;)
+	{
+		tmp.v[i % 4][i / 4] = matrix[i];
+	}
+
+	mat4x4_transpose(M.v, tmp.v);
+
+	return M;
+}
+
+void populate_scene(CustomPass& pass, json& obj, mat4x4_t world)
+{
+	mat4x4_t tmp, my_world;
+
+	tmp = mat_from_json(obj);
+	mat4x4_mul(my_world.v, world.v, tmp.v);
+
+	for (auto child : obj["children"])
+	{
+		if (child["type"] == "Mesh")
+		{
+			mat4x4_t child_mat = mat_from_json(child);
+			mat4x4_t purturbed;
+
+
+			mat4x4_rotate(purturbed.v, child_mat.v, 0, 1, 0, seen::rf(-0.1, 0.1));
+
+			auto bale = new HayBale();
+			mat4x4_mul(bale->world.v,  my_world.v, purturbed.v);
+			// mat4x4_transpose(bale->world.v, tmp.v);
+			pass.drawables.push_back(bale);
+		}
+		else {
+			populate_scene(pass, child, my_world);
+		}
+	}
+}
+
+
+int open_ctrl_socket()
+{
+	struct sockaddr_un namesock = {};
+	int fd;
+	namesock.sun_family = AF_UNIX;
+
+	const char* path = "/tmp/avc.sim.ctrl";
+	unlink(path);
+	strncpy(namesock.sun_path, path, sizeof(namesock.sun_path));
+
+	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+
+	if (fd < 0)
+	{
+		return -1;
+	}
+
+	if (bind(fd, (struct sockaddr *) &namesock, sizeof(struct sockaddr_un)))
+	{
+		return -2;
+	}
+
+	return fd;
+}
+
+
+void rgb_to_yuv422(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
+{
+	for(int yi = h; yi--;)
+	for(int xi = w; xi--;)
+	{
+		int i = yi * w + xi;
+		int j = yi * (w >> 1) + (xi >> 1);
+
+		int l = (rgb[i].r + rgb[i].g + rgb[i].b) / 3;
+
+		luma[i] = l;
+		uv[j].cb = ((rgb[i].r - l) / 1.14f) - 128;
+		uv[j].cr = ((rgb[i].b - l) / 2.033f) - 128;
+	}
+}
