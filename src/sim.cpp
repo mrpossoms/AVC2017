@@ -2,11 +2,15 @@
 #include "sky.hpp"
 #include "json.hpp"
 
-#define SURFACE_SHADER {                          \
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+
+#define SURFACE_SHADER {                      \
 	.vertex = "displacement.vsh",             \
 	.tessalation = {                          \
-		.control = "displacement.tcs",    \
-		.evaluation = "displacement.tes", \
+		.control = "displacement.tcs",        \
+		.evaluation = "displacement.tes",     \
 	},                                        \
 	.geometry = "",                           \
 	.fragment = "basic.fsh" }                 \
@@ -20,21 +24,6 @@ static vec3_t one = { 1, 1, 1 };
 static vec4_t material = { 0.1, 0.01, 1, 0.01 };
 static vec3_t light_dir = { 1, -1, 1 };
 static vec3_t tex_control = { 0, 0, 16 };
-
-
-void printm(mat4x4_t m)
-{
-	for (int r = 0; r < 4; ++r)
-	{
-		for (int c = 0; c < 4; ++c)
-		{
-			if (c == 0) printf("| ");
-			printf("%0.3f ", m.v[r][c]);
-			if (c == 3) printf("|");
-		}
-		printf("\n");
-	}
-}
 
 
 class Asphalt : public Drawable {
@@ -178,6 +167,54 @@ void populate_scene(CustomPass& pass, json& obj, mat4x4_t world)
 }
 
 
+int open_ctrl_socket()
+{
+	struct sockaddr_un namesock = {};
+	int fd;
+	namesock.sun_family = AF_UNIX;
+
+	strncpy(namesock.sun_path, "/tmp/avc.sim.ctrl", sizeof(namesock.sun_path));
+
+	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+
+	if (fd < 0)
+	{
+		return -1;
+	}
+
+	if (bind(fd, (struct sockaddr *) &namesock, sizeof(struct sockaddr_un)))
+	{
+		return -2;
+	}
+
+	return fd;
+}
+
+
+void poll_ctrl_sock(int sock)
+{
+	fd_set fds;
+	struct timeval tout = { 0, 1000 * 16 };
+	FD_ZERO(&fds);
+	FD_SET(sock, &fds);
+
+	int res = select(sock + 1, &fds, NULL, NULL, &tout);
+
+	switch(res)
+	{
+		case 0: // timeout occurred
+		break;
+		case -1: // error
+		break;
+		default:
+		if (FD_ISSET(sock, &fds))
+		{
+			printf("Something on the socket!\n");
+		}
+	}
+}
+
+
 int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
@@ -242,6 +279,8 @@ int main (int argc, char* argv[])
 	scene.drawables().push_back(&ground_pass);
 	scene.drawables().push_back(&bale_pass);
 
+	int sock_fd = open_ctrl_socket();
+
 	float t = 0;
 	renderer.key_pressed = [&](int key) {
 		Quat q = camera.orientation();
@@ -281,8 +320,14 @@ int main (int argc, char* argv[])
 
 	while (renderer.is_running())
 	{
+		// look for socket input
+		poll_ctrl_sock(sock_fd);
+
 		renderer.draw(&camera, &scene);
 	}
+
+	close(sock_fd);
+	unlink("/tmp/avc.sim.ctrl");
 
 	return 0;
 }
