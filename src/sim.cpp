@@ -63,36 +63,35 @@ public:
 
 	void draw(Viewer* viewer)
 	{
+		assert(gl_get_error());
+
 		vec3_t tex_control = { 0, 0, 1000 };
 		ShaderProgram& shader = *ShaderProgram::active();
+
 		shader["u_normal_matrix"] << _rot;
 		shader["u_world_matrix"] << _world;
-
 		shader["u_tex_control"] << tex_control;
-		shader["us_displacement"] << disp_tex;
-
-		shader << mat;
+		assert(gl_get_error());
 
 		model->draw(viewer);
+		assert(gl_get_error());
 	}
 };
 
 class HayBale : public Drawable {
 	Model* _model;
-	Material* _mat;
-	Tex _disp_tex;
 public:
 	mat4x4_t world;
-
+	float disp_weight;
 	HayBale()
 	{
 		_model = MeshFactory::get_model("cube.obj");
-		_mat = TextureFactory::get_material("hay");
-		_disp_tex = TextureFactory::load_texture("hay.displacement.png");
+		disp_weight = seen::rf(0.1, 0.5);
 	}
 
 	void draw(Viewer* viewer)
 	{
+		assert(gl_get_error());
 		mat3x3_t _rot;
 		for(int i = 9; i--;)
 		{
@@ -101,49 +100,75 @@ public:
 
 		vec3_t tex_control = { 0, 0, 2 };
 		ShaderProgram& shader = *ShaderProgram::active();
+
 		shader["u_normal_matrix"] << _rot;
-		auto param = shader["u_world_matrix"];
-		param << world;
-
-		shader["u_displacement_weight"] << 0.25f;
+		shader["u_world_matrix"] << world;
+		shader["u_displacement_weight"] << disp_weight;
 		shader["u_tex_control"] << tex_control;
-		shader["us_displacement"] << _disp_tex;
-
-		shader << _mat;
-
 		_model->draw(viewer);
+		assert(gl_get_error());
+	}
+
+	static Material* material()
+	{
+		static Material* mat;
+
+		if (!mat)
+		{
+			mat = TextureFactory::get_material("hay");
+		}
+
+		return mat;
+	}
+
+	static Tex displacement_tex()
+	{
+		static Tex disp_tex;
+
+		if (!disp_tex)
+		{
+			disp_tex = TextureFactory::load_texture("hay.displacement.png");
+		}
+
+		return disp_tex;
 	}
 };
 
 
 mat4x4_t mat_from_json(json& obj)
 {
-	mat4x4_t tmp;
+	mat4x4_t tmp, M;
 	auto matrix = obj["matrix"];
 	for (int i = 16; i--;)
 	{
 		tmp.v[i % 4][i / 4] = matrix[i];
 	}
 
-	return tmp;
+	mat4x4_transpose(M.v, tmp.v);
+
+	return M;
 }
 
 void populate_scene(CustomPass& pass, json& obj, mat4x4_t world)
 {
+	mat4x4_t tmp, my_world;
+
+	tmp = mat_from_json(obj);
+	mat4x4_mul(my_world.v, world.v, tmp.v);
+
 	for (auto child : obj["children"])
 	{
-		mat4x4_t tmp, my_world;
-
-		tmp = mat_from_json(obj);
-		mat4x4_mul(my_world.v, tmp.v, world.v);
-
 		if (child["type"] == "Mesh")
 		{
 			mat4x4_t child_mat = mat_from_json(child);
-			mat4x4_mul(tmp.v, child_mat.v, my_world.v);
+			mat4x4_t purturbed;
+
+
+			mat4x4_rotate(purturbed.v, child_mat.v, 0, 1, 0, seen::rf(-0.1, 0.1));
 
 			auto bale = new HayBale();
-			mat4x4_transpose(bale->world.v, tmp.v);
+			mat4x4_mul(bale->world.v,  my_world.v, purturbed.v);
+			// mat4x4_transpose(bale->world.v, tmp.v);
 			pass.drawables.push_back(bale);
 		}
 		else {
@@ -165,6 +190,8 @@ int main (int argc, char* argv[])
 	json scene_json;
 	i >> scene_json;
 
+	glEnable(GL_CULL_FACE);
+
 	// Sky setup
 	Sky sky;
 	CustomPass sky_pass([&]() {
@@ -177,7 +204,7 @@ int main (int argc, char* argv[])
 	// Asphalt setup
 	Asphalt asphalt;
 
-	CustomPass surface_pass([&]() {
+	CustomPass ground_pass([&]() {
 		// draw pass preparation
 		ShaderConfig shader_desc = SURFACE_SHADER;
 		ShaderProgram& shader = *Shaders[shader_desc]->use();
@@ -189,16 +216,31 @@ int main (int argc, char* argv[])
 		shader["TessLevelOuter"] << 1.0f;
 		shader["u_tint"] << one;
 
+		shader["us_displacement"] << asphalt.disp_tex;
+		shader << asphalt.mat;
 	}, &asphalt, NULL);
+
+	CustomPass bale_pass([&]() {
+		ShaderConfig shader_desc = SURFACE_SHADER;
+		ShaderProgram& shader = *Shaders[shader_desc]->use();
+
+		shader["u_displacement_weight"] << 0.1f;
+		shader["TessLevelInner"] << 5.0f;
+		shader["TessLevelOuter"] << 5.0f;
+		shader["us_displacement"] << HayBale::displacement_tex();
+		shader << HayBale::material();
+	}, NULL);
 
 	mat4x4_t I;
 	mat4x4_identity(I.v);
+	mat4x4_translate_in_place(I.v, 0, 1, 0);
 	auto root = scene_json["object"];
-	populate_scene(surface_pass, root, I);
+	populate_scene(bale_pass, root, I);
 
 	camera.position(0, -1, 0);
 	scene.drawables().push_back(&sky_pass);
-	scene.drawables().push_back(&surface_pass);
+	scene.drawables().push_back(&ground_pass);
+	scene.drawables().push_back(&bale_pass);
 
 	float t = 0;
 	renderer.key_pressed = [&](int key) {

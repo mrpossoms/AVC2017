@@ -40,6 +40,9 @@ bin:
 bin/data: bin
 	ln -sf $(shell pwd)/src/seen/demos/data/ bin/data
 
+bin/scene.json: bin
+	cp .scene.json bin/scene.json
+
 obj/%.o: src/%.c magic obj
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) -c $< -o $@
 
@@ -57,7 +60,7 @@ src/seen:
 	git clone https://github.com/mrpossoms/Seen src/seen
 	make -C src/seen static
 
-magic: src/structs.h src/linmath.h src/seen src/json bin/data
+magic: src/structs.h src/linmath.h src/seen src/json bin/data bin/scene.json
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 bin/structsize: bin
