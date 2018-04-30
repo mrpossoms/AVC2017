@@ -23,6 +23,12 @@
 #define STEERING_BANDS 15
 #define THROTTLE_BANDS 7
 
+typedef struct {
+	uint64_t magic;
+	uint8_t is_raw;
+} dataset_header_t;
+
+
 typedef union {
 	struct {
 		uint8_t cb, cr;

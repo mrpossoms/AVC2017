@@ -16,7 +16,7 @@ BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_suppo
 BAD_SRC=sys.c goodbad.c
 TST_SRC=masseuse_falloff masseuse_bucket
 
-SIM_SRC=src/sim.cpp src/seen/demos/src/sky.cpp
+SIM_SRC=src/sim/sim.cpp src/seen/demos/src/sky.cpp
 SIM_INC=-Isrc/seen/demos/src/
 
 ifeq ($(OS),Darwin)
@@ -67,7 +67,7 @@ bin/structsize: bin
 	$(CC) $(CFLAGS) $(INC) src/size.c -o structsize
 
 bin/viewer: $(addprefix src/,$(VIEWER_SRC)) magic
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $< -o viewer $(VIEWER_LINK) $(LINK)
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $< -o bin/viewer $(VIEWER_LINK) $(LINK)
 
 bin/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)

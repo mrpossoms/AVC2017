@@ -14,16 +14,6 @@ using namespace nlohmann;
 #include "drawables.hpp"
 #include "helpers.hpp"
 
-#define SURFACE_SHADER {                      \
-	.vertex = "displacement.vsh",             \
-	.tessalation = {                          \
-		.control = "displacement.tcs",        \
-		.evaluation = "displacement.tes",     \
-	},                                        \
-	.geometry = "",                           \
-	.fragment = "basic.fsh" }                 \
-
-
 static vec3_t one = { 1, 1, 1 };
 
 static vec4_t material = { 0.1, 0.01, 1, 0.01 };
@@ -32,20 +22,30 @@ static vec3_t tex_control = { 0, 0, 16 };
 
 struct {
 	Vec3 position = { 0, -0.3, 0 };
-	float heading;
+	float angle;
 	float speed;
+	float distance;
 	float friction = 0.2;
+	float steering_angle;
 
 	void update()
 	{
 		speed *= 1 - friction;
-		Vec3 dir(cos(heading + M_PI / 2) * speed, 0, sin(heading + M_PI / 2) * speed);
-		position = position + dir;
+		Vec3 dir = heading();
+		position = position + (dir * speed);
+		angle += steering_angle * speed;
+		distance += speed;
+	}
+
+	Vec3 heading()
+	{
+		Vec3 dir(cos(angle + M_PI / 2), 0, sin(angle + M_PI / 2));
+		return dir;
 	}
 
 	void turn(float d_theta)
 	{
-		heading += d_theta * speed;
+		steering_angle = d_theta;
 	}
 
 	void accelerate(float d_v)
@@ -56,7 +56,7 @@ struct {
 	Quat orientation()
 	{
 		Quat q;
-		quat_from_axis_angle(q.v, 0, 1, 0, heading);
+		quat_from_axis_angle(q.v, 0, 1, 0, angle);
 		return q;
 	}
 } vehicle;
@@ -80,7 +80,11 @@ void poll_ctrl_sock(int sock)
 		default:
 		if (FD_ISSET(sock, &fds))
 		{
-			printf("Something on the socket!\n");
+			raw_action_t act;
+			if (read(sock, &act, sizeof(act)) == sizeof(act))
+			{
+
+			}
 		}
 	}
 }
@@ -151,13 +155,12 @@ int main (int argc, char* argv[])
 
 	float t = 0;
 	renderer.key_pressed = [&](int key) {
-
 		switch (key) {
 			case GLFW_KEY_LEFT:
-				vehicle.turn(-0.1);
+				vehicle.turn(-0.2);
 				break;
 			case GLFW_KEY_RIGHT:
-				vehicle.turn(0.1);
+				vehicle.turn(0.2);
 				break;
 			case GLFW_KEY_UP:
 			{
@@ -169,6 +172,14 @@ int main (int argc, char* argv[])
 				vehicle.accelerate(-0.1);
 			}
 				break;
+		}
+	};
+
+	renderer.key_released = [&](int key) {
+		switch (key) {
+			case GLFW_KEY_LEFT:
+			case GLFW_KEY_RIGHT:
+				vehicle.turn(0);
 		}
 	};
 
@@ -187,7 +198,15 @@ int main (int argc, char* argv[])
 
 		renderer.draw(&camera, &scene);
 
-		raw_example_t ex;
+		Vec3 heading = vehicle.heading();
+		raw_example_t ex = {
+			.state = {
+				.vel = vehicle.speed,
+				.distance = vehicle.distance,
+				.heading = { heading.x, heading.z, heading.y },
+				.position = { vehicle.position.x, vehicle.position.z, vehicle.position.y }
+			}
+		};
 
 		color_t rgb_buf[FRAME_W * FRAME_H], tmp[FRAME_W * FRAME_H];
 		glReadPixels(0, 0, FRAME_W, FRAME_H, GL_RGB, GL_UNSIGNED_BYTE, (void*)tmp);
@@ -204,6 +223,7 @@ int main (int argc, char* argv[])
 
 	close(sock_fd);
 	unlink("/tmp/avc.sim.ctrl");
+	kill(0, 9);
 
 	return 0;
 }

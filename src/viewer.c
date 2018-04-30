@@ -144,7 +144,7 @@ int main(int argc, char* argv[])
 	dataset_header_t hdr = {};
 	int oneOK = read(img_fd, &hdr, sizeof(hdr)) == sizeof(hdr);
 
-	if(hdr.magic != MAGIC)
+	if(hdr.magic != ((uint64_t)MAGIC))
 	{
 		EXIT("Incompatible version");
 	}
