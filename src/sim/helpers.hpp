@@ -51,26 +51,16 @@ void populate_scene(CustomPass& pass, json& obj, mat4x4_t world)
 }
 
 
-int open_ctrl_socket()
+int open_ctrl_pipe()
 {
-	struct sockaddr_un namesock = {};
-	int fd;
-	namesock.sun_family = AF_UNIX;
+	const char* path = "./avc.sim.ctrl";
+	mkfifo(path, 0666);
 
-	const char* path = "/tmp/avc.sim.ctrl";
-	unlink(path);
-	strncpy(namesock.sun_path, path, sizeof(namesock.sun_path));
-
-	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+	int fd = open(path, O_RDONLY | O_NONBLOCK);
 
 	if (fd < 0)
 	{
 		return -1;
-	}
-
-	if (bind(fd, (struct sockaddr *) &namesock, sizeof(struct sockaddr_un)))
-	{
-		return -2;
 	}
 
 	return fd;

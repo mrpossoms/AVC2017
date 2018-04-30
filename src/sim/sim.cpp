@@ -1,6 +1,6 @@
 #include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/un.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include "seen.hpp"
 #include "sky.hpp"
@@ -62,7 +62,7 @@ struct {
 } vehicle;
 
 
-void poll_ctrl_sock(int sock)
+void poll_ctrl_pipe(int sock)
 {
 	fd_set fds;
 	struct timeval tout = { 0, 1000 * 16 };
@@ -83,7 +83,8 @@ void poll_ctrl_sock(int sock)
 			raw_action_t act;
 			if (read(sock, &act, sizeof(act)) == sizeof(act))
 			{
-
+				vehicle.turn((act.steering - 128.f) / 512.f);
+				vehicle.accelerate((act.throttle - 128.f) / 1024.f);
 			}
 		}
 	}
@@ -151,7 +152,7 @@ int main (int argc, char* argv[])
 	scene.drawables().push_back(&ground_pass);
 	scene.drawables().push_back(&bale_pass);
 
-	int sock_fd = open_ctrl_socket();
+	int sock_fd = open_ctrl_pipe();
 
 	float t = 0;
 	renderer.key_pressed = [&](int key) {
@@ -189,7 +190,7 @@ int main (int argc, char* argv[])
 	while (renderer.is_running())
 	{
 		// look for socket input
-		poll_ctrl_sock(sock_fd);
+		poll_ctrl_pipe(sock_fd);
 
 		Quat q = vehicle.orientation();
 		vehicle.update();
@@ -221,8 +222,8 @@ int main (int argc, char* argv[])
 		write(1, &ex, sizeof(ex));
 	}
 
-	close(sock_fd);
-	unlink("/tmp/avc.sim.ctrl");
+	// close(sock_fd);
+	unlink("./avc.sim.ctrl");
 	kill(0, 9);
 
 	return 0;

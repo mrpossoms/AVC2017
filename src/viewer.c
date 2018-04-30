@@ -13,6 +13,7 @@
 
 #include "dataset_hdr.h"
 #include "structs.h"
+#include "sys.h"
 
 // #define RENDER_DEMO
 
@@ -114,7 +115,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	fprintf(stderr, "Magic %d\n", MAGIC);
+	b_log("Magic %d\n", MAGIC);
 
 	WIN = glfwCreateWindow(640, 480, "AVC 2017", NULL, NULL);
 
@@ -174,7 +175,7 @@ int main(int argc, char* argv[])
 
 			next_example(img_fd, &ex);
 			vec3_copy(positions[pos_idx++], ex.state.position);
-			if(pos_idx == 1024) printf("ROLLOVER\n");
+			if(pos_idx == 1024) b_log("ROLLOVER");
 			pos_idx %= 1024;
 			yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
 		}

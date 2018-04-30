@@ -12,7 +12,7 @@ waypoint_t* WAYPOINTS;
 waypoint_t* NEXT_WPT;
 
 calib_t CAL;
-uint8_t PWM_CHANNEL_MSK = 0x6; // all echo 
+uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
 int FORWARD_STATE = 0;
 int I2C_BUS;
 int USE_DEADRECKONING = 1;
@@ -38,7 +38,7 @@ void proc_opts(int argc, char* const *argv)
 	int c;
 	while((c = getopt(argc, argv, "fr:sm:d:")) != -1)
 	switch(c)
-	{	
+	{
 		case 'f':
 			FORWARD_STATE = 1;
 			break;
@@ -51,7 +51,7 @@ void proc_opts(int argc, char* const *argv)
 		{
 			// Load the route
 			int fd = open(optarg, O_RDONLY);
-			if(fd < 0)
+			if (fd < 0)
 			{
 				b_log("Loading route: '%s' failed", optarg);
 				exit(-1);
@@ -66,9 +66,9 @@ void proc_opts(int argc, char* const *argv)
 			b_log("Loading route with %d waypoints", count);
 
 			lseek(fd, sizeof(hdr), SEEK_SET);
-			WAYPOINTS = (waypoint_t*)calloc(count + 1, sizeof(waypoint_t));	
+			WAYPOINTS = (waypoint_t*)calloc(count + 1, sizeof(waypoint_t));
 			size_t read_bytes = read(fd, WAYPOINTS, count * sizeof(waypoint_t));
-			if(read_bytes != count * sizeof(waypoint_t))
+			if (read_bytes != count * sizeof(waypoint_t))
 			{
 				b_log("route read of %d/%dB failed", read_bytes, all_bytes);
 				exit(-1);
@@ -76,7 +76,7 @@ void proc_opts(int argc, char* const *argv)
 			close(fd);
 
 			// connect waypoint references
-			for(int i = 0; i < count - 1; ++i)
+			for (int i = 0; i < count - 1; ++i)
 			{
 				WAYPOINTS[i].next = WAYPOINTS + i + 1;
 			}
@@ -102,8 +102,8 @@ void proc_opts(int argc, char* const *argv)
 		case 'd':
 			USE_DEADRECKONING = optarg[0] == 'y' ? 1 : 0;
 			break;
-	
-	}	
+
+	}
 }
 
 
@@ -113,7 +113,7 @@ color_range_t* load_colors(const char* path, int* color_count)
 	color_range_t* colors = NULL;
 	*color_count = 0;
 
-	if(!dir)
+	if (!dir)
 	{
 		b_log("opendir() failed on '%s'", path);
 		return NULL;
@@ -127,13 +127,13 @@ color_range_t* load_colors(const char* path, int* color_count)
 	struct dirent* ent;
 	while((ent = readdir(dir)))
 	{
-		if(ent->d_name[0] == '.') continue;
+		if (ent->d_name[0] == '.') continue;
 		++*color_count;
 	}
 
 	// allocate array for all the colors we found
 	colors = calloc(sizeof(color_range_t), *color_count );
-	if(!colors)
+	if (!colors)
 	{
 		b_log("calloc() failed for %d colors", *color_count);
 		closedir(dir);
@@ -146,13 +146,13 @@ color_range_t* load_colors(const char* path, int* color_count)
 	color_range_t* color = colors;
 	while((ent = readdir(dir)))
 	{
-		if(ent->d_name[0] == '.') continue;
+		if (ent->d_name[0] == '.') continue;
 
 		char buf[256];
 		snprintf(buf, sizeof(buf), "%s/%s", path, ent->d_name);
 		int fd = open(buf, O_RDONLY);
-	
-		if(fd < 0)
+
+		if (fd < 0)
 		{
 			b_log("open() failed on '%s'", buf);
 			free(colors);
@@ -169,8 +169,8 @@ color_range_t* load_colors(const char* path, int* color_count)
 		// the 'gooder' it is, which leads to seeking behavior
 		color->badness = atoi(ent->d_name);
 
-		b_log("color: %s [%d-%d], [%d-%d]", 
-			buf, 
+		b_log("color: %s [%d-%d], [%d-%d]",
+			buf,
 			color->min.cr, color->max.cr,
 			color->min.cb, color->max.cb
 		);
@@ -193,13 +193,13 @@ float avoider(raw_state_t* state, float* confidence)
 	int biggest = 0;
 
 	// Here we compute the histogram of badness values
-	for(int c = CHROMA_W; c--;)
+	for (int c = CHROMA_W; c--;)
 	{
 		int col_sum = 0;
 
 		// For each column, we count the 'badness' by checking for good or
 		// bad pixel colors and summing up their 'badness' values
-		for(int r = FRAME_H; r--;)
+		for (int r = FRAME_H; r--;)
 		{
 			chroma_t cro = state->view.chroma[r * CHROMA_W + c];
 			color_range_t* bad = BAD_COLORS;
@@ -207,34 +207,34 @@ float avoider(raw_state_t* state, float* confidence)
 
 			// We check the current pixel against all the bad colors
 			// accumulating that bad color's 'badness' if it's a match
-			for(int col = BAD_COUNT; col--;)
+			for (int col = BAD_COUNT; col--;)
 			{
-				if(bad->min.cr <= cro.cr && cro.cr <= bad->max.cr) 
-				if(bad->min.cb <= cro.cb && cro.cb <= bad->max.cb)
-				{	
+				if (bad->min.cr <= cro.cr && cro.cr <= bad->max.cr)
+				if (bad->min.cb <= cro.cb && cro.cb <= bad->max.cb)
+				{
 					col_sum += bad->badness;
 					state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
 				}
-				
+
 				bad++;
 			}
 
 			// Same as above, but for good colors.
-			for(int col = GOOD_COUNT; col--;)
+			for (int col = GOOD_COUNT; col--;)
 			{
-				if(good->min.cr <= cro.cr && cro.cr <= good->max.cr) 
-				if(good->min.cb <= cro.cb && cro.cb <= good->max.cb)
-				{	
+				if (good->min.cr <= cro.cr && cro.cr <= good->max.cr)
+				if (good->min.cb <= cro.cb && cro.cb <= good->max.cb)
+				{
 					col_sum -= good->badness;
 					state->view.luma[(c << 1) + (r * FRAME_W)] = 255;
 				}
-				
+
 				good++;
 			}
 		}
 
 		// Try to reduce noise by ignoring columns with a badness below 16
-		if(col_sum > 16)
+		if (col_sum > 16)
 		{
 			hist_sum += col_sum;
 			red_hist[c] = col_sum;
@@ -247,13 +247,13 @@ float avoider(raw_state_t* state, float* confidence)
 	// Here we pick the best, most contigious horizontal range of
 	// the frame with the smallest sum of 'bad' colors, or the
 	// largest sum of good colors if they are present.
-	for(int j = CHROMA_W + 1; j--;)
+	for (int j = CHROMA_W + 1; j--;)
 	{
 		int cost = 0;
 		int cont_start = j;
 
 		// From the current column, slide all the way to the left.
-		for(int i = j; i--;)
+		for (int i = j; i--;)
 		{
 			// Accumulate cost for this region
 			cost += red_hist[i];
@@ -262,50 +262,50 @@ float avoider(raw_state_t* state, float* confidence)
 			// so as the region grows without accumulating badness
 			// it becomes more attractive. If it is found to have a better
 			// score than the best, then set it as the new best.
-			if((cost - (j - i)) < best)
+			if ((cost - (j - i)) < best)
 			{
 				cont_r[0] = i;
 				cont_r[1] = cont_start;
 				best = cost - (j - i);
 
-				if(red_hist[i] > biggest)
+				if (red_hist[i] > biggest)
 				{
 					biggest = red_hist[i];
 				}
 			}
 		}
 	}
-	
+
 
 	int cont_width = (cont_r[1] - cont_r[0]);
 	int target_idx;
 
 	// Decide which place in the region we should steer toward
-	if(cont_r[0] > 0 && cont_r[1] == CHROMA_W)
+	if (cont_r[0] > 0 && cont_r[1] == CHROMA_W)
 	{
 		target_idx = cont_r[0] + cont_width * 0.75f;
 	}
-	else if(cont_r[0] == 0 && cont_r[1] < CHROMA_W)
+	else if (cont_r[0] == 0 && cont_r[1] < CHROMA_W)
 	{
 		target_idx = cont_r[0] + cont_width * 0.25f;
 	}
 	else
 	{
-		target_idx = cont_r[0] + (cont_width >> 1);	
+		target_idx = cont_r[0] + (cont_width >> 1);
 	}
 
-	if(FORWARD_STATE)
+	if (FORWARD_STATE)
 	{
 		// Draw a black line down the frame where we are steering
-		for(int i = FRAME_H; i--;)
+		for (int i = FRAME_H; i--;)
 		{
 			state->view.luma[i * FRAME_W + (target_idx << 1)] = 0;
 		}
 
 		// Tint the contiguous region green before forwarding the frame
-		for(int j = cont_r[0]; j < cont_r[1]; ++j)
+		for (int j = cont_r[0]; j < cont_r[1]; ++j)
 		{
-			for(int i = FRAME_H; i--;)
+			for (int i = FRAME_H; i--;)
 			{
 				state->view.chroma[i * CHROMA_W + j].cb -= 64;
 				state->view.chroma[i * CHROMA_W + j].cr -= 64;
@@ -325,7 +325,7 @@ float avoider(raw_state_t* state, float* confidence)
 }
 
 time_t LAST_SECOND;
-raw_action_t predict(raw_state_t* state, waypoint_t goal)
+raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 {
 
 	quat q = { 0, 0, sin(M_PI / 4), cos(M_PI / 4) };
@@ -340,9 +340,9 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 	float inv_conf = 1 - conf;
 
 	// Pre recorded path guidance
-	if(USE_DEADRECKONING)
+	if (USE_DEADRECKONING && goal)
 	{
-		if(vec3_len(state->heading) == 0 && I2C_BUS > -1)
+		if (vec3_len(state->heading) == 0 && I2C_BUS > -1)
 		{
 			return act;
 		}
@@ -350,40 +350,39 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 		// Compute the total delta vector between the car, and the goal
 		// then normalize the delta to get the goal heading
 		// rotate the heading vector about the z-axis to get the left vector
-		vec3_sub(dist_vec, goal.position, state->position);
+		vec3_sub(dist_vec, goal->position, state->position);
 		vec3_norm(goal_vec, dist_vec);
 		quat_mul_vec3(left, q, state->heading);
 
 		// Determine if we are pointing toward the goal with the 'coincidence' value
 		// Project the goal vector onto the left vector to determine steering direction
-		// remap range to [0, 1] 
+		// remap range to [0, 1]
 		float coincidence = vec3_mul_inner(state->heading, goal_vec);
 		p = (vec3_mul_inner(left, goal_vec) + 1) / 2;
-		
+
 		// If pointing away, steer all the way to the right or left, so
 		// p will be either 1 or 0
-		if(coincidence < 0)
+		if (coincidence < 0)
 		{
-			p = roundf(p); 
+			p = roundf(p);
 		}
 
-		p = inv_conf * p + conf * avd_p;	
+		p = inv_conf * p + conf * avd_p;
 	}
 	else
 	{
 		p = avd_p;
 	}
 
-
 	// Lerp between right and left.
 	act.steering = CAL.steering.max * (1 - p) + CAL.steering.min * p;
 
 	// Use a pid controller to regulate the throttle to match the speed driven
-	int throttle_temp = 117 + PID_control(&PID_THROTTLE, NEXT_WPT->velocity * inv_conf, state->vel);
+	int throttle_temp = 117 + PID_control(&PID_THROTTLE, inv_conf, state->vel);
 	act.throttle = MAX(117, throttle_temp);
 
 	//time_t now = time(NULL);
-	//if(LAST_SECOND != now)
+	//if (LAST_SECOND != now)
 	{
 		b_log("throttle: %d", act.throttle);
 	//	LAST_SECOND = now;
@@ -395,7 +394,7 @@ raw_action_t predict(raw_state_t* state, waypoint_t goal)
 
 void sig_handler(int sig)
 {
-	b_log("Caught signal %d", sig);	
+	b_log("Caught signal %d", sig);
 	raw_action_t act = { 117, 117 };
 	pwm_set_echo(0x6);
 	usleep(10000);
@@ -413,30 +412,30 @@ waypoint_t* best_waypoint(raw_state_t* state)
 	{
 		vec3 delta;  // difference between car pos and waypoint pos
 
-		if(USE_DEADRECKONING)
+		if (USE_DEADRECKONING)
 		{
 			vec3 dir;    // unit vector direction to waypoint from car pos
 			float cost;
 			float co;    // coincidence with heading
 			float dist;
 			float lowest_cost = 1E10;
-	
+
 			vec3_sub(delta, next->position, state->position);
 			vec3_norm(dir, delta);
 			co = vec3_mul_inner(dir, state->heading);
 			dist = vec3_len(delta);
 
 			cost = dist + (2 - (co + 1));
-			
-			if(dist > 0.5)
+
+			if (dist > 0.5)
 			{
-				if(cost < lowest_cost)
+				if (cost < lowest_cost)
 				{
 					best = next;
-					lowest_cost = cost;	
+					lowest_cost = cost;
 				}
 			}
-			else if(next->next == NULL)
+			else if (next->next == NULL)
 			{
 				return NULL;
 			}
@@ -444,15 +443,15 @@ waypoint_t* best_waypoint(raw_state_t* state)
 		}
 		else
 		{
-			if(!next->next) return NULL;
+			if (!next->next) return NULL;
 
 			vec3_sub(delta, next->position, next->next->position);
 			dist_sum += vec3_len(delta);
 
-			if(dist_sum > state->distance)
+			if (dist_sum > state->distance)
 			{
 				return next;
-			} 
+			}
 		}
 
 		next = next->next; // lol
@@ -469,7 +468,7 @@ int main(int argc, char* const argv[])
 	signal(SIGINT, sig_handler);
 
 
-	if(calib_load(ACTION_CAL_PATH, &CAL))
+	if (calib_load(ACTION_CAL_PATH, &CAL))
 	{
 		b_log("Failed to load '%s'", ACTION_CAL_PATH);
 		return -1;
@@ -477,7 +476,7 @@ int main(int argc, char* const argv[])
 
 	proc_opts(argc, argv);
 
-	if(i2c_init("/dev/i2c-1"))
+	if (i2c_init("/dev/i2c-1"))
 	{
 		b_log("Failed to init i2c bus");
 		I2C_BUS = -1;
@@ -486,10 +485,10 @@ int main(int argc, char* const argv[])
 	else
 	{
 		pwm_set_echo(PWM_CHANNEL_MSK);
-	}	
+	}
 
 	raw_example_t ex = {};
-	
+
 	b_log("\t\033[0;32mGOOD\033[0m");
 	GOOD_COLORS = load_colors("/var/predictor/color/good", &GOOD_COUNT);
 
@@ -503,7 +502,7 @@ int main(int argc, char* const argv[])
 	read(INPUT_FD, &ex, sizeof(ex)); // block for the first sample
 	b_log("OK");
 
-	if(FORWARD_STATE)
+	if (FORWARD_STATE)
 	{
 		write(1, &hdr, sizeof(hdr));
 		write(1, &ex, sizeof(ex));
@@ -518,37 +517,54 @@ int main(int argc, char* const argv[])
 		FD_ZERO(&fds);
 		FD_SET(INPUT_FD, &fds);
 
-		ret = select(1, &fds, NULL, NULL, &tv);
+		ret = select(INPUT_FD + 1, &fds, NULL, NULL, &tv);
 
-		if(ret == -1) // error
+		if (ret == -1) // error
 		{
 			// TODO
 			b_log("Error");
 		}
-		else if(ret) // stuff to read
+		else if (ret) // stuff to read
 		{
 			read(INPUT_FD, &ex, sizeof(ex));
 
-			raw_action_t act = predict(&ex.state, *NEXT_WPT); 
+			raw_action_t act = predict(&ex.state, NEXT_WPT);
 
-			//if(I2C_BUS > -1)
+			if (I2C_BUS > -1)
 			{
 				pwm_set_action(&act);
 			}
-
-			waypoint_t* next = best_waypoint(&ex.state);
-			if(next != NEXT_WPT)
+			else
 			{
-				NEXT_WPT = next;
-				b_log("next waypoint: %lx", (unsigned int)NEXT_WPT);
+				static int sim_pipe;
+				if (sim_pipe <= 0)
+				{
+					sim_pipe = open("./avc.sim.ctrl", O_WRONLY);
+					b_log("Opened pipe");
+				}
+				else
+				{
+					write(sim_pipe, &act, sizeof(act));
+				}
 			}
 
-			if(NEXT_WPT == NULL)
+			if (USE_DEADRECKONING)
 			{
-				sig_handler(0);
+				b_log("Reckoning...");
+				waypoint_t* next = best_waypoint(&ex.state);
+				if (next != NEXT_WPT)
+				{
+					NEXT_WPT = next;
+					b_log("next waypoint: %lx", (unsigned int)NEXT_WPT);
+				}
+
+				if (NEXT_WPT == NULL)
+				{
+					sig_handler(0);
+				}
 			}
 
-			if(FORWARD_STATE) 
+			if (FORWARD_STATE)
 			{
 				write(1, &ex, sizeof(ex));
 			}
@@ -556,9 +572,9 @@ int main(int argc, char* const argv[])
 		else // timeout
 		{
 			b_log("timeout");
-			if(I2C_BUS > -1)
+			if (I2C_BUS > -1)
 			{
-				// stop everything 
+				// stop everything
 				raw_action_t act = { 117, 117 };
 				pwm_set_action(&act);
 			}

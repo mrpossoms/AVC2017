@@ -8,7 +8,7 @@ COLLECTOR_SRC=deadreckon.c sys.c BNO055_driver/bno055.c BNO055_driver/bno055_sup
 PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c
 INC=-I./src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src -I./src/json
 LINK=-lm -lpthread
-VIEWER_SRC=viewer.c
+VIEWER_SRC=sys.c viewer.c
 VIEWER_LINK=
 MASSEUSE_SRC=src/curves.c
 MASSEUSE_MAIN=src/masseuse.c
@@ -16,7 +16,7 @@ BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_suppo
 BAD_SRC=sys.c goodbad.c
 TST_SRC=masseuse_falloff masseuse_bucket
 
-SIM_SRC=src/sim/sim.cpp src/seen/demos/src/sky.cpp
+SIM_SRC=src/sim/sim.cpp src/sys.c src/seen/demos/src/sky.cpp
 SIM_INC=-Isrc/seen/demos/src/
 
 ifeq ($(OS),Darwin)
@@ -66,8 +66,8 @@ magic: src/structs.h src/linmath.h src/seen src/json bin/data bin/scene.json
 bin/structsize: bin
 	$(CC) $(CFLAGS) $(INC) src/size.c -o structsize
 
-bin/viewer: $(addprefix src/,$(VIEWER_SRC)) magic
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $< -o bin/viewer $(VIEWER_LINK) $(LINK)
+bin/viewer: $(addprefix obj/,$(VIEWER_SRC:.c=.o))
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $^ -o $@ $(VIEWER_LINK) $(LINK)
 
 bin/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
