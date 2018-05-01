@@ -82,6 +82,8 @@ void nn_mat_mul(mat_t* R, mat_t* A, mat_t* B)
 	assert(A->_rank == B->_rank);
 	assert(A->dims[1] == B->dims[0]);
 
+
+
 	for (int ar = A->dims[0]; ar--;)
 	for (int bc = B->dims[1]; bc--;)
 	{
@@ -101,6 +103,8 @@ void nn_mat_mul_e(mat_t* R, mat_t* A, mat_t* B)
 	assert(R->_rank == A->_rank);
 	assert(A->_rank == B->_rank);
 	assert(A->dims[0] == B->dims[0] && A->dims[1] == B->dims[1]);
+
+
 
 	for (int r = A->dims[0]; r--;)
 	for (int c = A->dims[1]; c--;)
@@ -156,4 +160,61 @@ void nn_mat_f(mat_t* R, mat_t* M, mat_value_t (*func)(mat_value_t))
 		}
 		break;
 	}
+}
+
+
+void nn_conv_patch(mat_t* patch, mat_t* src, conv_op_t op)
+{
+	for (int row = op.kernel.h; row--;)
+	for (int col = op.kernel.w; col--;)
+	{
+		int ri = op.corner.row + row;
+		int ci = op.corner.col + col;
+		int i = row * op.kernel.w + col;
+		size_t pix_size;
+		uint8_t* pixel_chan = op.pixel_indexer(src,
+		                                       ri,
+		                                       ci,
+		                                       &pix_size);
+
+		uint8_t* patch_bytes = (uint8_t*)patch->_data.ptr;
+		memcpy(patch_bytes + (pix_size * i), pixel_chan, pix_size);
+	}
+}
+
+
+mat_t nn_mat_load(const char* path)
+{
+	mat_t M = { .type = f32 };
+	uint8_t dims = 0;
+	int fd = open(path, O_RDONLY);
+
+	// open file, read the dimensions
+	if (fd < 0) goto abort;
+	if (read(fd, &dims, sizeof(uint8_t)) != sizeof(uint8_t)) goto abort;
+	for (int i = 0; i < dims; ++i)
+	{
+		if (read(fd, M.dims + i, sizeof(int)) != sizeof(int)) goto abort;
+	}
+
+	if (dims == 1)
+	{
+		M.dims[1] = 1;
+	}
+
+	// allocate space for the matrix
+	if (nn_mat_init(&M)) goto abort;
+
+	// read the entire matrix
+	size_t M_size = sizeof(float) * M._size;
+	if (read(fd, M._data.ptr, M_size) != M_size) goto abort;
+
+	close(fd);
+
+	return M;
+abort:
+	free(M._data.ptr);
+	M._data.ptr = NULL;
+	close(fd);
+	return M;
 }

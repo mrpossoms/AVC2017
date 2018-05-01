@@ -1,6 +1,9 @@
 #ifndef AVC_NN
 #define AVC_NN
 
+#include <sys/types.h>
+#include <inttypes.h>
+
 #define NN_MAT_MAX_DIMS 4
 
 typedef enum {
@@ -8,13 +11,16 @@ typedef enum {
 	d64
 } mat_storage_t;
 
+
 typedef union {
 	float f;
 	double d;
 } mat_value_t;
 
+
 struct mat_t;
 //typedef mat_value_t (*mat_initializer)(struct mat_t*);
+
 
 struct mat_t {
 	/**
@@ -55,6 +61,39 @@ struct mat_t {
 	} _data;
 };
 typedef struct mat_t mat_t;
+
+
+typedef enum {
+	PADDING_VALID,
+	PADDING_SAME
+} conv_padding_t;
+
+
+typedef struct {
+	struct {
+		int w, h;
+	} kernel;
+
+	struct {
+		int row, col;
+	} corner;
+
+	conv_padding_t padding;
+
+	/**
+	 * Returns a pointer to a pixel and all its consecutive channels.
+	 *
+	 * @param src  Matrix to retrieve a pixel from
+	 * @param row  Row the pixel resides in, if outside the bounds of 'src'
+	 *             a pointer to a 0 filled buffer of 'size' must be returned.
+	 * @param col  Column the pixel resides in, if outside the bounds of 'src'
+	 *             a pointer to a 0 filled buffer of 'size' must be returned.
+	 * @param size Will contain the size of the pixel and its channels in bytes
+	 * @return Pointer to contigious memory containing pixel
+	 */
+	uint8_t* (*pixel_indexer)(mat_t* src, int row, int col, size_t* size);
+} conv_op_t;
+
 
 /**
  * @brief Allocates memory for matrix described by 'M'
@@ -100,6 +139,22 @@ void nn_mat_scl_e(mat_t* R, mat_t* M, mat_value_t s);
  */
 void nn_mat_add_e(mat_t* R, mat_t* A, mat_t* B);
 
+/**
+ * Applies function element wise to all values in matrix M.
+ * @param R    Result of func on M. R must be the same shape as M.
+ * @param M    Matrix whose values will be passed through func
+ * @param func Pointer to a function that takes a numeric value, apply
+ *             some transformation and returns the result.
+ */
 void nn_mat_f(mat_t* R, mat_t* M, mat_value_t (*func)(mat_value_t));
+
+
+mat_t nn_mat_load(const char* path);
+
+
+void nn_conv_patch(mat_t* patch, mat_t* src, conv_op_t op);
+
+
+void nn_conv_max_pool(mat_t* pool, mat_t* src, conv_op_t op);
 
 #endif

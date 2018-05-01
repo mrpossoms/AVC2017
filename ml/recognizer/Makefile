@@ -4,7 +4,7 @@ CC=gcc
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
 INC=-I./src -I./src/BNO055_driver -I./src/linmath
 LINK=-lm -lpthread
-TST_SRC=nn_mat_mul nn_mat_func
+TST_SRC=nn_mat_mul nn_mat_func nn_conv_patch nn_mat_load conv_model_test
 
 bin/tests:
 	mkdir -p bin/tests

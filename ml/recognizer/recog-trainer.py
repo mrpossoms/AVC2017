@@ -6,6 +6,7 @@ import sys
 import os
 import time
 import signal
+import struct
 
 IS_TRAINING = True
 
@@ -273,6 +274,37 @@ def model(features, labels, mode):
         mode=mode, loss=loss, eval_metric_ops=eval_metric_ops)
 
 
+def export_model(model):
+    for param_name in model.get_variable_names():
+        comps = param_name.split('/')
+        name = comps[0]
+
+        if len(comps) < 2: continue
+        if comps[-1] in ['kernel', 'bias']:
+            with open('model/' + param_name.replace('/', '.'), mode='wb') as file:
+                param = model.get_variable_value(param_name)
+                shape = param.shape
+
+                # We will be converting the weight tensor into
+                # a matrix to make it usable in the predictor implementation
+                if len(shape) == 4:
+                    shape = (shape[3], np.prod(shape[0:3]))
+
+                file.write(struct.pack('b', len(shape)))
+                for d in shape:
+                    file.write(struct.pack('i', d))
+
+                if len(param.shape) == 4:
+                    for f in range(param.shape[3]):
+                        filter = param[:,:,:,f]
+
+                        for w in filter.flatten():
+                            file.write(struct.pack('f', w))
+                else:
+                    for w in param.flatten():
+                        file.write(struct.pack('f', w))
+
+
 def train(hyper_params):
     # Get the set of all the labels and file paths, pre shuffled
     full_set = filenames_labels()
@@ -302,7 +334,7 @@ def train(hyper_params):
         num_epochs=None,
         shuffle=True)
 
-    texture_classifier.train(my_input_fn, [logging_hook], 10000)
+    texture_classifier.train(my_input_fn, [logging_hook], 100)
 
     ds_X, ds_Y = minibatch(dev_set, 0, size=100)
     epochs = hyper_params['epochs']
@@ -323,6 +355,8 @@ def train(hyper_params):
     #
     # ds_score = model.score(ds_X, ds_Y)
     # print('Dev set score: %f' % ds_score)
+
+    export_model(texture_classifier)
 
     if epochs < 0:
         for i in range(3):
