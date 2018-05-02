@@ -2,10 +2,20 @@
 #include "../nn.h"
 #include "../nn.c"
 
-void* indexer(mat_t* src, int row, int col, size_t* size)
+uint8_t* indexer(mat_t* src, int row, int col, size_t* size)
 {
+	static const float zeros[256] = {};
+
+	*size = sizeof(float) * src->dims[2];
+
+	// Zero padding for SAME convolutions
+	if (row < 0 || col < 0 ||
+	    row >= src->dims[0] || col >= src->dims[1])
+	{
+		return zeros;
+	}
+
 	int cols = src->dims[1];
-	*size = sizeof(float);
 	return (void*)(src->_data.f + (row * cols) + col);
 }
 

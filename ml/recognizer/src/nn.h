@@ -63,6 +63,16 @@ struct mat_t {
 typedef struct mat_t mat_t;
 
 
+typedef struct {
+	mat_t w;
+	mat_t b;
+	mat_value_t (*activation)(mat_value_t);
+
+	mat_t _conv_patch;
+	mat_t _z;
+} nn_layer_t;
+
+
 typedef enum {
 	PADDING_VALID,
 	PADDING_SAME
@@ -77,6 +87,10 @@ typedef struct {
 	struct {
 		int row, col;
 	} corner;
+
+	struct {
+		int row, col;
+	} stride;
 
 	conv_padding_t padding;
 
@@ -148,13 +162,18 @@ void nn_mat_add_e(mat_t* R, mat_t* A, mat_t* B);
  */
 void nn_mat_f(mat_t* R, mat_t* M, mat_value_t (*func)(mat_value_t));
 
+mat_t nn_mat_reshape(mat_t* M, ...);
 
 mat_t nn_mat_load(const char* path);
 
+int nn_conv_init(nn_layer_t* li);
+
+// mat_t nn_conv_filter(mat_t* W, int filter_index);
 
 void nn_conv_patch(mat_t* patch, mat_t* src, conv_op_t op);
 
-
 void nn_conv_max_pool(mat_t* pool, mat_t* src, conv_op_t op);
+
+void nn_conv(mat_t* a_in, mat_t* a_out, nn_layer_t* li, conv_op_t op);
 
 #endif

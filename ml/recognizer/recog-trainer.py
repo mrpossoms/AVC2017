@@ -287,8 +287,8 @@ def export_model(model):
 
                 # We will be converting the weight tensor into
                 # a matrix to make it usable in the predictor implementation
-                if len(shape) == 4:
-                    shape = (shape[3], np.prod(shape[0:3]))
+                # if len(shape) == 4:
+                    # shape = (shape[3], np.prod(shape[0:3]))
 
                 file.write(struct.pack('b', len(shape)))
                 for d in shape:

@@ -2,7 +2,7 @@
 #include "../nn.h"
 #include "../nn.c"
 
-void* indexer(mat_t* src, int row, int col, size_t* size)
+uint8_t* indexer(mat_t* src, int row, int col, size_t* size)
 {
 	int cols = src->dims[1];
 	*size = sizeof(float);

@@ -2,6 +2,25 @@
 #include "../nn.h"
 #include "../nn.c"
 
+
+uint8_t* indexer(mat_t* src, int row, int col, size_t* size)
+{
+	static const float zeros[256] = {};
+
+	*size = sizeof(float) * src->dims[2];
+
+	// Zero padding for SAME convolutions
+	if (row < 0 || col < 0 ||
+	    row >= src->dims[0] || col >= src->dims[1])
+	{
+		return zeros;
+	}
+
+	int cols = src->dims[1];
+	return (uint8_t*)(src->_data.f + (row * cols) + col);
+}
+
+
 mat_value_t relu_f(mat_value_t v)
 {
 	mat_value_t ret = {
@@ -37,6 +56,10 @@ int model_test(void)
 		},
 
 	};
+	for (int i = 3; i--;)
+	{
+		nn_conv_init(L + i);
+	}
 
 	mat_t X = {
 		.dims = { 32, 32, 3 }
@@ -63,6 +86,9 @@ int model_test(void)
 
 	conv_op_t op = {
 		.stride = { 1, 1 },
+		.kernel = { 3, 3 },
+		.padding = PADDING_SAME,
+		.pixel_indexer = indexer
 	};
 
 	nn_conv(&X, A + 0, L + 0, op);

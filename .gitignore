@@ -1,8 +1,13 @@
-*.o:
+*.o
 *.dSYM
+*.idea
+*.DS_Store
+__pycache__
 obj
 bin
 src/linmath.h
 src/seen
 magic
 actions.cal
+ml/recognizer/model/
+.data
