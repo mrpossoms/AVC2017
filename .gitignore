@@ -1,3 +1,5 @@
+*.o:
+*.dSYM
 obj
 bin
 src/linmath.h
