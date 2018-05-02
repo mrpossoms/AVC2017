@@ -1,7 +1,7 @@
 $(eval OS := $(shell uname))
 
 CC=gcc
-CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
+CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -pg -O3
 INC=-I./src -I./src/BNO055_driver -I./src/linmath
 LINK=-lm -lpthread
 TST_SRC=nn_mat_mul nn_mat_func nn_conv_patch nn_conv_max_pool nn_conv nn_mat_load conv_model_test

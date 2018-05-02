@@ -80,7 +80,7 @@ int conv_patch(void)
 		},
 		.activation = sigmoid_f
 	};
-	assert(nn_conv_init(&conv) == 0);
+	assert(nn_conv_init(&conv, &X0) == 0);
 
 	conv_op_t op = {
 		.kernel = { 3, 3 },
@@ -88,11 +88,11 @@ int conv_patch(void)
 		.pixel_indexer = indexer
 	};
 
-	nn_conv(&X0, &A, &conv, op);
+	nn_conv(&X0, &conv);
 	Log("A[0] -> %f\n", 1, A._data.f[0]);
 	assert(A._data.f[0] > 0.5);
 
-	nn_conv(&X1, &A, &conv, op);
+	nn_conv(&X1, &conv);
 	Log("A[0] -> %f\n", 1, A._data.f[0]);
 	assert(A._data.f[0] <= 0.5);
 

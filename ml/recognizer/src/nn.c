@@ -96,13 +96,37 @@ void nn_mat_mul(mat_t* R, mat_t* A, mat_t* B)
 	for (int ar = A->dims[0]; ar--;)
 	for (int bc = B->dims[1]; bc--;)
 	{
-		float dot = 0;
-		for (int i = B->dims[0]; i--;)
+		volatile float dot = 0;
+		int i = B->dims[0];
+		while (i)
 		{
-			dot += e2f(A, ar, i) * e2f(B, i, bc);
+			if (i > 32)
+			{
+				float d __attribute__ ((vector_size (4)));
+				float a __attribute__ ((vector_size (4)));
+				float b __attribute__ ((vector_size (4)));
+
+				// for (int j = 32; j--;)
+				d[0] = a[0] * b[0];
+				d[1] = a[1] * b[1];
+				d[2] = a[2] * b[2];
+				d[3] = a[3] * b[3];
+
+				i -= 32;
+			}
+			else
+			{
+				i -= 1;
+				dot += e2f(A, ar, i) * e2f(B, i, bc);
+			}
 		}
 
-		e2f(R, ar, bc) = dot;
+		// for (int i = B->dims[0]; i--;)
+		// {
+		// 	dot += e2f(A, ar, i) * e2f(B, i, bc);
+		// }
+		//
+		// e2f(R, ar, bc) = dot;
 	}
 }
 
@@ -207,44 +231,106 @@ mat_t nn_mat_reshape(mat_t* M, ...)
 }
 
 
-int nn_conv_init(nn_layer_t* li)
+int nn_conv_init(nn_layer_t* li, mat_t* a_in)
 {
 	int res = 0;
 	assert(li);
+	assert(a_in);
 
+	int a_rows = a_in->dims[0];
+	int a_cols = a_in->dims[1];
 	int depth_in = li->w.dims[2];
 	int depth_out = li->w.dims[3];
-	li->w.dims[1] = li->w.dims[0] * li->w.dims[1] * depth_in;
-	li->w.dims[0] = depth_out;
-	li->w.dims[2] = li->w.dims[3] = 0;
 
-	res += nn_mat_init(&li->w) * -10;
+	{ // Setup matrices for weights and biases
+		li->w.dims[1] = li->w.dims[0] * li->w.dims[1] * depth_in;
+		li->w.dims[0] = depth_out;
+		li->w.dims[2] = li->w.dims[3] = 0;
+		res += nn_mat_init(&li->w) * -10;
 
-	if (res) return res;
+		if (res) return res;
 
-	mat_t z = {
-		.type = f32,
-		.dims = { depth_out, 1 }
-	};
-	res += nn_mat_init(&z) * -30;
-	li->_z = z;
+		mat_t b = {
+			.type = f32,
+			.dims = { depth_out, 1 }
+		};
+		res += nn_mat_init(&b) * -20;
+		li->b = b;
 
-	mat_t patch = {
-		.type = f32,
-		.dims = { li->w.dims[1], 1 }
-	};
-	res += nn_mat_init(&patch) * -40;
-	li->_conv_patch = patch;
+		if (res) return res;
+	}
 
-	mat_t b = {
-		.type = f32,
-		.dims = { depth_out, 1 }
-	};
-	res += nn_mat_init(&b) * -20;
-	li->b = b;
+	{ // Setup preactivation vector
+		mat_t z = {
+			.type = f32,
+			.dims = { depth_out, 1 }
+		};
+		res += nn_mat_init(&z) * -30;
+		li->_z = z;
+
+		if (res) return res;
+	}
+
+	{ // Setup patch vector
+		mat_t patch = {
+			.type = f32,
+			.dims = { li->w.dims[1], 1 }
+		};
+		res += nn_mat_init(&patch) * -40;
+		li->_conv_patch = patch;
+
+		if (res) return res;
+	}
+
+	{ // Setup convolution activation map
+		int pad_row = 0;
+		int pad_col = 0;
+
+		conv_op_t f = li->filter;
+		if (f.padding == PADDING_SAME)
+		{
+			pad_row = f.kernel.h / 2;
+			pad_col = f.kernel.w / 2;
+		}
+
+		int ca_rows = ((a_rows - f.kernel.h + 2 * pad_row) / f.stride.row) + 1;
+		int ca_cols = ((a_cols - f.kernel.w + 2 * pad_col) / f.stride.col) + 1;
+
+		mat_t CA = {
+			.type = f32,
+			.dims = { ca_rows, ca_cols, depth_out }
+		};
+		res += nn_mat_init(&CA) * -50;
+		li->_CA = CA;
+		li->A = &li->_CA;
+
+		if (res) return res;
+	}
+
+	// Setup pooling matrix
+	switch (li->pool.type)
+	{
+		case POOLING_MAX:
+		{
+			mat_t PA = {
+				.type = f32,
+				.dims = {
+					li->_CA.dims[0] / li->pool.op.kernel.h,
+					li->_CA.dims[1] / li->pool.op.kernel.w,
+					depth_out
+				}
+			};
+			res += nn_mat_init(&PA) * -60;
+			li->pool._PA = PA;
+			li->A = &li->pool._PA;
+			if (res) return res;
+		}
+		case POOLING_NONE:;
+	}
 
 	return res;
 }
+
 
 void nn_conv_patch(mat_t* patch, mat_t* src, conv_op_t op)
 {
@@ -269,11 +355,14 @@ void nn_conv_patch(mat_t* patch, mat_t* src, conv_op_t op)
 }
 
 
-void nn_conv(mat_t* a_in, mat_t* a_out, nn_layer_t* li, conv_op_t op)
+void nn_conv(mat_t* a_in, nn_layer_t* li)
 {
+	assert(a_in);
+	assert(li);
 	// assert(a_in->_rank == 3);
 	// assert(a_out->_rank == 3);
 
+	conv_op_t op = li->filter;
 	int pad_row = 0;
 	int pad_col = 0;
 	mat_t* patch = &li->_conv_patch;
@@ -285,8 +374,8 @@ void nn_conv(mat_t* a_in, mat_t* a_out, nn_layer_t* li, conv_op_t op)
 	}
 
 	// For each pile of channels in the pool...
-	for (int p_row = a_out->dims[0]; p_row--;)
-	for (int p_col = a_out->dims[1]; p_col--;)
+	for (int p_row = li->_CA.dims[0]; p_row--;)
+	for (int p_col = li->_CA.dims[1]; p_col--;)
 	{
 		op.corner.row = p_row * op.stride.row - pad_row;
 		op.corner.col = p_col * op.stride.col - pad_col;
@@ -299,13 +388,23 @@ void nn_conv(mat_t* a_in, mat_t* a_out, nn_layer_t* li, conv_op_t op)
 		nn_mat_add_e(&li->_z, &li->_z, &li->b);
 
 		size_t feature_depth;
-		float* z_pile = (float*)op.pixel_indexer(a_out, p_row, p_col, &feature_depth);
+		float* z_pile = (float*)op.pixel_indexer(&li->_CA, p_row, p_col, &feature_depth);
 
 		memcpy(z_pile, li->_z._data.f, feature_depth);
 	}
 
 	// activate
-	nn_mat_f(a_out, a_out, li->activation);
+	nn_mat_f(&li->_CA, &li->_CA, li->activation);
+
+	// Apply pooling if specified
+	switch (li->pool.type)
+	{
+		case POOLING_MAX:
+		{
+			nn_conv_max_pool(&li->pool._PA, &li->_CA, li->pool.op);
+		}
+		case POOLING_NONE:;
+	}
 }
 
 

@@ -63,30 +63,22 @@ struct mat_t {
 typedef struct mat_t mat_t;
 
 
-typedef struct {
-	mat_t w;
-	mat_t b;
-	mat_value_t (*activation)(mat_value_t);
-
-	mat_t _conv_patch;
-	mat_t _z;
-} nn_layer_t;
-
-
 typedef enum {
 	PADDING_VALID,
 	PADDING_SAME
 } conv_padding_t;
 
 
+typedef enum {
+	POOLING_NONE = 0,
+	POOLING_MAX,
+} conv_pooling_t;
+
+
 typedef struct {
 	struct {
 		int w, h;
 	} kernel;
-
-	struct {
-		int row, col;
-	} corner;
 
 	struct {
 		int row, col;
@@ -106,7 +98,36 @@ typedef struct {
 	 * @return Pointer to contigious memory containing pixel
 	 */
 	uint8_t* (*pixel_indexer)(mat_t* src, int row, int col, size_t* size);
+
+	struct {
+		int row, col;
+	} corner;
+
 } conv_op_t;
+
+
+typedef struct {
+	mat_t w;
+	mat_t b;
+	mat_value_t (*activation)(mat_value_t);
+
+	conv_op_t filter;
+
+	struct {
+		conv_op_t op;
+		conv_pooling_t type;
+		mat_t _PA;
+	} pool;
+
+	/**
+	 * @brief Final output of activations
+	 */
+	mat_t* A;
+
+	mat_t _CA;
+	mat_t _conv_patch;
+	mat_t _z;
+} nn_layer_t;
 
 
 /**
@@ -166,7 +187,7 @@ mat_t nn_mat_reshape(mat_t* M, ...);
 
 mat_t nn_mat_load(const char* path);
 
-int nn_conv_init(nn_layer_t* li);
+int nn_conv_init(nn_layer_t* li, mat_t* a_in);
 
 // mat_t nn_conv_filter(mat_t* W, int filter_index);
 
@@ -174,6 +195,6 @@ void nn_conv_patch(mat_t* patch, mat_t* src, conv_op_t op);
 
 void nn_conv_max_pool(mat_t* pool, mat_t* src, conv_op_t op);
 
-void nn_conv(mat_t* a_in, mat_t* a_out, nn_layer_t* li, conv_op_t op);
+void nn_conv(mat_t* a_in, nn_layer_t* li);
 
 #endif
