@@ -122,14 +122,12 @@ void nn_mat_mul(mat_t* R, mat_t* A, mat_t* B)
 	for (int ar = A->dims[0]; ar--;)
 	for (int bc = B->dims[1]; bc--;)
 	{
-		float dot = 0;
+		e2f(R, ar, bc) = 0;
 
 		for (int i = B->dims[0]; i--;)
 		{
-			dot += e2f(A, ar, i) * e2f(B, i, bc);
+			e2f(R, ar, bc) += e2f(A, ar, i) * e2f(B, i, bc);
 		}
-
-		e2f(R, ar, bc) = dot;
 	}
 
 	// memcpy(R->_data.f, &d, sizeof(d));

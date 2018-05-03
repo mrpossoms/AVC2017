@@ -5,8 +5,8 @@ CXX=g++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
 CXXFLAGS=--std=c++11 -g
 COLLECTOR_SRC=deadreckon.c sys.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c collector.c i2c.c drv_pwm.c cam.c curves.c
-PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c
-INC=-I./src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src -I./src/json
+PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c nn.c
+INC=-I./src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src -I./src/json -Iml/recognizer/src
 LINK=-lm -lpthread
 VIEWER_SRC=sys.c viewer.c
 VIEWER_LINK=

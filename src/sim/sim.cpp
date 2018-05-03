@@ -21,7 +21,7 @@ static vec3_t light_dir = { 1, -1, 1 };
 static vec3_t tex_control = { 0, 0, 16 };
 
 struct {
-	Vec3 position = { 0, -0.3, 0 };
+	Vec3 position = { 0, -1.6, 0 };
 	float angle;
 	float speed;
 	float distance;
@@ -147,7 +147,7 @@ int main (int argc, char* argv[])
 	auto root = scene_json["object"];
 	populate_scene(bale_pass, root, I);
 
-	camera.position(0, -1.1, 0);
+	// camera.position(0, 0, 0);
 	scene.drawables().push_back(&sky_pass);
 	scene.drawables().push_back(&ground_pass);
 	scene.drawables().push_back(&bale_pass);
@@ -193,8 +193,11 @@ int main (int argc, char* argv[])
 		poll_ctrl_pipe(sock_fd);
 
 		Quat q = vehicle.orientation();
+		Quat tilt;
+		quat_from_axis_angle(tilt.v, 1, 0, 0, 0.3);
 		vehicle.update();
 		camera.position(vehicle.position);
+		q = tilt * q;
 		camera.orientation(q);
 
 		renderer.draw(&camera, &scene);

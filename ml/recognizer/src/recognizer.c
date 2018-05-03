@@ -67,11 +67,13 @@ void yuv422_to_lum8(color_t* yuv, uint8_t* lum8, int w, int h)
 	}
 }
 
+
 float clamp(float v)
 {
 	v = v > 255 ? 255 : v;
 	return  v < 0 ? 0 : v;
 }
+
 
 void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
 {
@@ -194,8 +196,6 @@ int main(int argc, char* argv[])
 		.type = f32,
 		.dims = { 1, 768 },
 	};
-	nn_mat_init(&x);
-
 
 	nn_layer_t L[] = {
 		{
@@ -210,6 +210,7 @@ int main(int argc, char* argv[])
 		}
 	};
 
+	nn_mat_init(&x);
 	assert(nn_fc_init(L + 0, &x) == 0);
 	assert(nn_fc_init(L + 1, L[0].A) == 0);
 
