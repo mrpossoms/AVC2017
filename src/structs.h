@@ -12,7 +12,7 @@
 	exit(-1);\
 }\
 
-#define FRAME_W 360
+#define FRAME_W 352
 #define FRAME_H 240
 #define PIX_DEPTH 3
 

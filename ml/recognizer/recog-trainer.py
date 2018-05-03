@@ -206,43 +206,44 @@ def hyper_parameter_search(ranges, candidates=100):
 def model(features, labels, mode):
     input_layer = tf.reshape(features["x"], [-1, PATCH_SIDE, PATCH_SIDE, 3])
 
-    # Convolutional Layer #1
-    conv1 = tf.layers.conv2d(
-        inputs=input_layer,
-        filters=16,
-        kernel_size=[3, 3],
-        padding="same",
-        activation=tf.nn.relu)
-
-    # Pooling Layer #1
-    pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
-
-    # Convolutional Layer #2 and Pooling Layer #2
-    conv2 = tf.layers.conv2d(
-        inputs=pool1,
-        filters=32,
-        kernel_size=[3, 3],
-        padding="same",
-        activation=tf.nn.relu)
-    pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
-
-    # Convolutional Layer #2 and Pooling Layer #2
-    conv3 = tf.layers.conv2d(
-        inputs=pool2,
-        filters=64,
-        kernel_size=[3, 3],
-        padding="same",
-        activation=tf.nn.relu)
-    pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
-
-    # Dense Layer
-    pool_flat = tf.reshape(pool3, [-1, 2 * 2 * 64])
-    dense = tf.layers.dense(inputs=pool_flat, units=256, activation=tf.nn.relu)
-    # dropout = tf.layers.dropout(
-    #     inputs=dense, rate=0.4, training=mode == tf.estimator.ModeKeys.TRAIN)
+    # # Convolutional Layer #1
+    # conv1 = tf.layers.conv2d(
+    #     inputs=input_layer,
+    #     filters=16,
+    #     kernel_size=[3, 3],
+    #     padding="same",
+    #     activation=tf.nn.relu)
+    #
+    # # Pooling Layer #1
+    # pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
+    #
+    # # Convolutional Layer #2 and Pooling Layer #2
+    # conv2 = tf.layers.conv2d(
+    #     inputs=pool1,
+    #     filters=32,
+    #     kernel_size=[3, 3],
+    #     padding="same",
+    #     activation=tf.nn.relu)
+    # pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
+    #
+    # # Convolutional Layer #2 and Pooling Layer #2
+    # conv3 = tf.layers.conv2d(
+    #     inputs=pool2,
+    #     filters=64,
+    #     kernel_size=[3, 3],
+    #     padding="same",
+    #     activation=tf.nn.relu)
+    # pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
+    #
+    # # Dense Layer
+    # pool_flat = tf.reshape(pool3, [-1, 2 * 2 * 64])
+    pool_flat = tf.reshape(input_layer, [-1, 768])
+    dense = tf.layers.dense(inputs=pool_flat, units=128, activation=tf.nn.relu)
+    dropout = tf.layers.dropout(
+        inputs=dense, rate=0.5, training=mode == tf.estimator.ModeKeys.TRAIN)
 
     # Logits Layer
-    logits = tf.layers.dense(inputs=dense, units=3)
+    logits = tf.layers.dense(inputs=dropout, units=3)
 
     predictions = {
         # Generate predictions (for PREDICT and EVAL mode)
@@ -281,28 +282,33 @@ def export_model(model):
 
         if len(comps) < 2: continue
         if comps[-1] in ['kernel', 'bias']:
-            with open('model/' + param_name.replace('/', '.'), mode='wb') as file:
+            with open('/tmp/model/' + param_name.replace('/', '.'), mode='wb') as file:
                 param = model.get_variable_value(param_name)
                 shape = param.shape
 
                 # We will be converting the weight tensor into
                 # a matrix to make it usable in the predictor implementation
-                # if len(shape) == 4:
+                if len(shape) == 4:
+                    pass
                     # shape = (shape[3], np.prod(shape[0:3]))
 
                 file.write(struct.pack('b', len(shape)))
                 for d in shape:
                     file.write(struct.pack('i', d))
 
-                # if len(param.shape) == 4:
-                #     for f in range(param.shape[3]):
-                #         filter = param[:,:,:,f]
-                #
-                #         for w in filter.flatten():
-                #             file.write(struct.pack('f', w))
-                # else:
-                for w in param.flatten():
-                    file.write(struct.pack('f', w))
+                if len(param.shape) == 4:
+                    for f in range(param.shape[3]):
+                        filter = param[:,:,:,f].T
+
+                        for w in filter.flatten():
+                            file.write(struct.pack('f', w))
+                    # filter = param[:,:,:,:].T
+                    #
+                    # for w in filter.flatten():
+                    #     file.write(struct.pack('f', w))
+                else:
+                    for w in param.flatten():
+                        file.write(struct.pack('f', w))
 
 
 def train(hyper_params):

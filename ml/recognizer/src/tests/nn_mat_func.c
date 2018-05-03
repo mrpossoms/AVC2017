@@ -4,12 +4,9 @@
 
 #include <math.h>
 
-mat_value_t sigmoid_f(mat_value_t v)
+float sigmoid_f(float v)
 {
-	mat_value_t o = {
-		.f = 1 - (powf(v.f, 2) / (1 + powf(v.f, 2))),
-	};
-	return o;
+	return 1 - (powf(v, 2) / (1 + powf(v, 2)));
 }
 
 int mat_mul(void)

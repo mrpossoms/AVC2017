@@ -12,14 +12,8 @@ typedef enum {
 } mat_storage_t;
 
 
-typedef union {
-	float f;
-	double d;
-} mat_value_t;
-
-
 struct mat_t;
-//typedef mat_value_t (*mat_initializer)(struct mat_t*);
+//typedef float (*mat_initializer)(struct mat_t*);
 
 
 struct mat_t {
@@ -38,7 +32,7 @@ struct mat_t {
 	 * @brief Optional: Uses this function to initialize each value
 	 *                  of the matrix
 	 */
-	mat_value_t (*fill)(struct mat_t*);
+	float (*fill)(struct mat_t*);
 
 	/**
 	 * @brief number of dimensions, this will be filled in automatically
@@ -109,7 +103,7 @@ typedef struct {
 typedef struct {
 	mat_t w;
 	mat_t b;
-	mat_value_t (*activation)(mat_value_t);
+	float (*activation)(float);
 
 	conv_op_t filter;
 
@@ -150,6 +144,10 @@ int nn_mat_init(mat_t* M);
  */
 void nn_mat_mul(mat_t* R, mat_t* A, mat_t* B);
 
+void nn_mat_mul_conv(mat_t* R, mat_t* A, mat_t* B);
+
+int nn_mat_max(mat_t* M);
+
 /**
  * @brief Performs element-wise multiplication A x B storing the result in R
  * @param R - Resulting matrix of the multiplication. It's dimensions must be valid
@@ -164,7 +162,7 @@ void nn_mat_mul_e(mat_t* R, mat_t* A, mat_t* B);
  * @param M - Left hand of the muliplication
  * @param s - Scalar that is multiplied by each element of M
  */
-void nn_mat_scl_e(mat_t* R, mat_t* M, mat_value_t s);
+void nn_mat_scl_e(mat_t* R, mat_t* M, float s);
 
 /**
  * @brief Performs element-wise addition A + B storing the result in R
@@ -181,9 +179,7 @@ void nn_mat_add_e(mat_t* R, mat_t* A, mat_t* B);
  * @param func Pointer to a function that takes a numeric value, apply
  *             some transformation and returns the result.
  */
-void nn_mat_f(mat_t* R, mat_t* M, mat_value_t (*func)(mat_value_t));
-
-mat_t nn_mat_reshape(mat_t* M, ...);
+void nn_mat_f(mat_t* R, mat_t* M, float (*func)(float));
 
 mat_t nn_mat_load(const char* path);
 

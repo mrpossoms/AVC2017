@@ -33,29 +33,19 @@ uint8_t* indexer(mat_t* src, int row, int col, size_t* size)
 	return (uint8_t*)(src->_data.f + (row * cols) + col);
 }
 
-mat_value_t sigmoid_f(mat_value_t v)
+float sigmoid_f(float v)
 {
-	mat_value_t o = {
-		.f = 1 / (1 + powf(M_E, -v.f)),
-	};
-	return o;
+	return 1 / (1 + powf(M_E, -v));
 }
 
-mat_value_t relu_f(mat_value_t v)
+float relu_f(float v)
 {
-	mat_value_t ret = {
-		.f = v.f > 0 ? v.f : 0
-	};
-	return ret;
+	return v > 0 ? v : 0;
 }
 
-mat_value_t softmax_num_f(mat_value_t v)
+float softmax_num_f(float v)
 {
-
-	mat_value_t ret = {
-		.f = powf(M_E, v.f)
-	};
-	return ret;
+	return powf(M_E, v);
 }
 
 #define MAX_POOL_HALF {          \
@@ -132,6 +122,7 @@ int main(int argc, char* argv[])
 		//use_sleep = 1;
 	}
 
+/*
 	mat_t x = {
 		.type = f32,
 		.dims = { 16, 16, 3 },
@@ -197,6 +188,30 @@ int main(int argc, char* argv[])
 	{
 		assert(nn_fc_init(L + i, (L+i-1)->A) == 0);
 	}
+*/
+
+	mat_t x = {
+		.type = f32,
+		.dims = { 1, 768 },
+	};
+	nn_mat_init(&x);
+
+
+	nn_layer_t L[] = {
+		{
+			.w = nn_mat_load(ROOT_DIR "model/dense.kernel"),
+			.b = nn_mat_load(ROOT_DIR "model/dense.bias"),
+			.activation = relu_f
+		},
+		{
+			.w = nn_mat_load(ROOT_DIR "model/dense_1.kernel"),
+			.b = nn_mat_load(ROOT_DIR "model/dense_1.bias"),
+			.activation = softmax_num_f
+		}
+	};
+
+	assert(nn_fc_init(L + 0, &x) == 0);
+	assert(nn_fc_init(L + 1, L[0].A) == 0);
 
 	dataset_header_t hdr = {};
 	int oneOK = read(INPUT_FD, &hdr, sizeof(hdr)) == sizeof(hdr);
@@ -220,19 +235,20 @@ int main(int argc, char* argv[])
 
 		yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
 
-		for (int r = 90; r < 122; r += 16)
-		for (int c = 0; c < FRAME_W; c += 16)
+		for (int r = 64; r < FRAME_H - 96; r += 8)
+		for (int c = 0; c < FRAME_W; c += 8)
 		{
 			for (int kr = 16; kr--;)
 			for (int kc = 16; kc--;)
 			{
 				color_t color = rgb[((r + kr) * FRAME_W) + c + kc];
-				x._data.f[kr * kc * 3 + 0] = color.r / 255.0f - 0.5f;
-				x._data.f[kr * kc * 3 + 1] = color.g / 255.0f - 0.5f;
-				x._data.f[kr * kc * 3 + 2] = color.b / 255.0f - 0.5f;
+				x._data.f[(kr * 48) + kc * 3 + 0] = (color.r / 255.0f) - 0.5f;
+				x._data.f[(kr * 48) + kc * 3 + 1] = (color.g / 255.0f) - 0.5f;
+				x._data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
 			}
 
 			{ // predict
+				/*
 				nn_conv_ff(&x, L + 0);
 
 				for (int i = 1; i < 3; ++i)
@@ -254,19 +270,44 @@ int main(int argc, char* argv[])
 					A_1.dims[0] = 1;
 				}
 
+				*/
+
+				nn_fc_ff(L + 0, &x);
+				nn_fc_ff(L + 1, L[0].A);
+				A_1 = *L[1].A;
+
 				float sum = 0;
 				for (int i = A_1._size; i--;) sum += A_1._data.f[i];
-				mat_value_t denom = { .f = 1.f / sum };
+				float denom = 1.f / sum ;
 				nn_mat_scl_e(&A_1, &A_1, denom);
 
 				const int CHROMA_W = FRAME_W / 2;
-				for (int kr = 16; kr--;)
-				for (int kc = 16; kc--;)
+				for (int kr = 8; kr--;)
+				for (int kc = 8; kc--;)
 				{
 					// ex.state.view.luma[(r + kr) * FRAME_W + (c + kc)] = A_1._data.f[1] * 255;
-					if (A_1._data.f[1] > A_1._data.f[2] && A_1._data.f[1] > A_1._data.f[0])
-					ex.state.view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cb = A_1._data.f[1] * 255;
-					// ex.state.view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cr = A_1._data.f[2] * 255;
+
+					float chroma_v  __attribute__ ((vector_size(8))) = {};
+					float magenta_none __attribute__ ((vector_size(8))) = { 1, 1 };
+					float orange_hay  __attribute__ ((vector_size(8))) = { -1, 1 };
+					float green_asph  __attribute__ ((vector_size(8))) = { -1, -1 };
+
+					chroma_v = A_1._data.f[0] * magenta_none + A_1._data.f[1] * orange_hay + A_1._data.f[2] * green_asph;
+					chroma_v = (chroma_v + 1.f) / 2.f;
+					ex.state.view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cr = chroma_v[0] * 255;
+					ex.state.view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cb = chroma_v[1] * 255;
+
+					// int classes[][2] = {
+					// 	{ 255, 255 },
+					// 	{ 0, 255 },
+					// 	{ 0, 0 }
+					// };
+					//
+					// int mi = nn_mat_max(&A_1);
+					// ex.state.view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cr = classes[mi][0];
+					// ex.state.view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cb = classes[mi][1];
+					//
+
 					// ex.state.view.chroma[(r + kr) * FRAME_H + c + kc].cb = A_1._data.f[2] * 255;
 				}
 			}

@@ -24,20 +24,14 @@ uint8_t* indexer(mat_t* src, int row, int col, size_t* size)
 	return (uint8_t*)(src->_data.f + (row * cols) + col);
 }
 
-mat_value_t sigmoid_f(mat_value_t v)
+float sigmoid_f(float v)
 {
-	mat_value_t o = {
-		.f = 1 / (1 + powf(M_E, -v.f)),
-	};
-	return o;
+	return 1 / (1 + powf(M_E, -v));
 }
 
-mat_value_t relu_f(mat_value_t v)
+float relu_f(float v)
 {
-	mat_value_t ret = {
-		.f = v.f > 0 ? v.f : 0
-	};
-	return ret;
+	return v > 0 ? v : 0;
 }
 
 #define MAX_POOL_HALF {          \
@@ -53,7 +47,7 @@ int model_test(void)
 {
 	mat_t x = {
 		.type = f32,
-		.dims = { 32, 32, 3 },
+		.dims = { 16, 16, 3 },
 		._data.f = hay
 	};
 	nn_mat_init(&x);

@@ -19,12 +19,9 @@ uint8_t* indexer(mat_t* src, int row, int col, size_t* size)
 	return (void*)(src->_data.f + (row * cols) + col);
 }
 
-mat_value_t sigmoid_f(mat_value_t v)
+float sigmoid_f(float v)
 {
-	mat_value_t o = {
-		.f = 1 / (1 + powf(M_E, -v.f)),
-	};
-	return o;
+	return 1 / (1 + powf(M_E, -v));
 }
 
 
@@ -37,7 +34,7 @@ int conv_patch(void)
 	};
 	mat_t X0 = {
 		.type = f32,
-		.dims = { 3, 3 },
+		.dims = { 3, 3, 1 },
 		._rank = 3,
 		._size = 9,
 		._data.f = x0_s
@@ -50,7 +47,7 @@ int conv_patch(void)
 	};
 	mat_t X1 = {
 		.type = f32,
-		.dims = { 3, 3 },
+		.dims = { 3, 3, 1 },
 		._rank = 3,
 		._size = 9,
 		._data.f = x1_s

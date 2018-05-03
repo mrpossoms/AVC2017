@@ -11,10 +11,9 @@
 #define e2d(M, i, j) ((M)->_data.d[(M)->dims[1] * i + j])
 
 
-static mat_value_t zero_fill(mat_t* M)
+static float zero_fill(mat_t* M)
 {
-	const mat_value_t zero = {};
-	return zero;
+	return 0;
 }
 
 
@@ -66,21 +65,43 @@ int nn_mat_init(mat_t* M)
 		// perform fill initialization
 		for (int i = total_elements; i--;)
 		{
-			switch(M->type)
-			{
-				case f32:
-					(M->_data.f)[i] = M->fill(M).f;
-					break;
-				case d64:
-					(M->_data.d)[i] = M->fill(M).d;
-					break;
-			}
+			(M->_data.f)[i] = M->fill(M);
 		}
 	}
 
 	return 0;
 }
 
+void nn_mat_mul_conv(mat_t* R, mat_t* A, mat_t* B)
+{
+	// MxN * NxO = MxO
+
+	assert(R->_rank == A->_rank);
+	assert(A->_rank == B->_rank);
+	if(A->dims[1] != B->dims[0])
+	{
+		fprintf(stderr,
+		        "nn_mat_mul: %dx%d not compatible with %dx%d\n",
+		        A->dims[0], A->dims[1],
+		        B->dims[0], B->dims[1]);
+
+		exit(-1);
+	}
+
+	for (int f = B->dims[1]; f--;)
+	{
+		float dot = 0;
+
+		for (int i = B->dims[0]; i--;)
+		{
+			dot += e2f(A, 0, i) * e2f(B, f, i);
+		}
+
+		R->_data.f[f] = dot;
+	}
+
+	// memcpy(R->_data.f, &d, sizeof(d));
+}
 
 void nn_mat_mul(mat_t* R, mat_t* A, mat_t* B)
 {
@@ -160,7 +181,7 @@ void nn_mat_add_e(mat_t* R, mat_t* A, mat_t* B)
 }
 
 
-void nn_mat_scl_e(mat_t* R, mat_t* M, mat_value_t s)
+void nn_mat_scl_e(mat_t* R, mat_t* M, float s)
 {
 	assert(R->_rank == M->_rank);
 	assert(M->_rank == R->_rank);
@@ -169,49 +190,36 @@ void nn_mat_scl_e(mat_t* R, mat_t* M, mat_value_t s)
 	for (int r = M->dims[0]; r--;)
 	for (int c = M->dims[1]; c--;)
 	{
-		e2f(R, r, c) = e2f(M, r, c) * s.f;
+		e2f(R, r, c) = e2f(M, r, c) * s;
 	}
 }
 
 
-void nn_mat_f(mat_t* R, mat_t* M, mat_value_t (*func)(mat_value_t))
+void nn_mat_f(mat_t* R, mat_t* M, float (*func)(float))
 {
 	assert(R->_size == M->_size);
 
-	switch (R->type) {
-		case f32:
-		for (int i = R->_size; i--;)
-		{
-			R->_data.f[i] = func((mat_value_t)M->_data.f[i]).f;
-		}
-		break;
-		case d64:
-		for (int i = R->_size; i--;)
-		{
-			R->_data.d[i] = func((mat_value_t)M->_data.d[i]).d;
-		}
-		break;
+	for (int i = R->_size; i--;)
+	{
+		R->_data.f[i] = func((float)M->_data.f[i]);
 	}
 }
 
 
-mat_t nn_mat_reshape(mat_t* M, ...)
+int nn_mat_max(mat_t* M)
 {
-	mat_t R = *M;
-	va_list args;
-
-	memset(R.dims, 0, sizeof(int) * NN_MAT_MAX_DIMS);
-	va_start(args, M);
-
-	int i = 0;
-	for (int d = va_arg(args, int); d;)
+	float max = M->_data.f[0];
+	int max_i = 0;
+	for (int i = M->_size; i--;)
 	{
-		R.dims[i++] = d;
+		if (M->_data.f[i] > max)
+		{
+			max = M->_data.f[i];
+			max_i = i;
+		}
 	}
 
-	va_end(args);
-
-	return R;
+	return max_i;
 }
 
 
@@ -223,7 +231,7 @@ int nn_fc_init(nn_layer_t* li, mat_t* a_in)
 
 	mat_t A = {
 		.type = f32,
-		.dims = { li->b.dims[0], 1 }
+		.dims = { 1, li->b.dims[0] }
 	};
 	res += nn_mat_init(&A) * -30;
 	li->_CA = A;
@@ -236,9 +244,17 @@ int nn_fc_init(nn_layer_t* li, mat_t* a_in)
 
 void nn_fc_ff(nn_layer_t* li, mat_t* a_in)
 {
+	int t = li->A->dims[0];
+	li->A->dims[0] = li->A->dims[1];
+	li->A->dims[1] = t;
+
 	nn_mat_mul(li->A, a_in, &li->w);
 	nn_mat_add_e(li->A, li->A, &li->b);
 	nn_mat_f(li->A, li->A, li->activation);
+
+	t = li->A->dims[0];
+	li->A->dims[0] = li->A->dims[1];
+	li->A->dims[1] = t;
 }
 
 
