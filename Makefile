@@ -19,6 +19,9 @@ TST_SRC=masseuse_falloff masseuse_bucket
 SIM_SRC=src/sim/sim.cpp src/sys.c src/seen/demos/src/sky.cpp
 SIM_INC=-Isrc/seen/demos/src/
 
+RECOG_SRC=nn.c recognizer.c sys.c
+RECOG_INC=-Iml/recognizer/src
+
 ifeq ($(OS),Darwin)
 	VIEWER_LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
 	VIEWER_LINK += -lopencv_videoio
@@ -74,6 +77,9 @@ bin/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 
 bin/predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
+
+bin/recognizer: $(addprefix obj/,$(RECOG_SRC:.c=.o))
+	$(CC) $(CFLAGS) -O3 -ftree-vectorize -DMAGIC=$(shell cat magic) $(INC) $(RECOG_INC) $^ -o $@ $(LINK)
 
 bin/bad: $(addprefix obj/,$(BAD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)

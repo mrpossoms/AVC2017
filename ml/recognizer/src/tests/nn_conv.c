@@ -88,11 +88,11 @@ int conv_patch(void)
 		.pixel_indexer = indexer
 	};
 
-	nn_conv(&X0, &conv);
+	nn_conv_ff(&X0, &conv);
 	Log("A[0] -> %f\n", 1, A._data.f[0]);
 	assert(A._data.f[0] > 0.5);
 
-	nn_conv(&X1, &conv);
+	nn_conv_ff(&X1, &conv);
 	Log("A[0] -> %f\n", 1, A._data.f[0]);
 	assert(A._data.f[0] <= 0.5);
 

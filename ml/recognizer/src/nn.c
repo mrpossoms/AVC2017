@@ -1,6 +1,11 @@
 #include "nn.h"
 #include <assert.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
 
 #define e2f(M, i, j) ((M)->_data.f[(M)->dims[1] * i + j])
 #define e2d(M, i, j) ((M)->_data.d[(M)->dims[1] * i + j])
@@ -83,7 +88,7 @@ void nn_mat_mul(mat_t* R, mat_t* A, mat_t* B)
 
 	assert(R->_rank == A->_rank);
 	assert(A->_rank == B->_rank);
-	if(A->dims[0] != B->dims[1])
+	if(A->dims[1] != B->dims[0])
 	{
 		fprintf(stderr,
 		        "nn_mat_mul: %dx%d not compatible with %dx%d\n",
@@ -96,38 +101,17 @@ void nn_mat_mul(mat_t* R, mat_t* A, mat_t* B)
 	for (int ar = A->dims[0]; ar--;)
 	for (int bc = B->dims[1]; bc--;)
 	{
-		volatile float dot = 0;
-		int i = B->dims[0];
-		while (i)
+		float dot = 0;
+
+		for (int i = B->dims[0]; i--;)
 		{
-			if (i > 32)
-			{
-				float d __attribute__ ((vector_size (4)));
-				float a __attribute__ ((vector_size (4)));
-				float b __attribute__ ((vector_size (4)));
-
-				// for (int j = 32; j--;)
-				d[0] = a[0] * b[0];
-				d[1] = a[1] * b[1];
-				d[2] = a[2] * b[2];
-				d[3] = a[3] * b[3];
-
-				i -= 32;
-			}
-			else
-			{
-				i -= 1;
-				dot += e2f(A, ar, i) * e2f(B, i, bc);
-			}
+			dot += e2f(A, ar, i) * e2f(B, i, bc);
 		}
 
-		// for (int i = B->dims[0]; i--;)
-		// {
-		// 	dot += e2f(A, ar, i) * e2f(B, i, bc);
-		// }
-		//
-		// e2f(R, ar, bc) = dot;
+		e2f(R, ar, bc) = dot;
 	}
+
+	// memcpy(R->_data.f, &d, sizeof(d));
 }
 
 
@@ -231,6 +215,33 @@ mat_t nn_mat_reshape(mat_t* M, ...)
 }
 
 
+int nn_fc_init(nn_layer_t* li, mat_t* a_in)
+{
+	int res = 0;
+	assert(li);
+	assert(a_in);
+
+	mat_t A = {
+		.type = f32,
+		.dims = { li->b.dims[0], 1 }
+	};
+	res += nn_mat_init(&A) * -30;
+	li->_CA = A;
+
+	li->A = &li->_CA;
+
+	return res;
+}
+
+
+void nn_fc_ff(nn_layer_t* li, mat_t* a_in)
+{
+	nn_mat_mul(li->A, a_in, &li->w);
+	nn_mat_add_e(li->A, li->A, &li->b);
+	nn_mat_f(li->A, li->A, li->activation);
+}
+
+
 int nn_conv_init(nn_layer_t* li, mat_t* a_in)
 {
 	int res = 0;
@@ -243,8 +254,8 @@ int nn_conv_init(nn_layer_t* li, mat_t* a_in)
 	int depth_out = li->w.dims[3];
 
 	{ // Setup matrices for weights and biases
-		li->w.dims[1] = li->w.dims[0] * li->w.dims[1] * depth_in;
-		li->w.dims[0] = depth_out;
+		li->w.dims[0] = li->w.dims[0] * li->w.dims[1] * depth_in;
+		li->w.dims[1] = depth_out;
 		li->w.dims[2] = li->w.dims[3] = 0;
 		res += nn_mat_init(&li->w) * -10;
 
@@ -274,7 +285,7 @@ int nn_conv_init(nn_layer_t* li, mat_t* a_in)
 	{ // Setup patch vector
 		mat_t patch = {
 			.type = f32,
-			.dims = { li->w.dims[1], 1 }
+			.dims = { 1, li->w.dims[0] }
 		};
 		res += nn_mat_init(&patch) * -40;
 		li->_conv_patch = patch;
@@ -355,7 +366,7 @@ void nn_conv_patch(mat_t* patch, mat_t* src, conv_op_t op)
 }
 
 
-void nn_conv(mat_t* a_in, nn_layer_t* li)
+void nn_conv_ff(mat_t* a_in, nn_layer_t* li)
 {
 	assert(a_in);
 	assert(li);
@@ -417,6 +428,8 @@ void nn_conv_max_pool(mat_t* pool, mat_t* src, conv_op_t op)
 
 	assert(pool->_rank == src->_rank);
 	for (int i = 2; i--;) assert(exp_size[i] == pool->dims[i]);
+
+	memset(pool->_data.f, 0, sizeof(float) * pool->_size);
 
 	// For each pile of channels in the pool...
 	for (int p_row = pool->dims[0]; p_row--;)
@@ -482,5 +495,6 @@ abort:
 	free(M._data.ptr);
 	M._data.ptr = NULL;
 	close(fd);
+	exit(-1);
 	return M;
 }

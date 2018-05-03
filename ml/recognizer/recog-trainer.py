@@ -10,7 +10,7 @@ import struct
 
 IS_TRAINING = True
 
-PATCH_SIDE = 32
+PATCH_SIDE = 16
 X_SIZE = (3 * (PATCH_SIDE ** 2))
 
 def handle_sig_done(*args):
@@ -204,12 +204,12 @@ def hyper_parameter_search(ranges, candidates=100):
 
 
 def model(features, labels, mode):
-    input_layer = tf.reshape(features["x"], [-1, 32, 32, 3])
+    input_layer = tf.reshape(features["x"], [-1, PATCH_SIDE, PATCH_SIDE, 3])
 
     # Convolutional Layer #1
     conv1 = tf.layers.conv2d(
         inputs=input_layer,
-        filters=32,
+        filters=16,
         kernel_size=[3, 3],
         padding="same",
         activation=tf.nn.relu)
@@ -220,7 +220,7 @@ def model(features, labels, mode):
     # Convolutional Layer #2 and Pooling Layer #2
     conv2 = tf.layers.conv2d(
         inputs=pool1,
-        filters=64,
+        filters=32,
         kernel_size=[3, 3],
         padding="same",
         activation=tf.nn.relu)
@@ -229,14 +229,14 @@ def model(features, labels, mode):
     # Convolutional Layer #2 and Pooling Layer #2
     conv3 = tf.layers.conv2d(
         inputs=pool2,
-        filters=128,
+        filters=64,
         kernel_size=[3, 3],
         padding="same",
         activation=tf.nn.relu)
     pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
 
     # Dense Layer
-    pool_flat = tf.reshape(pool3, [-1, 4 * 4 * 128])
+    pool_flat = tf.reshape(pool3, [-1, 2 * 2 * 64])
     dense = tf.layers.dense(inputs=pool_flat, units=256, activation=tf.nn.relu)
     # dropout = tf.layers.dropout(
     #     inputs=dense, rate=0.4, training=mode == tf.estimator.ModeKeys.TRAIN)
@@ -294,15 +294,15 @@ def export_model(model):
                 for d in shape:
                     file.write(struct.pack('i', d))
 
-                if len(param.shape) == 4:
-                    for f in range(param.shape[3]):
-                        filter = param[:,:,:,f]
-
-                        for w in filter.flatten():
-                            file.write(struct.pack('f', w))
-                else:
-                    for w in param.flatten():
-                        file.write(struct.pack('f', w))
+                # if len(param.shape) == 4:
+                #     for f in range(param.shape[3]):
+                #         filter = param[:,:,:,f]
+                #
+                #         for w in filter.flatten():
+                #             file.write(struct.pack('f', w))
+                # else:
+                for w in param.flatten():
+                    file.write(struct.pack('f', w))
 
 
 def train(hyper_params):
@@ -359,7 +359,7 @@ def train(hyper_params):
     export_model(texture_classifier)
 
     if epochs < 0:
-        for i in range(3):
+        for i in range(4):
             activation_map(texture_classifier, "test%d.png" % i, "act_map%d.png" % i)
 
     return ts_score, ds_score

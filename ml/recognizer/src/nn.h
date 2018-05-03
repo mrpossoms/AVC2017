@@ -187,6 +187,10 @@ mat_t nn_mat_reshape(mat_t* M, ...);
 
 mat_t nn_mat_load(const char* path);
 
+int nn_fc_init(nn_layer_t* li, mat_t* a_in);
+
+void nn_fc_ff(nn_layer_t* li, mat_t* a_in);
+
 int nn_conv_init(nn_layer_t* li, mat_t* a_in);
 
 // mat_t nn_conv_filter(mat_t* W, int filter_index);
@@ -195,6 +199,6 @@ void nn_conv_patch(mat_t* patch, mat_t* src, conv_op_t op);
 
 void nn_conv_max_pool(mat_t* pool, mat_t* src, conv_op_t op);
 
-void nn_conv(mat_t* a_in, nn_layer_t* li);
+void nn_conv_ff(mat_t* a_in, nn_layer_t* li);
 
 #endif

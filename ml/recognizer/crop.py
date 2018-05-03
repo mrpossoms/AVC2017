@@ -46,7 +46,7 @@ while True:
     if symli['no-sky']:
         img_h //= 2
 
-    w, h = 32, 32
+    w, h = 16, 16
     i += 1
 
     for _ in range(12):
