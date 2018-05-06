@@ -30,9 +30,10 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
+
 extern const char* PROC_NAME;
 
-typedef struct {	
+typedef struct {
 	struct timeval start;
 	uint32_t interval_us;
 } timegate_t;
@@ -46,5 +47,10 @@ void timegate_open(timegate_t* tg);
 void timegate_close(timegate_t* tg);
 
 int calib_load(const char* path, calib_t* cal);
+
+void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h);
+float clamp(float v);
+
+void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const char* cmd_desc[]);
 
 #endif

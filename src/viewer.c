@@ -47,26 +47,6 @@ void yuv422_to_lum8(color_t* yuv, uint8_t* lum8, int w, int h)
 	}
 }
 
-float clamp(float v)
-{
-	v = v > 255 ? 255 : v;
-	return  v < 0 ? 0 : v;
-}
-
-void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
-{
-	for(int yi = h; yi--;)
-	for(int xi = w; xi--;)
-	{
-		int i = yi * w + xi;
-		int j = yi * (w >> 1) + (xi >> 1);
-
-		rgb[i].r = clamp(luma[i] + 1.14 * (uv[j].cb - 128));
-		rgb[i].g = clamp(luma[i] - 0.395 * (uv[j].cr - 128) - (0.581 * (uv[j].cb - 128)));
-		rgb[i].b = clamp(luma[i] + 2.033 * (uv[j].cr - 128));
-	}
-}
-
 void next_example(int fd, raw_example_t* ex)
 {
 	size_t needed = sizeof(raw_example_t);
@@ -108,9 +88,10 @@ void display_static()
 }
 
 
-static int oneOK;
 int main(int argc, char* argv[])
 {
+	PROC_NAME = argv[0];
+
 	if (!glfwInit()){
 		return -1;
 	}
@@ -143,7 +124,14 @@ int main(int argc, char* argv[])
 	}
 
 	dataset_header_t hdr = {};
-	int oneOK = read(img_fd, &hdr, sizeof(hdr)) == sizeof(hdr);
+	int one_ok = 0;
+
+	// while (!one_ok)
+	// {
+	one_ok = read(img_fd, &hdr, sizeof(hdr)) == sizeof(hdr);
+	// }
+
+	b_log("hdr: %lu, OK: %d", hdr.magic, one_ok);
 
 	if(hdr.magic != ((uint64_t)MAGIC))
 	{
@@ -155,7 +143,7 @@ int main(int argc, char* argv[])
 
 	while(!glfwWindowShouldClose(WIN)){
 
-		if(!oneOK)
+		if(!one_ok)
 		{
 			display_static();
 		}

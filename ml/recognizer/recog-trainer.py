@@ -282,7 +282,7 @@ def export_model(model):
 
         if len(comps) < 2: continue
         if comps[-1] in ['kernel', 'bias']:
-            with open('/tmp/model/' + param_name.replace('/', '.'), mode='wb') as file:
+            with open('/var/model/' + param_name.replace('/', '.'), mode='wb') as file:
                 param = model.get_variable_value(param_name)
                 shape = param.shape
 

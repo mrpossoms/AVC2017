@@ -5,8 +5,10 @@ CXX=g++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
 CXXFLAGS=--std=c++11 -g
 COLLECTOR_SRC=deadreckon.c sys.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c collector.c i2c.c drv_pwm.c cam.c curves.c
-PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c nn.c
-INC=-I./src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src -I./src/json -Iml/recognizer/src
+PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
+PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c
+PREDICTOR_LINK=src/nn.h/lib/libnn.a
+INC=-I./src -I./src/nn.h/src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src -I./src/json -Iml/recognizer/src
 LINK=-lm -lpthread
 VIEWER_SRC=sys.c viewer.c
 VIEWER_LINK=
@@ -51,6 +53,10 @@ obj/%.o: src/%.c magic obj
 
 all: viewer collector masseuse
 
+src/nn.h:
+	git clone https://github.com/mrpossoms/nn.h src/nn.h
+	make -C src/nn.h static
+
 src/json:
 	mkdir -p src/json
 	wget https://raw.githubusercontent.com/nlohmann/json/master/single_include/nlohmann/json.hpp --output-document src/json/json.hpp
@@ -63,7 +69,7 @@ src/seen:
 	git clone https://github.com/mrpossoms/Seen src/seen
 	make -C src/seen static
 
-magic: src/structs.h src/linmath.h src/seen src/json bin/data bin/scene.json
+magic: src/structs.h src/linmath.h src/nn.h src/seen src/json bin/data bin/scene.json
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 bin/structsize: bin
@@ -76,7 +82,7 @@ bin/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 bin/predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
+	$(CC) $(CFLAGS) $(PREDICTOR_FLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) $(PREDICTOR_LINK)
 
 bin/recognizer: $(addprefix obj/,$(RECOG_SRC:.c=.o))
 	$(CC) $(CFLAGS) -O3 -ftree-vectorize -DMAGIC=$(shell cat magic) $(INC) $(RECOG_INC) $^ -o $@ $(LINK)

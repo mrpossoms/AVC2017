@@ -37,7 +37,7 @@ void proc_opts(int argc, const char ** argv)
 
 	const char* cmds = "?cniaf:";
 	const char* prog_desc = "Collects data from sensors, compiles them into system state packets. Then forwards them over stdout";
-	const char* flag_desc[] = {
+	const char* cmd_desc[] = {
 		"Show this help",
 		"Calibrate action vector (steering and throttle)",
 		"Normalize video frames",
@@ -51,24 +51,10 @@ void proc_opts(int argc, const char ** argv)
 		int c = getopt(argc, (char *const *)argv, cmds);
 		if (c == -1) break;
 
-		switch (c) 
+		switch (c)
 		{
 			case '?': // Display usage help
-			{
-				int cmd_idx = 0;
-				
-				printf("%s\n", argv[0]);
-				printf("%s\n", prog_desc);
-
-				for (int i = 0; i < strlen(cmds); i++)
-				{
-					if (cmds[i] == ':') continue;
-					printf("-%c\t%s\n", cmds[i], flag_desc[cmd_idx]);
-					cmd_idx++;
-				}
-
-				exit(0);
-			}
+			cli_help(prog_desc, cmds, cmd_desc);
 			case 'c': // Calibrate
 				MODE = COL_MODE_ACT_CAL;
 				b_log("Calibrating action vector");
@@ -116,7 +102,7 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 		uint32_t* row = cams[0].frame_buffers[bi] + (j * (FRAME_W << 1));
 		uint8_t* luma_row = state->view.luma + (j * FRAME_W);
 		chroma_t* chroma_row = state->view.chroma + (j * (FRAME_W >> 1));
-		
+
 		for (int i = FRAME_W / 2; i--;)
 		{
 			int li = i << 1;
@@ -135,14 +121,14 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 }
 
 /**
- * @brief Gets the min and max throttle and steering values. Saves updated 
+ * @brief Gets the min and max throttle and steering values. Saves updated
  *        max and min values automatically.
  * @returns 0 on success
  */
 int calibration(cam_settings_t cfg)
 {
 	raw_action_t action = {};
-		
+
 	poll_i2c_devs(NULL, &action, NULL);
 
 	CAL.throttle.min = CAL.throttle.max = action.throttle;
@@ -205,7 +191,7 @@ int start_pose_thread(raw_example_t* ex)
  *        recording does not begin until wheel movement is detected. Collection
  *        ends and the program is terminated when movement stops.
  * @param cam - pointer to v4l2 camera instance
- * @return 0 on success 
+ * @return 0 on success
  */
 int collection(cam_t* cam)
 {
@@ -269,11 +255,11 @@ int collection(cam_t* cam)
 		}
 		pthread_mutex_unlock(&STATE_LOCK);
 
-	
+
 		if (ex.state.vel == 0 && WAIT_FOR_MOVEMENT)
 		{
 			exit(0);
-		}	
+		}
 	}
 }
 
@@ -309,7 +295,7 @@ int main(int argc, const char* argv[])
 	}
 
 	if (READ_ACTION)
-	{	
+	{
 		pwm_set_echo(0x6);
 	}
 
@@ -336,7 +322,7 @@ int main(int argc, const char* argv[])
 	{
 		assert(calib_load(ACTION_CAL_PATH, &CAL) == 0);
 	}
-	
+
 	res = collection(cam);
 
 

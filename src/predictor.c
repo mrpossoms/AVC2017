@@ -1,4 +1,6 @@
 #include <dirent.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include "sys.h"
 #include "structs.h"
 #include "dataset_hdr.h"
@@ -6,7 +8,9 @@
 #include "drv_pwm.h"
 #include "pid.h"
 
-#include "net.h"
+#include "nn.h"
+
+#define ROOT_MODEL_DIR "/var/model/"
 
 int INPUT_FD = 0;
 
@@ -28,22 +32,27 @@ PID_t PID_THROTTLE = {
 mat_t X;
 nn_layer_t* L;
 
-typedef struct {
-	chroma_t min, max;
-	int badness;
-} color_range_t;
-
-color_range_t *BAD_COLORS;
-color_range_t *GOOD_COLORS;
-int BAD_COUNT, GOOD_COUNT;
 float TOTAL_DISTANCE;
 
 void proc_opts(int argc, char* const *argv)
 {
+	const char* cmds = "fm:r:sd:";
+	const char* prog_desc = "Collects data from sensors, compiles them into system state packets. Then forwards them over stdout";
+	const char* cmd_desc[] = {
+		"Show this help",
+		"Forward system state over stdout",
+		"Mask PWM output channels. Useful for disabling throttle or steering",
+		"Path for route file to load",
+		"Set one explicit waypoint that is very far away",
+		"Enable or disable deadreckoning",
+	};
+
 	int c;
-	while((c = getopt(argc, argv, "fr:sm:d:")) != -1)
+	while((c = getopt(argc, argv, cmds)) != -1)
 	switch(c)
 	{
+		case '?':
+			cli_help(argv, prog_desc, cmds, cmd_desc);
 		case 'f':
 			FORWARD_STATE = 1;
 			break;
@@ -111,26 +120,6 @@ void proc_opts(int argc, char* const *argv)
 	}
 }
 
-float clamp(float v)
-{
-	v = v > 255 ? 255 : v;
-	return  v < 0 ? 0 : v;
-}
-
-void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
-{
-	for(int yi = h; yi--;)
-	for(int xi = w; xi--;)
-	{
-		int i = yi * w + xi;
-		int j = yi * (w >> 1) + (xi >> 1);
-
-		rgb[i].r = clamp(luma[i] + 1.14 * (uv[j].cb - 128));
-		rgb[i].g = clamp(luma[i] - 0.395 * (uv[j].cr - 128) - (0.581 * (uv[j].cb - 128)));
-		rgb[i].b = clamp(luma[i] + 2.033 * (uv[j].cr - 128));
-	}
-}
-
 
 void next_example(int fd, raw_example_t* ex)
 {
@@ -147,89 +136,12 @@ void next_example(int fd, raw_example_t* ex)
 }
 
 
-color_range_t* load_colors(const char* path, int* color_count)
-{
-	DIR* dir = opendir(path);
-	color_range_t* colors = NULL;
-	*color_count = 0;
-
-	if (!dir)
-	{
-		b_log("opendir() failed on '%s'", path);
-		return NULL;
-	}
-
-	// Get our starting position so we can return after
-	// the number of color files has been determined
-	long start = telldir(dir);
-
-	// count all files except for . and ..
-	struct dirent* ent;
-	while((ent = readdir(dir)))
-	{
-		if (ent->d_name[0] == '.') continue;
-		++*color_count;
-	}
-
-	// allocate array for all the colors we found
-	colors = calloc(sizeof(color_range_t), *color_count );
-	if (!colors)
-	{
-		b_log("calloc() failed for %d colors", *color_count);
-		closedir(dir);
-		return NULL;
-	}
-
-	// return to the beginning now load each file into our
-	// array we allocated above.
-	seekdir(dir, start);
-	color_range_t* color = colors;
-	while((ent = readdir(dir)))
-	{
-		if (ent->d_name[0] == '.') continue;
-
-		char buf[256];
-		snprintf(buf, sizeof(buf), "%s/%s", path, ent->d_name);
-		int fd = open(buf, O_RDONLY);
-
-		if (fd < 0)
-		{
-			b_log("open() failed on '%s'", buf);
-			free(colors);
-			closedir(dir);
-			return NULL;
-		}
-
-		read(fd, color, sizeof(chroma_t) << 1);
-		close(fd);
-
-		// set the 'badness' of the color based on the filename
-		// the more positive, the 'badder' the color. Colors with
-		// high badness are avoided. Conversly, the more negative color
-		// the 'gooder' it is, which leads to seeking behavior
-		color->badness = atoi(ent->d_name);
-
-		b_log("color: %s [%d-%d], [%d-%d]",
-			buf,
-			color->min.cr, color->max.cr,
-			color->min.cb, color->max.cb
-		);
-
-		color++;
-	}
-
-	// cleanup
-	closedir(dir);
-
-	return colors;
-}
-
-
 float avoider(raw_state_t* state, float* confidence)
 {
 	color_t rgb[FRAME_W * FRAME_H];
 	const int CHROMA_W = FRAME_W / 2;
 	const int HIST_W = FRAME_W / 16;
+	const int HIST_CENTER = HIST_W / 2;
 	float hist[FRAME_W / 16] = {};
 	float hist_sum = 0;
 	float biggest = 0;
@@ -239,9 +151,11 @@ float avoider(raw_state_t* state, float* confidence)
 	for (int ci = 0; ci < HIST_W; ++ci)
 	{
 		float col_sum = 0;
+		float t = ci / (float)HIST_W;
 		int c = ci * 16;
+		int r_stride = (ci >= HIST_CENTER - 1 && ci <= HIST_CENTER + 1) ? 4 : 16;
 
-		for (int r = 80; r < FRAME_H - 80; r += 16)
+		for (int r = 80; r < FRAME_H - 80; r += r_stride)
 		{
 			for (int kr = 16; kr--;)
 			for (int kc = 16; kc--;)
@@ -252,102 +166,32 @@ float avoider(raw_state_t* state, float* confidence)
 				X._data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
 			}
 
-			nn_fc_ff(L + 0, &X);
-			nn_fc_ff(L + 1, L[0].A);
-			mat_t A_1 = *L[1].A;
+			mat_t y = *nn_predict(L, &X);
 
-			float sum = 0;
-			for (int i = A_1._size; i--;) sum += A_1._data.f[i];
-			float denom = 1.f / sum ;
-			nn_mat_scl_e(&A_1, &A_1, denom);
-
-
-							for (int kr = 16; kr--;)
-							for (int kc = 16; kc--;)
-							{
-								// ex.state.view.luma[(r + kr) * FRAME_W + (c + kc)] = A_1._data.f[1] * 255;
-
-								float chroma_v  __attribute__ ((vector_size(8))) = {};
-								float magenta_none __attribute__ ((vector_size(8))) = { 1, 1 };
-								float orange_hay  __attribute__ ((vector_size(8))) = { -1, 1 };
-								float green_asph  __attribute__ ((vector_size(8))) = { -1, -1 };
-
-								chroma_v = A_1._data.f[0] * magenta_none + A_1._data.f[1] * orange_hay + A_1._data.f[2] * green_asph;
-								chroma_v = (chroma_v + 1.f) / 2.f;
-								state->view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cr = chroma_v[0] * 255;
-								state->view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cb = chroma_v[1] * 255;
-
-								// int classes[][2] = {
-								// 	{ 255, 255 },
-								// 	{ 0, 255 },
-								// 	{ 0, 0 }
-								// };
-								//
-								// int mi = nn_mat_max(&A_1);
-								// ex.state.view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cr = classes[mi][0];
-								// ex.state.view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cb = classes[mi][1];
-								//
-
-								// ex.state.view.chroma[(r + kr) * FRAME_H + c + kc].cb = A_1._data.f[2] * 255;
-							}
-
-			col_sum += (A_1._data.f[0] + A_1._data.f[1]) - A_1._data.f[2];
-		}
-
-		hist[ci] = col_sum;
-	}
-
-
-	// Here we compute the histogram of badness values
-/*
-	for (int c = HIST_W; c--;)
-	{
-		int col_sum = 0;
-
-		// For each column, we count the 'badness' by checking for good or
-		// bad pixel colors and summing up their 'badness' values
-		for (int r = FRAME_H; r--;)
-		{
-			chroma_t cro = state->view.chroma[r * CHROMA_W + c];
-			color_range_t* bad = BAD_COLORS;
-			color_range_t* good = GOOD_COLORS;
-
-			// We check the current pixel against all the bad colors
-			// accumulating that bad color's 'badness' if it's a match
-			for (int col = BAD_COUNT; col--;)
+			if (FORWARD_STATE)
+			for (int kr = 16; kr--;)
+			for (int kc = 16; kc--;)
 			{
-				if (bad->min.cr <= cro.cr && cro.cr <= bad->max.cr)
-				if (bad->min.cb <= cro.cb && cro.cb <= bad->max.cb)
-				{
-					col_sum += bad->badness;
-					state->view.luma[(c << 1) + (r * FRAME_W)] = 16;
-				}
+				float chroma_v  __attribute__ ((vector_size(8))) = {};
+				float magenta_none __attribute__ ((vector_size(8))) = { 1, 1 };
+				float orange_hay  __attribute__ ((vector_size(8))) = { -1, 1 };
+				float green_asph  __attribute__ ((vector_size(8))) = { -1, -1 };
 
-				bad++;
+				chroma_v = y._data.f[0] * magenta_none + y._data.f[1] * orange_hay + y._data.f[2] * green_asph;
+				chroma_v = (chroma_v + 1.f) / 2.f;
+				state->view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cr = chroma_v[0] * 255;
+				state->view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cb = chroma_v[1] * 255;
+
 			}
 
-			// Same as above, but for good colors.
-			for (int col = GOOD_COUNT; col--;)
-			{
-				if (good->min.cr <= cro.cr && cro.cr <= good->max.cr)
-				if (good->min.cb <= cro.cb && cro.cb <= good->max.cb)
-				{
-					col_sum -= good->badness;
-					state->view.luma[(c << 1) + (r * FRAME_W)] = 255;
-				}
-
-				good++;
-			}
+			col_sum += (y._data.f[0] + y._data.f[1]) - y._data.f[2];
 		}
 
-		// Try to reduce noise by ignoring columns with a badness below 16
-		if (col_sum > 16)
-		{
-			hist_sum += col_sum;
-			hist[c] = col_sum;
-		}
+		const float power = 0.5f;
+		hist[ci] = col_sum * (sinf(t * M_PI) * power + (1.f));
+		// hist[ci] = col_sum * (1.f + powf(sinf(t * M_PI), 3.f) * power);
 	}
-*/
+
 	int best = hist_sum;
 	int cont_r[2] = { HIST_W, HIST_W };
 
@@ -369,7 +213,7 @@ float avoider(raw_state_t* state, float* confidence)
 			// so as the region grows without accumulating badness
 			// it becomes more attractive. If it is found to have a better
 			// score than the best, then set it as the new best.
-			if ((cost - (j - i)) < best)
+			if ((cost /*- (j - i)*/) < best)
 			{
 				cont_r[0] = i;
 				cont_r[1] = cont_start;
@@ -401,28 +245,18 @@ float avoider(raw_state_t* state, float* confidence)
 		target_idx = cont_r[0] + (cont_width >> 1);
 	}
 
-	// if (FORWARD_STATE)
-	// {
-	// 	// Draw a black line down the frame where we are steering
-	// 	for (int i = FRAME_H; i--;)
-	// 	{
-	// 		state->view.luma[i * FRAME_W + (target_idx)] = 0;
-	// 	}
-	//
-	// 	// Tint the contiguous region green before forwarding the frame
-	// 	for (int j = cont_r[0]; j < cont_r[1]; ++j)
-	// 	{
-	// 		for (int i = FRAME_H; i--;)
-	// 		{
-	// 			state->view.chroma[i * CHROMA_W + j].cb -= 64;
-	// 			state->view.chroma[i * CHROMA_W + j].cr -= 64;
-	// 		}
-	// 	}
-	// }
-
 	// float weight = biggest / (float)FRAME_H;
 	float fp = (target_idx / (float)HIST_W);
 	static float ap;
+
+	{
+		int ci = fp * FRAME_W;
+		for (int i = FRAME_H; i--;)
+		{
+			state->view.luma[i * FRAME_W + ci] = 0;
+		}
+	}
+
 
 	// *confidence = MIN(weight + 0.5, 1);
 	ap =  0.8 * ap + 0.2 * (1 - fp);
@@ -483,11 +317,11 @@ raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 	}
 
 	// Lerp between right and left.
-	act.steering = 255 * p;//CAL.steering.max * (1 - p) + CAL.steering.min * p;
+	act.steering = 255 * p; //CAL.steering.max * (1 - p) + CAL.steering.min * p;
 
 	// Use a pid controller to regulate the throttle to match the speed driven
 	int throttle_temp = 117 + PID_control(&PID_THROTTLE, inv_conf, state->vel);
-	act.throttle = 150;//MAX(117, throttle_temp);
+	act.throttle = 220;//MAX(117, throttle_temp);
 
 	//time_t now = time(NULL);
 	//if (LAST_SECOND != now)
@@ -576,22 +410,22 @@ int main(int argc, char* const argv[])
 	signal(SIGINT, sig_handler);
 
 	mat_t x = {
-		.type = f32,
 		.dims = { 1, 768 },
 	};
 	X = x;
 
 	nn_layer_t l[] = {
 		{
-			.w = nn_mat_load(ROOT_DIR "model/dense.kernel"),
-			.b = nn_mat_load(ROOT_DIR "model/dense.bias"),
-			.activation = relu_f
+			.w = nn_mat_load(ROOT_MODEL_DIR "dense.kernel"),
+			.b = nn_mat_load(ROOT_MODEL_DIR "dense.bias"),
+			.activation = nn_act_relu
 		},
 		{
-			.w = nn_mat_load(ROOT_DIR "model/dense_1.kernel"),
-			.b = nn_mat_load(ROOT_DIR "model/dense_1.bias"),
-			.activation = softmax_num_f
-		}
+			.w = nn_mat_load(ROOT_MODEL_DIR "dense_1.kernel"),
+			.b = nn_mat_load(ROOT_MODEL_DIR "dense_1.bias"),
+			.activation = nn_act_softmax
+		},
+		{}
 	};
 	L = l;
 
@@ -619,12 +453,6 @@ int main(int argc, char* const argv[])
 	assert(nn_fc_init(L + 1, L[0].A) == 0);
 
 	raw_example_t ex = {};
-
-	b_log("\t\033[0;32mGOOD\033[0m");
-	GOOD_COLORS = load_colors("/var/predictor/color/good", &GOOD_COUNT);
-
-	b_log("\t\033[0;31mBAD\033[0m");
-	BAD_COLORS = load_colors("/var/predictor/color/bad", &BAD_COUNT);
 
 	b_log("Waiting...");
 
