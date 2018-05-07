@@ -153,7 +153,7 @@ float avoider(raw_state_t* state, float* confidence)
 		float col_sum = 0;
 		float t = ci / (float)HIST_W;
 		int c = ci * 16;
-		int r_stride = (ci >= HIST_CENTER - 1 && ci <= HIST_CENTER + 1) ? 4 : 16;
+		int r_stride = (ci >= HIST_CENTER - 0 && ci <= HIST_CENTER + 0) ? 16 : 16;
 
 		for (int r = 80; r < FRAME_H - 80; r += r_stride)
 		{
@@ -184,15 +184,21 @@ float avoider(raw_state_t* state, float* confidence)
 
 			}
 
-			col_sum += (y._data.f[0] + y._data.f[1]) - y._data.f[2];
+			const float power = 0.0f;
+			// hist[ci] = col_sum * (sinf(t * M_PI) * power + (1.f));
+			float w = (float)(FRAME_H) / (float)(r);
+			col_sum += (-(y._data.f[0] + y._data.f[1]) + (y._data.f[2])) * w;// * (sinf(t * M_PI) * power + (1.f))));
+			// col_sum += y._data.f[2];//+= -sinf(t * M_PI) * power + (1.f);
 		}
 
-		const float power = 0.5f;
-		hist[ci] = col_sum * (sinf(t * M_PI) * power + (1.f));
+		// const float power = 0.5f;
+		// hist[ci] = col_sum * (sinf(t * M_PI) * power + (1.f));
 		// hist[ci] = col_sum * (1.f + powf(sinf(t * M_PI), 3.f) * power);
+
+		hist[ci] = col_sum;
 	}
 
-	int best = hist_sum;
+	float best = hist[HIST_W-1];
 	int cont_r[2] = { HIST_W, HIST_W };
 
 	// Here we pick the best, most contigious horizontal range of
@@ -213,16 +219,13 @@ float avoider(raw_state_t* state, float* confidence)
 			// so as the region grows without accumulating badness
 			// it becomes more attractive. If it is found to have a better
 			// score than the best, then set it as the new best.
-			if ((cost /*- (j - i)*/) < best)
+			const float width_weight = 1;
+			float total_cost = cost / (1 + (j - i) * width_weight);
+			if (total_cost > best)
 			{
 				cont_r[0] = i;
 				cont_r[1] = cont_start;
-				best = cost - (j - i);
-
-				if (hist[i] > biggest)
-				{
-					biggest = hist[i];
-				}
+				best = total_cost;
 			}
 		}
 	}
@@ -244,6 +247,8 @@ float avoider(raw_state_t* state, float* confidence)
 	{
 		target_idx = cont_r[0] + (cont_width >> 1);
 	}
+
+
 
 	// float weight = biggest / (float)FRAME_H;
 	float fp = (target_idx / (float)HIST_W);
