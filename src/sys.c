@@ -118,8 +118,8 @@ float clamp(float v)
 void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const char* cmd_desc[])
 {
 	int cmd_idx = 0;
-	printf("%sn", argv[0]);
-	printf("%sn", (prog_desc));
+	printf("%s\n", argv[0]);
+	printf("%s\n", (prog_desc));
 	for (int i = 0; i < strlen((cmds)); i++)
 	{
 		if ((cmds)[i] == ':') continue;

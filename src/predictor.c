@@ -36,7 +36,7 @@ float TOTAL_DISTANCE;
 
 void proc_opts(int argc, char* const *argv)
 {
-	const char* cmds = "fm:r:sd:";
+	const char* cmds = "?fm:r:sd:";
 	const char* prog_desc = "Collects data from sensors, compiles them into system state packets. Then forwards them over stdout";
 	const char* cmd_desc[] = {
 		"Show this help",
@@ -161,9 +161,9 @@ float avoider(raw_state_t* state, float* confidence)
 			for (int kc = 16; kc--;)
 			{
 				color_t color = rgb[((r + kr) * FRAME_W) + c + kc];
-				X._data.f[(kr * 48) + kc * 3 + 0] = (color.r / 255.0f) - 0.5f;
-				X._data.f[(kr * 48) + kc * 3 + 1] = (color.g / 255.0f) - 0.5f;
-				X._data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
+				X.data.f[(kr * 48) + kc * 3 + 0] = (color.r / 255.0f) - 0.5f;
+				X.data.f[(kr * 48) + kc * 3 + 1] = (color.g / 255.0f) - 0.5f;
+				X.data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
 			}
 
 			mat_t y = *nn_predict(L, &X);
@@ -177,7 +177,7 @@ float avoider(raw_state_t* state, float* confidence)
 				float orange_hay  __attribute__ ((vector_size(8))) = { -1, 1 };
 				float green_asph  __attribute__ ((vector_size(8))) = { -1, -1 };
 
-				chroma_v = y._data.f[0] * magenta_none + y._data.f[1] * orange_hay + y._data.f[2] * green_asph;
+				chroma_v = y.data.f[0] * magenta_none + y.data.f[1] * orange_hay + y.data.f[2] * green_asph;
 				chroma_v = (chroma_v + 1.f) / 2.f;
 				state->view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cr = chroma_v[0] * 255;
 				state->view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cb = chroma_v[1] * 255;
@@ -187,8 +187,8 @@ float avoider(raw_state_t* state, float* confidence)
 			const float power = 0.0f;
 			// hist[ci] = col_sum * (sinf(t * M_PI) * power + (1.f));
 			float w = (float)(FRAME_H) / (float)(r);
-			col_sum += (-(y._data.f[0] + y._data.f[1]) + (y._data.f[2])) * w;// * (sinf(t * M_PI) * power + (1.f))));
-			// col_sum += y._data.f[2];//+= -sinf(t * M_PI) * power + (1.f);
+			col_sum += (-(y.data.f[0] + y.data.f[1]) + (y.data.f[2])) * w;// * (sinf(t * M_PI) * power + (1.f))));
+			// col_sum += y.data.f[2];//+= -sinf(t * M_PI) * power + (1.f);
 		}
 
 		// const float power = 0.5f;

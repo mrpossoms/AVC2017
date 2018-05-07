@@ -41,6 +41,7 @@ obj:
 
 bin:
 	mkdir bin
+	cp actions.cal bin/
 
 bin/data: bin
 	ln -sf $(shell pwd)/src/seen/demos/data/ bin/data
