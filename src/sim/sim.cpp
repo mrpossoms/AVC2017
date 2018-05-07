@@ -215,7 +215,16 @@ int main (int argc, char* argv[])
 		color_t rgb_buf[FRAME_W * FRAME_H], tmp[FRAME_W * FRAME_H];
 		glReadPixels(0, 0, FRAME_W, FRAME_H, GL_RGB, GL_UNSIGNED_BYTE, (void*)tmp);
 
-		for(int i = FRAME_H; i--;)
+		// Add clamped noise to the image
+		for (int i = FRAME_W * FRAME_H * 3; i--;)
+		{
+			int c = ((uint8_t*)tmp)[i] + ((random() % 16) - 8);
+			if (c < 0) c = 0;
+			if (c > 255) c = 255;
+			((uint8_t*)tmp)[i] = c;
+		}
+
+		for (int i = FRAME_H; i--;)
 		{
 			memcpy(rgb_buf + (i * FRAME_W), tmp + ((FRAME_H - i) * FRAME_W), sizeof(color_t) * FRAME_W);
 		}
