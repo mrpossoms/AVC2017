@@ -128,3 +128,89 @@ void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const
 	}
 	exit(0);
 }
+
+
+int write_pipeline_payload(payload_t* payload)
+{
+	size_t expected_size = sizeof(dataset_hdr_t);
+	if (!payload) return -1;
+
+	if (write(1, &payload->header, expected_size) != expected_size)
+	{
+		return -2;
+	}
+
+	switch (payload->header.type)
+	{
+		case PAYLOAD_ACTION:
+			expected_size = sizeof(raw_action_t);
+			break;
+		case PAYLOAD_STATE:
+			expected_size = sizeof(raw_state_t);
+			break;
+		case PAYLOAD_PAIR:
+			expected_size = sizeof(raw_state_t) + sizeof(raw_action_t);
+			break;
+	}
+
+	if (write(1, &payload->payload, expected_size) != expected_size)
+	{
+		return -3;
+	}
+
+	return 0;
+}
+
+
+int read_pipeline_payload(payload_t* payload, payload_type_t exp_type)
+{
+	size_t expected_size = sizeof(dataset_hdr_t);
+	if (!payload) return -1;
+
+	if (read(0, &payload->header, expected_size) != expected_size)
+	{
+		return -2;
+	}
+
+	if (payload->header.magic != MAGIC)
+	{
+		b_bad(
+			"Incorrect magic number got: %lx expected %lx",
+			payload->header.magic,
+			MAGIC
+		);
+		return -4;
+	}
+
+	if (!(payload->header.type & exp_type))
+	{
+		b_bad("Incompatible payload type %lx / %lx", payload->header.type, exp_type);
+		return -5;
+	}
+
+	switch (payload->header.type)
+	{
+		case PAYLOAD_ACTION:
+			expected_size = sizeof(raw_action_t);
+			break;
+		case PAYLOAD_STATE:
+			expected_size = sizeof(raw_state_t);
+			break;
+		case PAYLOAD_PAIR:
+			expected_size = sizeof(raw_action_t) + sizeof(raw_state_t);
+			break;
+	}
+
+	size_t needed = expected_size;
+	off_t  off = 0;
+	uint8_t* buf = (uint8_t*)&payload->payload;
+
+	while(needed)
+	{
+		size_t gotten = read(0, buf + off, needed);
+		needed -= gotten;
+		off += gotten;
+	}
+
+	return 0;
+}

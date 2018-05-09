@@ -184,8 +184,12 @@ int main (int argc, char* argv[])
 		}
 	};
 
-	dataset_header_t hdr = { MAGIC, 1 };
-	write(1, &hdr, sizeof(hdr));
+	payload_t payload = {
+		.header = {
+			.magic = MAGIC,
+			.type  = PAYLOAD_STATE
+		},
+	};
 
 	while (renderer.is_running())
 	{
@@ -203,13 +207,11 @@ int main (int argc, char* argv[])
 		renderer.draw(&camera, &scene);
 
 		Vec3 heading = vehicle.heading();
-		raw_example_t ex = {
-			.state = {
-				.vel = vehicle.speed,
-				.distance = vehicle.distance,
-				.heading = { heading.x, heading.z, heading.y },
-				.position = { vehicle.position.x, vehicle.position.z, vehicle.position.y }
-			}
+		raw_state_t state = {
+			.vel = vehicle.speed,
+			.distance = vehicle.distance,
+			.heading = { heading.x, heading.z, heading.y },
+			.position = { vehicle.position.x, vehicle.position.z, vehicle.position.y }
 		};
 
 		color_t rgb_buf[FRAME_W * FRAME_H], tmp[FRAME_W * FRAME_H];
@@ -229,9 +231,13 @@ int main (int argc, char* argv[])
 			memcpy(rgb_buf + (i * FRAME_W), tmp + ((FRAME_H - i) * FRAME_W), sizeof(color_t) * FRAME_W);
 		}
 
-		rgb_to_yuv422(ex.state.view.luma, ex.state.view.chroma, rgb_buf, FRAME_W, FRAME_H);
+		rgb_to_yuv422(state.view.luma, state.view.chroma, rgb_buf, FRAME_W, FRAME_H);
 
-		write(1, &ex, sizeof(ex));
+		payload.payload.state = state;
+		if (write_pipeline_payload(&payload))
+		{
+			return -1;
+		}
 	}
 
 	// close(sock_fd);

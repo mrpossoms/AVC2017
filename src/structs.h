@@ -23,11 +23,6 @@
 #define STEERING_BANDS 15
 #define THROTTLE_BANDS 7
 
-typedef struct {
-	uint64_t magic;
-	uint8_t is_raw;
-} dataset_header_t;
-
 
 typedef union {
 	struct {
@@ -67,14 +62,6 @@ typedef struct {
 	uint8_t throttle, steering;
 } raw_action_t;
 
-typedef union {
-	struct {
-		float throttle[THROTTLE_BANDS];
-		float steering[STEERING_BANDS];
-	};
-	float v[THROTTLE_BANDS + STEERING_BANDS];
-} action_f_t;
-
 typedef struct {
 	int16_t  rot_rate[3];
 	int16_t  acc[3];
@@ -88,31 +75,9 @@ typedef struct {
 	} view;
 } raw_state_t;
 
-typedef struct {
-	raw_state_t state;
-	action_f_t action;
-} raw_example_t;
 
 typedef float state_vector_t[3 + 3 + 1 + 1];
 
-typedef union {
-	struct {
-		float rot[3];
-		float acc[3];
-		float vel;
-		float distance;
-		struct {
-			float luma[LUMA_PIXELS];
-			chroma_f_t chroma[CHRO_PIXELS];
-		} view;
-	};
-	state_vector_t v;
-} state_f_t;
-
-typedef struct {
-	state_f_t  state;
-	action_f_t action;
-} example_t;
 
 struct waypoint;
 typedef struct waypoint {
@@ -130,6 +95,33 @@ typedef struct {
 	range_t steering;
 	range_t throttle;
 } calib_t;
+
+/**
+ * Payloads
+ */
+
+typedef enum {
+	PAYLOAD_STATE  = 0x01,
+	PAYLOAD_ACTION = 0x02,
+	PAYLOAD_PAIR   = 0x03,
+} payload_type_t;
+
+typedef struct {
+	uint64_t magic;
+	payload_type_t type;
+} dataset_hdr_t;
+
+typedef struct {
+	dataset_hdr_t header;
+	union {
+		raw_state_t state;
+		raw_action_t action;
+		struct {
+			raw_action_t action;
+			raw_state_t state;
+		} pair;
+	} payload;
+} payload_t;
 
 #define VEC_DIMENSIONS_F(v) (sizeof((v)) / sizeof(float))
 

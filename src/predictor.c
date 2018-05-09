@@ -3,9 +3,6 @@
 #include <stdarg.h>
 #include "sys.h"
 #include "structs.h"
-#include "dataset_hdr.h"
-#include "i2c.h"
-#include "drv_pwm.h"
 #include "pid.h"
 
 #include "nn.h"
@@ -17,10 +14,7 @@ int INPUT_FD = 0;
 waypoint_t* WAYPOINTS;
 waypoint_t* NEXT_WPT;
 
-calib_t CAL;
-uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
 int FORWARD_STATE = 0;
-int I2C_BUS;
 int USE_DEADRECKONING = 1;
 
 PID_t PID_THROTTLE = {
@@ -36,12 +30,11 @@ float TOTAL_DISTANCE;
 
 void proc_opts(int argc, char* const *argv)
 {
-	const char* cmds = "?fm:r:sd:";
+	const char* cmds = "hfr:sd:";
 	const char* prog_desc = "Collects data from sensors, compiles them into system state packets. Then forwards them over stdout";
 	const char* cmd_desc[] = {
 		"Show this help",
 		"Forward system state over stdout",
-		"Mask PWM output channels. Useful for disabling throttle or steering",
 		"Path for route file to load",
 		"Set one explicit waypoint that is very far away",
 		"Enable or disable deadreckoning",
@@ -51,15 +44,10 @@ void proc_opts(int argc, char* const *argv)
 	while((c = getopt(argc, argv, cmds)) != -1)
 	switch(c)
 	{
-		case '?':
+		case 'h':
 			cli_help(argv, prog_desc, cmds, cmd_desc);
 		case 'f':
 			FORWARD_STATE = 1;
-			break;
-		case 'm':
-			// Explicit PWM channel masking
-			PWM_CHANNEL_MSK = atoi(optarg);
-			b_log("channel mask %x", PWM_CHANNEL_MSK);
 			break;
 		case 'r':
 		{
@@ -71,15 +59,12 @@ void proc_opts(int argc, char* const *argv)
 				exit(-1);
 			}
 
-			dataset_header_t hdr = {};
-			read(fd, &hdr, sizeof(hdr));
-			assert(hdr.magic == MAGIC);
 			off_t all_bytes = lseek(fd, 0, SEEK_END);
 			size_t count = all_bytes / sizeof(waypoint_t);
 
 			b_log("Loading route with %d waypoints", count);
 
-			lseek(fd, sizeof(hdr), SEEK_SET);
+			lseek(fd, 0, SEEK_SET);
 			WAYPOINTS = (waypoint_t*)calloc(count + 1, sizeof(waypoint_t));
 			size_t read_bytes = read(fd, WAYPOINTS, count * sizeof(waypoint_t));
 			if (read_bytes != count * sizeof(waypoint_t))
@@ -117,21 +102,6 @@ void proc_opts(int argc, char* const *argv)
 			USE_DEADRECKONING = optarg[0] == 'y' ? 1 : 0;
 			break;
 
-	}
-}
-
-
-void next_example(int fd, raw_example_t* ex)
-{
-	size_t needed = sizeof(raw_example_t);
-	off_t  off = 0;
-	uint8_t* buf = (uint8_t*)ex;
-
-	while(needed)
-	{
-		size_t gotten = read(fd, buf + off, needed);
-		needed -= gotten;
-		off += gotten;
 	}
 }
 
@@ -289,7 +259,7 @@ raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 	// Pre recorded path guidance
 	if (USE_DEADRECKONING && goal)
 	{
-		if (vec3_len(state->heading) == 0 && I2C_BUS > -1)
+		if (vec3_len(state->heading) == 0)
 		{
 			return act;
 		}
@@ -342,9 +312,6 @@ raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);
-	raw_action_t act = { 117, 117 };
-	pwm_set_echo(0x6);
-	usleep(10000);
 	exit(0);
 }
 
@@ -434,88 +401,30 @@ int main(int argc, char* const argv[])
 	};
 	L = l;
 
-	if (calib_load(ACTION_CAL_PATH, &CAL))
-	{
-		b_log("Failed to load '%s'", ACTION_CAL_PATH);
-		return -1;
-	}
-
 	proc_opts(argc, argv);
-
-	if (i2c_init("/dev/i2c-1"))
-	{
-		b_log("Failed to init i2c bus");
-		I2C_BUS = -1;
-		//return -2;
-	}
-	else
-	{
-		pwm_set_echo(PWM_CHANNEL_MSK);
-	}
 
 	assert(nn_mat_init(&X) == 0);
 	assert(nn_fc_init(L + 0, &X) == 0);
 	assert(nn_fc_init(L + 1, L[0].A) == 0);
 
-	raw_example_t ex = {};
-
 	b_log("Waiting...");
-
-	dataset_header_t hdr = {};
-	read(INPUT_FD, &hdr, sizeof(hdr));
-	next_example(INPUT_FD, &ex);
-	b_log("OK");
-
-	if (FORWARD_STATE)
-	{
-		write(1, &hdr, sizeof(hdr));
-		write(1, &ex, sizeof(ex));
-	}
 
 	while(1)
 	{
-		int ret = 0;
-		fd_set fds;
-		struct timeval tv = { .tv_usec = 1000 * 333 };
+		payload_t payload = {};
 
-		FD_ZERO(&fds);
-		FD_SET(INPUT_FD, &fds);
-
-		ret = select(INPUT_FD + 1, &fds, NULL, NULL, &tv);
-
-		if (ret == -1) // error
+		if (!read_pipeline_payload(&payload, PAYLOAD_STATE))
 		{
-			// TODO
-			b_log("Error");
-		}
-		else if (ret) // stuff to read
-		{
-			next_example(INPUT_FD, &ex);
+			raw_state_t* state = &payload.payload.state;
+			raw_action_t act = predict(state, NEXT_WPT);
 
-			raw_action_t act = predict(&ex.state, NEXT_WPT);
-
-			if (I2C_BUS > -1)
-			{
-				pwm_set_action(&act);
-			}
-			else
-			{
-				static int sim_pipe;
-				if (sim_pipe <= 0)
-				{
-					sim_pipe = open("./avc.sim.ctrl", O_WRONLY);
-					b_log("Opened pipe");
-				}
-				else
-				{
-					write(sim_pipe, &act, sizeof(act));
-				}
-			}
+			payload.header.type = PAYLOAD_ACTION;
+			payload.payload.pair.action = act;
 
 			if (USE_DEADRECKONING)
 			{
 				b_log("Reckoning...");
-				waypoint_t* next = best_waypoint(&ex.state);
+				waypoint_t* next = best_waypoint(state);
 				if (next != NEXT_WPT)
 				{
 					NEXT_WPT = next;
@@ -524,29 +433,31 @@ int main(int argc, char* const argv[])
 
 				if (NEXT_WPT == NULL)
 				{
-					sig_handler(0);
+					b_bad("No waypoints loaded");
+					exit(-2);
 				}
 			}
 
 			if (FORWARD_STATE)
 			{
-				write(1, &ex, sizeof(ex));
+				payload.header.type = PAYLOAD_PAIR;
 			}
-		}
-		else // timeout
-		{
-			b_log("timeout");
-			if (I2C_BUS > -1)
-			{
-				// stop everything
-				raw_action_t act = { 117, 117 };
-				pwm_set_action(&act);
-			}
-		}
 
+			if (write_pipeline_payload(&payload))
+			{
+				b_bad("Failed to write payload");
+				return -1;
+			}
+		}
+		else
+		{
+			b_bad("read error");
+
+			return -1;
+		}
 	}
 
-	b_log("terminating");
+	b_bad("terminating");
 
 	return 0;
 }

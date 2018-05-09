@@ -47,20 +47,6 @@ void yuv422_to_lum8(color_t* yuv, uint8_t* lum8, int w, int h)
 	}
 }
 
-void next_example(int fd, raw_example_t* ex)
-{
-	size_t needed = sizeof(raw_example_t);
-	off_t  off = 0;
-	uint8_t* buf = (uint8_t*)ex;
-
-	while(needed)
-	{
-		size_t gotten = read(fd, buf + off, needed);
-		needed -= gotten;
-		off += gotten;
-	}
-}
-
 
 void display_static()
 {
@@ -110,7 +96,7 @@ int main(int argc, char* argv[])
 	createTexture(&frameTex);
 
 	color_t rgb[FRAME_W * FRAME_H] = {};
-	raw_example_t ex = {};
+	payload_t payload = {};
 
 	vec3 positions[1024];
 	int pos_idx = 0;
@@ -123,50 +109,36 @@ int main(int argc, char* argv[])
 		//use_sleep = 1;
 	}
 
-	dataset_header_t hdr = {};
-	int one_ok = 0;
-
-	// while (!one_ok)
-	// {
-	one_ok = read(img_fd, &hdr, sizeof(hdr)) == sizeof(hdr);
-	// }
-
-	b_log("hdr: %lu, OK: %d", hdr.magic, one_ok);
-
-	if(hdr.magic != ((uint64_t)MAGIC))
-	{
-		EXIT("Incompatible version");
-	}
-
-	next_example(img_fd, &ex);
-	yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
+	raw_state_t* state = NULL;
 
 	while(!glfwWindowShouldClose(WIN)){
+		glTexImage2D(
+			GL_TEXTURE_2D,
+			0,
+			GL_RGB,
+			FRAME_W,
+			FRAME_H,
+			0,
+			GL_RGB,
+			GL_UNSIGNED_BYTE,
+			rgb
+		);
 
-		if(!one_ok)
+		if (read_pipeline_payload(&payload, PAYLOAD_STATE))
 		{
-			display_static();
+			return -1;
 		}
-		else
-		{
-			glTexImage2D(
-				GL_TEXTURE_2D,
-				0,
-				GL_RGB,
-				FRAME_W,
-				FRAME_H,
-				0,
-				GL_RGB,
-				GL_UNSIGNED_BYTE,
-				rgb
-			);
 
-			next_example(img_fd, &ex);
-			vec3_copy(positions[pos_idx++], ex.state.position);
-			if(pos_idx == 1024) b_log("ROLLOVER");
-			pos_idx %= 1024;
-			yuv422_to_rgb(ex.state.view.luma, ex.state.view.chroma, rgb, FRAME_W, FRAME_H);
+		state = &payload.payload.state;
+		if (payload.header.type == PAYLOAD_PAIR)
+		{
+			state = &payload.payload.pair.state;
 		}
+
+		vec3_copy(positions[pos_idx++], state->position);
+		if(pos_idx == 1024) b_log("ROLLOVER");
+		pos_idx %= 1024;
+		yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		glEnable(GL_TEXTURE_2D);
@@ -198,12 +170,12 @@ int main(int argc, char* argv[])
 		glColor3f(0, 1, 0);
 		glBegin(GL_LINES);
 				glVertex2f(
-					(ex.state.position[0]) / 10.f,
-					(ex.state.position[1]) / 10.f
+					(state->position[0]) / 10.f,
+					(state->position[1]) / 10.f
 				);
 				glVertex2f(
-					(ex.state.position[0] + ex.state.heading[0]) / 10.f,
-					(ex.state.position[1] + ex.state.heading[1]) / 10.f
+					(state->position[0] + state->heading[0]) / 10.f,
+					(state->position[1] + state->heading[1]) / 10.f
 				);
 		glEnd();
 

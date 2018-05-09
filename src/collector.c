@@ -196,9 +196,15 @@ int start_pose_thread(raw_example_t* ex)
 int collection(cam_t* cam)
 {
 	int res = 0, fd = 1;
-	time_t now;
 	int started = 0, updates = 0;
-	dataset_header_t hdr = { MAGIC, 1 };
+	time_t now;
+	playload playload = {
+		.header = {
+			.magic = MAGIC,
+			.type  = PAYLOAD_STATE
+		},
+	};
+	raw_state_t* state = &payload.input;
 
 	pthread_mutex_init(&STATE_LOCK, NULL);
 
@@ -207,16 +213,13 @@ int collection(cam_t* cam)
 		//pwm_set_echo(0x6);
 	}
 
-	// write the header first
-	write(fd, &hdr, sizeof(hdr));
-
 	now = time(NULL);
-	raw_example_t ex = { };
-	start_pose_thread(&ex);
+
+	start_pose_thread(state);
 
 	// wait for the bot to start moving
 	if (WAIT_FOR_MOVEMENT)
-	while (ex.state.vel <= 0)
+	while (state->vel <= 0)
 	{
 		usleep(100000);
 	}
@@ -232,23 +235,23 @@ int collection(cam_t* cam)
 		{
 			b_log("%dHz (%f %f %f) %fm/s",
 				updates,
-				ex.state.position[0],
-				ex.state.position[1],
-				ex.state.position[2],
-				ex.state.vel
+				state->position[0],
+				state->position[1],
+				state->position[2],
+				state->vel
 			);
 			updates = 0;
 			now = time(NULL);
 		}
 
-		if (poll_vision(&ex.state, cam))
+		if (poll_vision(state, cam))
 		{
 			b_bad("Error capturing frame");
 			return -2;
 		}
 
 		pthread_mutex_lock(&STATE_LOCK);
-		if (write(fd, &ex, sizeof(ex)) != sizeof(ex))
+		if (write_pipeline_payload(&payload))
 		{
 			b_bad("Error writing state-action pair");
 			return -3;
@@ -256,7 +259,7 @@ int collection(cam_t* cam)
 		pthread_mutex_unlock(&STATE_LOCK);
 
 
-		if (ex.state.vel == 0 && WAIT_FOR_MOVEMENT)
+		if (state->vel == 0 && WAIT_FOR_MOVEMENT)
 		{
 			exit(0);
 		}
