@@ -4,17 +4,17 @@ CC=gcc
 CXX=g++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
 CXXFLAGS=--std=c++11 -g
-COLLECTOR_SRC=deadreckon.c sys.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c collector.c i2c.c drv_pwm.c cam.c
+DRIVER_SRC= drivers/BNO055_driver/bno055.c drivers/BNO055_driver/bno055_support.c drivers/drv_pwm.c i2c.c
+COLLECTOR_SRC=deadreckon.c sys.c collector.c cam.c $(DRIVER_SRC)
 PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
-PREDICTOR_SRC=predictor.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c
+PREDICTOR_SRC=predictor.c sys.c $(DRIVER_SRC)
 PREDICTOR_LINK=src/nn.h/lib/libnn.a
-ACTUATOR_SRC=actuator.c sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c
-INC=-I./src -I./src/nn.h/src -I./src/BNO055_driver -I./src/linmath -I./src/seen/src -I./src/json -Iml/recognizer/src
+ACTUATOR_SRC=actuator.c sys.c i2c.c drv_pwm.c $(DRIVER_SRC)
+INC=-Isrc -Isrc/nn.h/src -Isrc/drivers -Isrc/drivers/src/BNO055_driver -Isrc/linmath -Isrc/seen/src -Isrc/json -Iml/recognizer/src
 LINK=-lm -lpthread
 VIEWER_SRC=sys.c viewer.c
 VIEWER_LINK=
 BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c botd.c
-BAD_SRC=sys.c goodbad.c
 TST_SRC=masseuse_falloff masseuse_bucket
 
 SIM_SRC=src/sim/sim.cpp src/sys.c src/seen/demos/src/sky.cpp
@@ -85,16 +85,6 @@ bin/predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) $(PREDICTOR_FLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) $(PREDICTOR_LINK)
 
 bin/actuator: $(addprefix obj/,$(ACTUATOR_SRC:.c=.o))
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
-
-
-bin/recognizer: $(addprefix obj/,$(RECOG_SRC:.c=.o))
-	$(CC) $(CFLAGS) -O3 -ftree-vectorize -DMAGIC=$(shell cat magic) $(INC) $(RECOG_INC) $^ -o $@ $(LINK)
-
-bin/bad: $(addprefix obj/,$(BAD_SRC:.c=.o))
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
-
-bin/good: $(addprefix obj/,$(BAD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 bin/botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))

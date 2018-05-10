@@ -2,7 +2,6 @@
 
 #include "sys.h"
 #include "structs.h"
-#include "dataset_hdr.h"
 #include "i2c.h"
 #include "drv_pwm.h"
 #include "cam.h"
@@ -54,7 +53,7 @@ void proc_opts(int argc, const char ** argv)
 		switch (c)
 		{
 			case '?': // Display usage help
-			cli_help(prog_desc, cmds, cmd_desc);
+			cli_help(argv, prog_desc, cmds, cmd_desc);
 			case 'c': // Calibrate
 				MODE = COL_MODE_ACT_CAL;
 				b_log("Calibrating action vector");
@@ -180,7 +179,7 @@ int calibration(cam_settings_t cfg)
  * @param ex - Pointer to raw example pointer
  * @return 0 on success
  */
-int start_pose_thread(raw_example_t* ex)
+int start_pose_thread(payload_t* ex)
 {
 	pthread_t pose_thread;
 	return pthread_create(&pose_thread, NULL, pose_estimator, (void*)ex);
@@ -198,13 +197,13 @@ int collection(cam_t* cam)
 	int res = 0, fd = 1;
 	int started = 0, updates = 0;
 	time_t now;
-	playload playload = {
+	payload_t payload = {
 		.header = {
 			.magic = MAGIC,
 			.type  = PAYLOAD_STATE
 		},
 	};
-	raw_state_t* state = &payload.input;
+	raw_state_t* state = &payload.payload.state;
 
 	pthread_mutex_init(&STATE_LOCK, NULL);
 
@@ -215,7 +214,7 @@ int collection(cam_t* cam)
 
 	now = time(NULL);
 
-	start_pose_thread(state);
+	start_pose_thread(&payload);
 
 	// wait for the bot to start moving
 	if (WAIT_FOR_MOVEMENT)

@@ -6,7 +6,7 @@
 #include "i2c.h"
 #include "drv_pwm.h"
 #include "linmath.h"
-#include "curves.h"
+// #include "curves.h"
 #include "deadreckon.h"
 
 extern int READ_ACTION;
@@ -18,8 +18,9 @@ void* pose_estimator(void* params)
 		.interval_us = 10000
 	};
 
-	raw_example_t* ex = (raw_example_t*)params;
-	raw_action_t action, *act_ptr = NULL;	
+	payload_t* payload = (payload_t*)params;
+	raw_state_t* state = &payload->payload.state;
+	raw_action_t* act_ptr = NULL;
 
 #ifdef __LINUX__
 #warning "Using CPU affinity"
@@ -37,7 +38,7 @@ void* pose_estimator(void* params)
 
 	if(READ_ACTION)
 	{
-		act_ptr = &action;
+		act_ptr = &payload->payload.action;
 	}
 
 	// terminate if the I2C bus isn't open
@@ -51,48 +52,31 @@ void* pose_estimator(void* params)
 		timegate_open(&tg);
 
 		int odo = 0;
-		struct bno055_quaternion_t iq;		
+		struct bno055_quaternion_t iq;
 
 		pthread_mutex_lock(&STATE_LOCK);
-	
-		if(poll_i2c_devs(&ex->state, READ_ACTION ? act_ptr : NULL, &odo))
+
+		if(poll_i2c_devs(state, READ_ACTION ? act_ptr : NULL, &odo))
 		{
 			return (void*)-1;
 		}
 
-	
-
-		if(READ_ACTION)
-		{
-			float mu = bucket_index(act_ptr->steering, &CAL.steering, STEERING_BANDS); 
-			for(int i = STEERING_BANDS; i--;)
-			{
-				ex->action.steering[i] = falloff(mu, i);
-			}
-
-			mu = bucket_index(act_ptr->throttle, &CAL.throttle, THROTTLE_BANDS); 
-			for(int i = THROTTLE_BANDS; i--;)
-			{
-				ex->action.throttle[i] = falloff(mu, i);
-			}
-		}
-
 		const float wheel_cir = 0.082 * M_PI / 4.0;
-		float delta = (odo - last_odo) * wheel_cir; 
+		float delta = (odo - last_odo) * wheel_cir;
 		int cycles_d = POSE_CYCLES - LAST_D_ODO_CYCLE;
 
 		if(delta)
 		{
-			ex->state.vel = delta / (cycles_d * (tg.interval_us / 1.0E6));
+			state->vel = delta / (cycles_d * (tg.interval_us / 1.0E6));
 			LAST_D_ODO_CYCLE = POSE_CYCLES;
 		}
-		
+
 		if(cycles_d * tg.interval_us > 1E6)
 		{
-			ex->state.vel = 0;
+			state->vel = 0;
 		}
 
-		// TODO: pose integration	
+		// TODO: pose integration
 		bno055_read_quaternion_wxyz(&iq);
 		const float m = 0x7fff >> 1;
 		vec3 forward = { 0, 1, 0 };
@@ -103,19 +87,19 @@ void* pose_estimator(void* params)
 		vec3_norm(heading, heading);
 
 		// Essentially, apply a lowpass filter
-		float p = (vec3_mul_inner(heading, ex->state.heading) + 1) / 2;
+		float p = (vec3_mul_inner(heading, state->heading) + 1) / 2;
 
-		if(vec3_len(ex->state.heading) < 0.9f)
+		if(vec3_len(state->heading) < 0.9f)
 		{
 			p = 1;
 		}
 
-		vec3_lerp(ex->state.heading, ex->state.heading, heading, powf(p, 64));
+		vec3_lerp(state->heading, state->heading, heading, powf(p, 64));
 
-		vec3_scale(heading, ex->state.heading, delta);
-		vec3_add(ex->state.position, ex->state.position, heading);
+		vec3_scale(heading, state->heading, delta);
+		vec3_add(state->position, state->position, heading);
 
-		ex->state.distance += delta;
+		state->distance += delta;
 
 		pthread_mutex_unlock(&STATE_LOCK);
 
@@ -124,5 +108,3 @@ void* pose_estimator(void* params)
 		timegate_close(&tg);
 	}
 }
-
-
