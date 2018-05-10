@@ -9,12 +9,12 @@ COLLECTOR_SRC=deadreckon.c sys.c collector.c cam.c $(DRIVER_SRC)
 PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
 PREDICTOR_SRC=predictor.c sys.c $(DRIVER_SRC)
 PREDICTOR_LINK=src/nn.h/lib/libnn.a
-ACTUATOR_SRC=actuator.c sys.c i2c.c drv_pwm.c $(DRIVER_SRC)
+ACTUATOR_SRC=actuator.c sys.c $(DRIVER_SRC)
 INC=-Isrc -Isrc/nn.h/src -Isrc/drivers -Isrc/drivers/src/BNO055_driver -Isrc/linmath -Isrc/seen/src -Isrc/json -Iml/recognizer/src
 LINK=-lm -lpthread
 VIEWER_SRC=sys.c viewer.c
 VIEWER_LINK=
-BOTD_SRC=sys.c i2c.c drv_pwm.c BNO055_driver/bno055.c BNO055_driver/bno055_support.c botd.c
+BOTD_SRC=sys.c botd.c $(DRIVER_SRC)
 TST_SRC=masseuse_falloff masseuse_bucket
 
 SIM_SRC=src/sim/sim.cpp src/sys.c src/seen/demos/src/sky.cpp
@@ -35,8 +35,7 @@ bin/tests:
 	mkdir -p bin/tests
 
 obj:
-	mkdir obj
-	mkdir obj/BNO055_driver
+	mkdir -p obj/drivers/BNO055_driver
 
 bin:
 	mkdir bin

@@ -11,7 +11,6 @@
 
 #include <GLFW/glfw3.h>
 
-#include "dataset_hdr.h"
 #include "structs.h"
 #include "sys.h"
 
