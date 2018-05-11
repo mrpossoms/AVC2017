@@ -2,7 +2,7 @@ $(eval OS := $(shell uname))
 
 CC=gcc
 CXX=g++
-CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500
+CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall
 CXXFLAGS=--std=c++11 -g
 DRIVER_SRC= drivers/BNO055_driver/bno055.c drivers/BNO055_driver/bno055_support.c drivers/drv_pwm.c i2c.c
 COLLECTOR_SRC=deadreckon.c sys.c collector.c cam.c $(DRIVER_SRC)
@@ -100,11 +100,11 @@ bin/sim: magic
 	mkdir -p $@
 	chmod -R 777 $@
 
-install-bot: bin/predictor bin/collector bin/structsize bin/bad bin/good /var/predictor/color/bad /var/predictor/color/good
-	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
+install-bot: bin/predictor bin/actuator bin/collector
+	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/$(prog);)
 
-install-tools: bin/masseuse bin/viewer bin/structsize
-	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/bin/$(prog);)
+install-tools: bin/viewer bin/sim
+	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/$(prog);)
 
 
 tests: bin/tests magic

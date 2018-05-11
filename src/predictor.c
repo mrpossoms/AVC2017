@@ -105,42 +105,42 @@ void proc_opts(int argc, char* const *argv)
 	}
 }
 
-
+#define BUCKET_SIZE 32
 float avoider(raw_state_t* state, float* confidence)
 {
 	color_t rgb[FRAME_W * FRAME_H];
 	const int CHROMA_W = FRAME_W / 2;
-	const int HIST_W = FRAME_W / 16;
-	const int HIST_CENTER = HIST_W / 2;
-	float hist[FRAME_W / 16] = {};
-	float hist_sum = 0;
-	float biggest = 0;
+	const int HIST_W = FRAME_W / BUCKET_SIZE;
+	float hist[FRAME_W / BUCKET_SIZE] = {};
 
 	yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
 
 	for (int ci = 0; ci < HIST_W; ++ci)
 	{
 		float col_sum = 0;
-		float t = ci / (float)HIST_W;
-		int c = ci * 16;
-		int r_stride = (ci >= HIST_CENTER - 0 && ci <= HIST_CENTER + 0) ? 16 : 16;
+		int c = ci * BUCKET_SIZE;
 
-		for (int r = 80; r < FRAME_H - 80; r += r_stride)
+		const int start = 70;
+		const int height = 64;
+		int r_stride = 4;
+
+		for (int r = 0; r < height;)
 		{
 			for (int kr = 16; kr--;)
 			for (int kc = 16; kc--;)
 			{
-				color_t color = rgb[((r + kr) * FRAME_W) + c + kc];
+				color_t color = rgb[((r + start + kr) * FRAME_W) + c + kc];
 				X.data.f[(kr * 48) + kc * 3 + 0] = (color.r / 255.0f) - 0.5f;
 				X.data.f[(kr * 48) + kc * 3 + 1] = (color.g / 255.0f) - 0.5f;
 				X.data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
 			}
 
 			mat_t y = *nn_predict(L, &X);
+			col_sum += (-(y.data.f[0] + y.data.f[1]) + (y.data.f[2]));
 
 			if (FORWARD_STATE)
-			for (int kr = 16; kr--;)
-			for (int kc = 16; kc--;)
+			for (int kr = r_stride; kr--;)
+			for (int kc = BUCKET_SIZE; kc--;)
 			{
 				float chroma_v  __attribute__ ((vector_size(8))) = {};
 				float magenta_none __attribute__ ((vector_size(8))) = { 1, 1 };
@@ -149,23 +149,17 @@ float avoider(raw_state_t* state, float* confidence)
 
 				chroma_v = y.data.f[0] * magenta_none + y.data.f[1] * orange_hay + y.data.f[2] * green_asph;
 				chroma_v = (chroma_v + 1.f) / 2.f;
-				state->view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cr = chroma_v[0] * 255;
-				state->view.chroma[(r + kr) * CHROMA_W + (c + kc) / 2].cb = chroma_v[1] * 255;
+				// state->view.luma[(r + start + kr) * FRAME_W + (c + kc)] *= 0.5;
+				state->view.chroma[(r + start + kr) * CHROMA_W + (c + kc) / 2].cr = chroma_v[0] * 255;
+				state->view.chroma[(r + start + kr) * CHROMA_W + (c + kc) / 2].cb = chroma_v[1] * 255;
 
 			}
 
-			const float power = 0.0f;
-			// hist[ci] = col_sum * (sinf(t * M_PI) * power + (1.f));
-			float w = (float)(FRAME_H) / (float)(r);
-			col_sum += (-(y.data.f[0] + y.data.f[1]) + (y.data.f[2])) * w;// * (sinf(t * M_PI) * power + (1.f))));
-			// col_sum += y.data.f[2];//+= -sinf(t * M_PI) * power + (1.f);
+			r += r_stride;
+			r_stride *= 2;
 		}
 
-		// const float power = 0.5f;
-		// hist[ci] = col_sum * (sinf(t * M_PI) * power + (1.f));
-		// hist[ci] = col_sum * (1.f + powf(sinf(t * M_PI), 3.f) * power);
-
-		hist[ci] = col_sum;
+		hist[ci] = col_sum;// / samples;
 	}
 
 	float best = hist[HIST_W-1];
@@ -248,7 +242,7 @@ raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 	quat q = { 0, 0, sin(M_PI / 4), cos(M_PI / 4) };
 	raw_action_t act = { 117, 117 };
 	vec3 goal_vec, dist_vec = {};
-	vec3 left, proj;
+	vec3 left;
 	float p = 0.5;
 
 	// Visual obstacle avoidance
@@ -296,7 +290,7 @@ raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 
 	// Use a pid controller to regulate the throttle to match the speed driven
 	int throttle_temp = 117 + PID_control(&PID_THROTTLE, inv_conf, state->vel);
-	act.throttle = 220;//MAX(117, throttle_temp);
+	act.throttle = MAX(117, throttle_temp);
 
 	//time_t now = time(NULL);
 	//if (LAST_SECOND != now)
