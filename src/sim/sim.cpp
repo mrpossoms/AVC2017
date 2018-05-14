@@ -20,6 +20,9 @@ static vec4_t material = { 0.1, 0.01, 1, 0.01 };
 static vec3_t light_dir = { 1, -1, 1 };
 static vec3_t tex_control = { 0, 0, 16 };
 
+bool PAUSED = false;
+bool STEER_LOCKED = false;
+
 struct {
 	Vec3 position = { 0, -0.4, 0 };
 	float angle;
@@ -33,7 +36,7 @@ struct {
 		speed *= 1 - friction;
 		Vec3 dir = heading();
 		position = position + (dir * speed);
-		angle += steering_angle * speed;
+		angle += steer_speed();
 		distance += speed;
 	}
 
@@ -41,6 +44,11 @@ struct {
 	{
 		Vec3 dir(cos(angle + M_PI / 2), 0, sin(angle + M_PI / 2));
 		return dir;
+	}
+
+	float steer_speed()
+	{
+		return steering_angle * speed;
 	}
 
 	void turn(float d_theta)
@@ -83,7 +91,11 @@ void poll_ctrl_pipe(int sock)
 			raw_action_t act;
 			if (read(sock, &act, sizeof(act)) == sizeof(act))
 			{
-				vehicle.turn((act.steering - 128.f) / 512.f);
+				if (!STEER_LOCKED)
+				{
+					vehicle.turn((act.steering - 128.f) / 512.f);
+				}
+
 				vehicle.accelerate((act.throttle - 128.f) / 1024.f);
 			}
 		}
@@ -155,8 +167,12 @@ int main (int argc, char* argv[])
 	int sock_fd = open_ctrl_pipe();
 
 	float t = 0;
+
 	renderer.key_pressed = [&](int key) {
 		switch (key) {
+			case GLFW_KEY_L:
+				STEER_LOCKED = true;
+				break;
 			case GLFW_KEY_LEFT:
 				vehicle.turn(-0.2);
 				break;
@@ -173,6 +189,11 @@ int main (int argc, char* argv[])
 				vehicle.accelerate(-0.1);
 			}
 				break;
+			case GLFW_KEY_SPACE:
+			{
+				PAUSED = true;
+			}
+				break;
 		}
 	};
 
@@ -181,6 +202,14 @@ int main (int argc, char* argv[])
 			case GLFW_KEY_LEFT:
 			case GLFW_KEY_RIGHT:
 				vehicle.turn(0);
+			case GLFW_KEY_SPACE:
+			{
+				PAUSED = false;
+			}
+				break;
+			case GLFW_KEY_L:
+				STEER_LOCKED = false;
+				break;
 		}
 	};
 
@@ -197,47 +226,55 @@ int main (int argc, char* argv[])
 		poll_ctrl_pipe(sock_fd);
 
 		Quat q = vehicle.orientation();
-		Quat tilt;
+		Quat tilt, roll, jitter;
 		quat_from_axis_angle(tilt.v, 1, 0, 0, 0.35);
-		vehicle.update();
-		camera.position(vehicle.position);
-		q = tilt * q;
-		camera.orientation(q);
+		quat_from_axis_angle(roll.v, 0, 0, 1, -1.0f * vehicle.speed * vehicle.steer_speed());
+
+		Vec3 ja = seen::rn(); // jitter axis
+		quat_from_axis_angle(jitter.v, ja.x, ja.y, ja.z, seen::rf(-0.01, 0.01) * vehicle.speed);
+
+		if (!PAUSED)
+		{
+			vehicle.update();
+			camera.position(vehicle.position);
+			q = tilt * roll * jitter * q;
+			camera.orientation(q);
+
+			Vec3 heading = vehicle.heading();
+			raw_state_t state = {
+				.vel = vehicle.speed,
+				.distance = vehicle.distance,
+				.heading = { heading.x, heading.z, heading.y },
+				.position = { vehicle.position.x, vehicle.position.z, vehicle.position.y }
+			};
+
+			color_t rgb_buf[FRAME_W * FRAME_H], tmp[FRAME_W * FRAME_H];
+			glReadPixels(0, 0, FRAME_W, FRAME_H, GL_RGB, GL_UNSIGNED_BYTE, (void*)tmp);
+
+			// Add clamped noise to the image
+			for (int i = FRAME_W * FRAME_H * 3; i--;)
+			{
+				int c = ((uint8_t*)tmp)[i] + ((random() % 16) - 8);
+				if (c < 0) c = 0;
+				if (c > 255) c = 255;
+				((uint8_t*)tmp)[i] = c;
+			}
+
+			for (int i = FRAME_H; i--;)
+			{
+				memcpy(rgb_buf + (i * FRAME_W), tmp + ((FRAME_H - i) * FRAME_W), sizeof(color_t) * FRAME_W);
+			}
+
+			rgb_to_yuv422(state.view.luma, state.view.chroma, rgb_buf, FRAME_W, FRAME_H);
+
+			payload.payload.state = state;
+			if (write_pipeline_payload(&payload))
+			{
+				return -1;
+			}
+		}
 
 		renderer.draw(&camera, &scene);
-
-		Vec3 heading = vehicle.heading();
-		raw_state_t state = {
-			.vel = vehicle.speed,
-			.distance = vehicle.distance,
-			.heading = { heading.x, heading.z, heading.y },
-			.position = { vehicle.position.x, vehicle.position.z, vehicle.position.y }
-		};
-
-		color_t rgb_buf[FRAME_W * FRAME_H], tmp[FRAME_W * FRAME_H];
-		glReadPixels(0, 0, FRAME_W, FRAME_H, GL_RGB, GL_UNSIGNED_BYTE, (void*)tmp);
-
-		// Add clamped noise to the image
-		for (int i = FRAME_W * FRAME_H * 3; i--;)
-		{
-			int c = ((uint8_t*)tmp)[i] + ((random() % 16) - 8);
-			if (c < 0) c = 0;
-			if (c > 255) c = 255;
-			((uint8_t*)tmp)[i] = c;
-		}
-
-		for (int i = FRAME_H; i--;)
-		{
-			memcpy(rgb_buf + (i * FRAME_W), tmp + ((FRAME_H - i) * FRAME_W), sizeof(color_t) * FRAME_W);
-		}
-
-		rgb_to_yuv422(state.view.luma, state.view.chroma, rgb_buf, FRAME_W, FRAME_H);
-
-		payload.payload.state = state;
-		if (write_pipeline_payload(&payload))
-		{
-			return -1;
-		}
 
 		// sleep(1);
 		// usleep(1000000);

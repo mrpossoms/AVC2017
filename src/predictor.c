@@ -106,12 +106,15 @@ void proc_opts(int argc, char* const *argv)
 }
 
 #define BUCKET_SIZE 32
-float avoider(raw_state_t* state, float* confidence)
+#define HIST_W (FRAME_W / BUCKET_SIZE)
+#define HIST_MID (HIST_W >> 1)
+void avoider(raw_state_t* state, float* throttle, float* steering)
 {
 	color_t rgb[FRAME_W * FRAME_H];
 	const int CHROMA_W = FRAME_W / 2;
-	const int HIST_W = FRAME_W / BUCKET_SIZE;
-	float hist[FRAME_W / BUCKET_SIZE] = {};
+	time_t now = time(NULL);
+	float hist[HIST_W] = {};
+	float confidence = 0;
 
 	yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
 
@@ -123,6 +126,8 @@ float avoider(raw_state_t* state, float* confidence)
 		const int start = 70;
 		const int height = 64;
 		int r_stride = 4;
+		int samples = 0;
+		float col_conf = 0;
 
 		for (int r = 0; r < height;)
 		{
@@ -155,12 +160,20 @@ float avoider(raw_state_t* state, float* confidence)
 
 			}
 
+			++samples;
+			col_conf += y.data.f[2];
 			r += r_stride;
 			r_stride *= 2;
 		}
 
-		hist[ci] = col_sum;// / samples;
+		if (ci == HIST_W >> 1)
+		{
+			confidence = col_conf / samples;
+		}
+		hist[ci] = col_sum;
 	}
+
+	// *confidence /= (float)HIST_W;
 
 	float best = hist[HIST_W-1];
 	int cont_r[2] = { HIST_W, HIST_W };
@@ -194,110 +207,89 @@ float avoider(raw_state_t* state, float* confidence)
 		}
 	}
 
-
-	int cont_width = (cont_r[1] - cont_r[0]);
-	int target_idx;
+	int target_idx = (cont_r[0] + cont_r[1]) >> 1;
 
 	// Decide which place in the region we should steer toward
-	if (cont_r[0] > 0 && cont_r[1] == FRAME_H)
+	if (target_idx > HIST_MID)
 	{
-		target_idx = cont_r[0];// + cont_width * 0.75f;
+		target_idx = cont_r[1];// + cont_width * 0.75f;
 	}
-	else if (cont_r[0] == 0 && cont_r[1] < FRAME_H)
+	else if (target_idx < HIST_MID)
 	{
 		target_idx = cont_r[0];// + cont_width * 0.25f;
 	}
-	else
-	{
-		target_idx = cont_r[0] + (cont_width >> 1);
-	}
 
-
-
-	// float weight = biggest / (float)FRAME_H;
 	float fp = (target_idx / (float)HIST_W);
-	static float ap;
+	static struct {
+		float steering;
+		float throttle;
+	} lpf;
+	static time_t backup_start = 0;
 
-	{
-		int ci = fp * FRAME_W;
+	{ // Color the region and target index for debugging
+		int ci;
+
+		for (ci = cont_r[0] * BUCKET_SIZE; ci < cont_r[1] * BUCKET_SIZE; ci+=2)
+		for (int i = FRAME_H; i--;)
+		{
+			state->view.luma[i * FRAME_W + ci] = 128;
+		}
+
+		ci = fp * FRAME_W;
 		for (int i = FRAME_H; i--;)
 		{
 			state->view.luma[i * FRAME_W + ci] = 0;
 		}
 	}
 
+	// filter the steering and throttle values.
+	lpf.steering =  0.8 * lpf.steering + 0.2 * (fp);
+	lpf.throttle =  0.9 * lpf.throttle + 0.1 * (confidence);
 
-	// *confidence = MIN(weight + 0.5, 1);
-	ap =  0.8 * ap + 0.2 * (1 - fp);
+	// Let the confidence infered from classifying the video
+	// frame to directly set the throttle
+	if (confidence > 0.25)
+	{
+		lpf.throttle = confidence;
+	}
+	else
+	{ // Or start backing up if, confidence is poor.
+		backup_start = now + 1;
+	}
 
-	b_log("steer: %f", fp);
 
-	return fp;
+	if (backup_start > now)
+	{ // force a reverse throttle value if we are backing up
+		lpf.throttle = -0.05;
+	}
+
+
+	if (lpf.throttle < 0.25f)
+	{ // flip steering angle if reversing
+		*steering = lpf.steering < 0.5f ? 1 : 0;
+	}
+	else
+	{ // otherwise steer normally
+		*steering = lpf.steering;
+	}
+
+	*throttle = lpf.throttle;
 }
 
 time_t LAST_SECOND;
 raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 {
-
-	quat q = { 0, 0, sin(M_PI / 4), cos(M_PI / 4) };
 	raw_action_t act = { 117, 117 };
-	vec3 goal_vec, dist_vec = {};
-	vec3 left;
-	float p = 0.5;
 
 	// Visual obstacle avoidance
-	float conf = 0;
-	float avd_p = avoider(state, &conf);
-	float inv_conf = 1 - conf;
-
-	// Pre recorded path guidance
-	if (USE_DEADRECKONING && goal)
-	{
-		if (vec3_len(state->heading) == 0)
-		{
-			return act;
-		}
-
-		// Compute the total delta vector between the car, and the goal
-		// then normalize the delta to get the goal heading
-		// rotate the heading vector about the z-axis to get the left vector
-		vec3_sub(dist_vec, goal->position, state->position);
-		vec3_norm(goal_vec, dist_vec);
-		quat_mul_vec3(left, q, state->heading);
-
-		// Determine if we are pointing toward the goal with the 'coincidence' value
-		// Project the goal vector onto the left vector to determine steering direction
-		// remap range to [0, 1]
-		float coincidence = vec3_mul_inner(state->heading, goal_vec);
-		p = (vec3_mul_inner(left, goal_vec) + 1) / 2;
-
-		// If pointing away, steer all the way to the right or left, so
-		// p will be either 1 or 0
-		if (coincidence < 0)
-		{
-			p = roundf(p);
-		}
-
-		p = inv_conf * p + conf * avd_p;
-	}
-	else
-	{
-		p = avd_p;
-	}
+	float steer = 0.5, throttle = 0.5;
+	avoider(state, &throttle, &steer);
 
 	// Lerp between right and left.
-	act.steering = 255 * p; //CAL.steering.max * (1 - p) + CAL.steering.min * p;
+	act.steering = 255 * steer; //CAL.steering.max * (1 - p) + CAL.steering.min * p;
 
 	// Use a pid controller to regulate the throttle to match the speed driven
-	int throttle_temp = 117 + PID_control(&PID_THROTTLE, inv_conf, state->vel);
-	act.throttle = MAX(117, throttle_temp);
-
-	//time_t now = time(NULL);
-	//if (LAST_SECOND != now)
-	{
-		// b_log("throttle: %d", act.throttle);
-	//	LAST_SECOND = now;
-	}
+	act.throttle = 100 + throttle * 155;
 
 	return act;
 }
