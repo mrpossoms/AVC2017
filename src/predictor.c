@@ -3,7 +3,6 @@
 #include <stdarg.h>
 #include "sys.h"
 #include "structs.h"
-#include "pid.h"
 
 #include "nn.h"
 
@@ -16,12 +15,6 @@ waypoint_t* NEXT_WPT;
 
 int FORWARD_STATE = 0;
 int USE_DEADRECKONING = 1;
-
-PID_t PID_THROTTLE = {
-	.p = 2,
-	.i = 0.25,
-	.d = 2,
-};
 
 mat_t X;
 nn_layer_t* L;
@@ -125,7 +118,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 
 		const int start = 70;
 		const int height = 64;
-		int r_stride = 4;
+		int r_stride = 1;
 		int samples = 0;
 		float col_conf = 0;
 
@@ -154,7 +147,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 
 				chroma_v = y.data.f[0] * magenta_none + y.data.f[1] * orange_hay + y.data.f[2] * green_asph;
 				chroma_v = (chroma_v + 1.f) / 2.f;
-				// state->view.luma[(r + start + kr) * FRAME_W + (c + kc)] *= 0.5;
+
 				state->view.chroma[(r + start + kr) * CHROMA_W + (c + kc) / 2].cr = chroma_v[0] * 255;
 				state->view.chroma[(r + start + kr) * CHROMA_W + (c + kc) / 2].cb = chroma_v[1] * 255;
 

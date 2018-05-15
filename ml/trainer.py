@@ -4,14 +4,14 @@ from PIL import Image
 from random import shuffle
 import sys
 import os
-import time
 import signal
 import struct
 
 IS_TRAINING = True
-
 PATCH_SIDE = 16
 X_SIZE = (3 * (PATCH_SIDE ** 2))
+TRAINING_SET_BASE='ds/training/aug'
+
 
 def handle_sig_done(*args):
     global IS_TRAINING
@@ -25,9 +25,11 @@ def handle_sig_done(*args):
 
 signal.signal(signal.SIGINT, handle_sig_done)
 
+
 def process_example(x):
     # mu = np.average(x, axis=(0, 1))
     return (np.array((x).flatten(), dtype=np.float32) / 255.0) - 0.5
+
 
 def activation_map(model, in_path, out_path):
     img = Image.open(in_path).convert('RGB')
@@ -42,7 +44,6 @@ def activation_map(model, in_path, out_path):
     px_w = act_w * stride
 
     act_map = np.zeros((w, h, 3))
-
 
     def in_fn():
         X = []
@@ -80,8 +81,6 @@ def activation_map(model, in_path, out_path):
         # _y /= _y.max()
 
         color = np.array([[[1, 1, 1]]], dtype=np.float32)
-
-
         color *= np.array(_y)
 
         ix = x * stride
@@ -93,16 +92,17 @@ def activation_map(model, in_path, out_path):
 
 
 def filenames_labels():
+    global TRAINING_SET_BASE
     files_labels = []
 
-    for f in os.listdir('imgs/0'):
-        files_labels += [('imgs/0/' + f, [1, 0, 0])]
+    for f in os.listdir(TRAINING_SET_BASE + '/0'):
+        files_labels += [(TRAINING_SET_BASE + '/0/' + f, [1, 0, 0])]
 
-    for f in os.listdir('imgs/1'):
-        files_labels += [('imgs/1/' + f, [0, 1, 0])]
+    for f in os.listdir(TRAINING_SET_BASE + '/1'):
+        files_labels += [(TRAINING_SET_BASE + '/1/' + f, [0, 1, 0])]
 
-    for f in os.listdir('imgs/2'):
-        files_labels += [('imgs/2/' + f, [0, 0, 1])]
+    for f in os.listdir(TRAINING_SET_BASE + '/2'):
+        files_labels += [(TRAINING_SET_BASE + '/2/' + f, [0, 0, 1])]
 
     shuffle(files_labels)
 
@@ -278,7 +278,6 @@ def model(features, labels, mode):
 def export_model(model):
     for param_name in model.get_variable_names():
         comps = param_name.split('/')
-        name = comps[0]
 
         if len(comps) < 2: continue
         if comps[-1] in ['kernel', 'bias']:
@@ -340,7 +339,7 @@ def train(hyper_params):
         num_epochs=None,
         shuffle=True)
 
-    texture_classifier.train(my_input_fn, [logging_hook], 100)
+    texture_classifier.train(my_input_fn, [logging_hook], 1000)
 
     ds_X, ds_Y = minibatch(dev_set, 0, size=100)
     epochs = hyper_params['epochs']
@@ -366,7 +365,7 @@ def train(hyper_params):
 
     if epochs < 0:
         for i in range(4):
-            activation_map(texture_classifier, "test%d.png" % i, "act_map%d.png" % i)
+            activation_map(texture_classifier, "ds/test/%d.png" % i, "act_map%d.png" % i)
 
     return ts_score, ds_score
 

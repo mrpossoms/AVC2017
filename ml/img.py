@@ -1,10 +1,14 @@
-#/bin/python3
+#python3
 
 import sys
 import http.client
+import sym
 from bs4 import BeautifulSoup
 
-#query = '/search?tbm=isch&q=%s' % ('hay')
+
+symli = sym.Li('Scrapes images from google image search and writes their urls to stdout')
+symli.required('subject', 'search term to query google with')
+symli.required('count', 'number of examples to retrieve')
 
 
 def img_search(subject):
@@ -29,9 +33,9 @@ def get(url):
 
 
 
-subject = sys.argv[1]
+subject = symli['subject']
 alt_name = subject.replace('+', ' ')
-m = int(sys.argv[2])
+m = int(symli['count'])
 
 search_url = img_search(subject)
 examples_found = 0
@@ -47,4 +51,3 @@ while examples_found < m:
             break
 
     search_url = 'www.google.com' + page.find('a', attrs={'style':'text-align:left'})['href']
-    sys.stderr.write(search_url)
