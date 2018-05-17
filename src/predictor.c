@@ -390,15 +390,15 @@ int main(int argc, char* const argv[])
 
 	while(1)
 	{
-		payload_t payload = {};
+		message_t msg = {};
 
-		if (!read_pipeline_payload(&payload, PAYLOAD_STATE))
+		if (!read_pipeline_payload(&msg, PAYLOAD_STATE))
 		{
-			raw_state_t* state = &payload.payload.state;
+			raw_state_t* state = &msg.payload.state;
 			raw_action_t act = predict(state, NEXT_WPT);
 
-			payload.header.type = PAYLOAD_ACTION;
-			payload.payload.pair.action = act;
+			msg.header.type = PAYLOAD_ACTION;
+			msg.payload.pair.action = act;
 
 			if (USE_DEADRECKONING)
 			{
@@ -419,10 +419,10 @@ int main(int argc, char* const argv[])
 
 			if (FORWARD_STATE)
 			{
-				payload.header.type = PAYLOAD_PAIR;
+				msg.header.type = PAYLOAD_PAIR;
 			}
 
-			if (write_pipeline_payload(&payload))
+			if (write_pipeline_payload(&msg))
 			{
 				b_bad("Failed to write payload");
 				return -1;

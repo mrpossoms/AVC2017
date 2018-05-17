@@ -95,7 +95,7 @@ int main(int argc, char* argv[])
 	createTexture(&frameTex);
 
 	color_t rgb[FRAME_W * FRAME_H] = {};
-	payload_t payload = {};
+	message_t msg = {};
 
 	vec3 positions[1024];
 	int pos_idx = 0;
@@ -123,15 +123,15 @@ int main(int argc, char* argv[])
 			rgb
 		);
 
-		if (read_pipeline_payload(&payload, PAYLOAD_STATE))
+		if (read_pipeline_payload(&msg, PAYLOAD_STATE))
 		{
 			return -1;
 		}
 
-		state = &payload.payload.state;
-		if (payload.header.type == PAYLOAD_PAIR)
+		state = &msg.payload.state;
+		if (msg.header.type == PAYLOAD_PAIR)
 		{
-			state = &payload.payload.pair.state;
+			state = &msg.payload.pair.state;
 		}
 
 		vec3_copy(positions[pos_idx++], state->position);

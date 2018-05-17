@@ -26,7 +26,17 @@ scrape: $(addprefix ds/training/,$(CLASSES))
 .PHONY: augment
 augment: $(addprefix ds/training/aug/,$(CLASSES))
 	@echo "Augmented class examples"
-	
+
 .PHONY: train
 train: augment
-	$(PY) trainer.py	
+	$(PY) trainer.py
+
+.PHONY: help
+help:
+	@echo "Availible tasks"
+	@echo "make clean               Remove all downloaded or synthesized training data"
+	@echo "make ds/training/[N]     Download images for class N"
+	@echo "make ds/training/aug/[N] Augment images for class N"
+	@echo "make scrape              Download images for all specified classes"
+	@echo "make augment             Augment all downloaded image classes"
+	@echo "make train               Begin training the network with data in ds/training"

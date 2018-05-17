@@ -2,7 +2,7 @@ $(eval OS := $(shell uname))
 
 CC=gcc
 CXX=g++
-CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall
+CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall -Wno-implicit-function-declaration
 CXXFLAGS=--std=c++11 -g
 DRIVER_SRC= drivers/BNO055_driver/bno055.c drivers/BNO055_driver/bno055_support.c drivers/drv_pwm.c i2c.c
 COLLECTOR_SRC=deadreckon.c sys.c collector.c cam.c $(DRIVER_SRC)

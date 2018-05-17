@@ -46,8 +46,8 @@ long diff_us(struct timeval then, struct timeval now);
 void timegate_open(timegate_t* tg);
 void timegate_close(timegate_t* tg);
 
-int write_pipeline_payload(payload_t* payload);
-int read_pipeline_payload(payload_t* payload, payload_type_t exp_type);
+int write_pipeline_payload(message_t* msg);
+int read_pipeline_payload(message_t* msg, payload_type_t exp_type);
 
 int calib_load(const char* path, calib_t* cal);
 

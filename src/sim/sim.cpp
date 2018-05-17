@@ -213,7 +213,7 @@ int main (int argc, char* argv[])
 		}
 	};
 
-	payload_t payload = {
+	message_t msg = {
 		.header = {
 			.magic = MAGIC,
 			.type  = PAYLOAD_STATE
@@ -267,8 +267,8 @@ int main (int argc, char* argv[])
 
 			rgb_to_yuv422(state.view.luma, state.view.chroma, rgb_buf, FRAME_W, FRAME_H);
 
-			payload.payload.state = state;
-			if (write_pipeline_payload(&payload))
+			msg.payload.state = state;
+			if (write_pipeline_payload(&msg))
 			{
 				return -1;
 			}

@@ -20,9 +20,6 @@
 #define LUMA_PIXELS (FRAME_W * FRAME_H)
 #define CHRO_PIXELS (FRAME_W / 2 * FRAME_H)
 
-#define STEERING_BANDS 15
-#define THROTTLE_BANDS 7
-
 
 typedef union {
 	struct {
@@ -76,9 +73,6 @@ typedef struct {
 } raw_state_t;
 
 
-typedef float state_vector_t[3 + 3 + 1 + 1];
-
-
 struct waypoint;
 typedef struct waypoint {
 	vec3 position;
@@ -121,7 +115,7 @@ typedef struct {
 			raw_state_t state;
 		} pair;
 	} payload;
-} payload_t;
+} message_t;
 
 #define VEC_DIMENSIONS_F(v) (sizeof((v)) / sizeof(float))
 

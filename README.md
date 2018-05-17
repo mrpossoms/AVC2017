@@ -11,7 +11,7 @@ $ ./sim | ./predictor -d=n -f | ./actuator -f | ./viewer
 Each program with the exception of a few can receive some information over stdin, perform some processing or action, the write different information over stdout. The programs in the suite included so far are the following.
 
 ### sim
-A graphical simulator to replicate the competition environment for testing and experimentation. It is build on OpenGL 4.2 so a modern video card is necessary for its use. sim generates the same type of data
+A graphical simulator to replicate the competition environment for testing and experimentation. It is built on OpenGL 4.2 so a modern video card is necessary for its use. sim generates the same type of data.
 
 ### collector
 Gathers data from physical sensors and forwards it over stdout.

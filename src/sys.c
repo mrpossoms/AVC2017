@@ -130,17 +130,17 @@ void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const
 }
 
 
-int write_pipeline_payload(payload_t* payload)
+int write_pipeline_payload(message_t* msg)
 {
 	size_t expected_size = sizeof(dataset_hdr_t);
-	if (!payload) return -1;
+	if (!msg) return -1;
 
-	if (write(1, &payload->header, expected_size) != expected_size)
+	if (write(1, &msg->header, expected_size) != expected_size)
 	{
 		return -2;
 	}
 
-	switch (payload->header.type)
+	switch (msg->header.type)
 	{
 		case PAYLOAD_ACTION:
 			expected_size = sizeof(raw_action_t);
@@ -153,7 +153,7 @@ int write_pipeline_payload(payload_t* payload)
 			break;
 	}
 
-	if (write(1, &payload->payload, expected_size) != expected_size)
+	if (write(1, &msg->payload, expected_size) != expected_size)
 	{
 		return -3;
 	}
@@ -162,33 +162,33 @@ int write_pipeline_payload(payload_t* payload)
 }
 
 
-int read_pipeline_payload(payload_t* payload, payload_type_t exp_type)
+int read_pipeline_payload(message_t* msg, payload_type_t exp_type)
 {
 	size_t expected_size = sizeof(dataset_hdr_t);
-	if (!payload) return -1;
+	if (!msg) return -1;
 
-	if (read(0, &payload->header, expected_size) != expected_size)
+	if (read(0, &msg->header, expected_size) != expected_size)
 	{
 		return -2;
 	}
 
-	if (payload->header.magic != MAGIC)
+	if (msg->header.magic != MAGIC)
 	{
 		b_bad(
 			"Incorrect magic number got: %lx expected %lx",
-			payload->header.magic,
+			msg->header.magic,
 			MAGIC
 		);
 		return -4;
 	}
 
-	if (!(payload->header.type & exp_type))
+	if (!(msg->header.type & exp_type))
 	{
-		b_bad("Incompatible payload type %lx / %lx", payload->header.type, exp_type);
+		b_bad("Incompatible msg type %lx / %lx", msg->header.type, exp_type);
 		return -5;
 	}
 
-	switch (payload->header.type)
+	switch (msg->header.type)
 	{
 		case PAYLOAD_ACTION:
 			expected_size = sizeof(raw_action_t);
@@ -203,7 +203,7 @@ int read_pipeline_payload(payload_t* payload, payload_type_t exp_type)
 
 	size_t needed = expected_size;
 	off_t  off = 0;
-	uint8_t* buf = (uint8_t*)&payload->payload;
+	uint8_t* buf = (uint8_t*)&msg->payload;
 
 	while(needed)
 	{

@@ -14,6 +14,8 @@ int I2C_BUS;
 calib_t CAL;
 uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
 
+time_t LAST_SECOND;
+
 
 void proc_opts(int argc, char* const *argv)
 {
@@ -43,12 +45,9 @@ void proc_opts(int argc, char* const *argv)
 }
 
 
-time_t LAST_SECOND;
-
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);
-	raw_action_t act = { 117, 117 };
 	pwm_set_echo(0x6);
 	usleep(10000);
 	exit(0);
@@ -82,13 +81,13 @@ int main(int argc, char* const argv[])
 
 	while(1)
 	{
-		payload_t payload = {};
+		message_t msg = {};
 
-		if (!read_pipeline_payload(&payload, PAYLOAD_PAIR))
+		if (!read_pipeline_payload(&msg, PAYLOAD_PAIR))
 		{
 			if (I2C_BUS > -1)
 			{
-				pwm_set_action(&payload.payload.action);
+				pwm_set_action(&msg.payload.action);
 			}
 			else
 			{
@@ -100,13 +99,13 @@ int main(int argc, char* const argv[])
 				}
 				else
 				{
-					write(sim_pipe, &payload.payload.action, sizeof(payload.payload.action));
+					write(sim_pipe, &msg.payload.action, sizeof(msg.payload.action));
 				}
 			}
 
 			if (FORWARD_STATE)
 			{
-				if (write_pipeline_payload(&payload))
+				if (write_pipeline_payload(&msg))
 				{
 					b_bad("Failed to write payload");
 					return -1;

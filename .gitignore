@@ -11,4 +11,5 @@ src/nn.h
 magic
 actions.cal
 ml/recognizer/model/
+ml/.*
 .data
