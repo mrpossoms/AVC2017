@@ -24,7 +24,8 @@ float TOTAL_DISTANCE;
 void proc_opts(int argc, char* const *argv)
 {
 	const char* cmds = "hfr:sd:";
-	const char* prog_desc = "Collects data from sensors, compiles them into system state packets. Then forwards them over stdout";
+	const char* prog_desc = "Collects data from sensors, compiles them into system\
+	                         state packets. Then forwards them over stdout";
 	const char* cmd_desc[] = {
 		"Show this help",
 		"Forward system state over stdout",
@@ -108,6 +109,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	time_t now = time(NULL);
 	float hist[HIST_W] = {};
 	float confidence = 0;
+	float col_conf_best = 0;
 
 	yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
 
@@ -120,7 +122,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 		const int height = 64;
 		int r_stride = 1;
 		int samples = 0;
-		float col_conf = 0;
+		float col_conf_sum = 0;
 
 		for (int r = 0; r < height;)
 		{
@@ -154,17 +156,21 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 			}
 
 			++samples;
-			col_conf += y.data.f[2];
+			col_conf_sum += y.data.f[2];
+
+
 			r += r_stride;
 			r_stride *= 2;
 		}
 
-		if (ci == HIST_W >> 1)
-		{
-			confidence = col_conf / samples;
-		}
+		float col_conf_avg = col_conf_sum / samples;
+		if (col_conf_avg > col_conf_best) { col_conf_best = col_conf_avg; }
+
 		hist[ci] = col_sum;
+		confidence += col_conf_avg;
 	}
+	
+	confidence /= (float)HIST_W;
 
 	// *confidence /= (float)HIST_W;
 
@@ -251,7 +257,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	}
 
 
-	if (backup_start > now)
+	if (confidence <= 0.25 || col_conf_best < 0.4)
 	{ // force a reverse throttle value if we are backing up
 		lpf.throttle = -0.05;
 	}
