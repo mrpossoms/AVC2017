@@ -100,6 +100,7 @@ int main(int argc, char* argv[])
 	vec3 positions[1024];
 	int pos_idx = 0;
 	int use_sleep = 0;
+	int img_fd = 0;
 
 	if(argc >= 2)
 	{
