@@ -3,7 +3,7 @@
 
 #include <time.h>
 
-#ifdef __LINUX__
+#ifdef __linux__
 #include <linux/videodev2.h>
 #include <inttypes.h>
 #include <sys/types.h>

@@ -22,7 +22,7 @@ void* pose_estimator(void* params)
 	raw_state_t* state = &msg->payload.state;
 	raw_action_t* act_ptr = NULL;
 
-#ifdef __LINUX__
+#ifdef __linux__
 #warning "Using CPU affinity"
 	// Run exclusively on the 4th core
 	cpu_set_t* pose_cpu = CPU_ALLOC(1);
