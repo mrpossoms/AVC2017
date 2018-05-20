@@ -5,7 +5,7 @@ jobs:
     # working_directory: ~/demo_project
 
     docker:
-      - image: https://github.com/mrpossoms/UbuntuArtfulDev 
+      - image: https://github.com/mrpossoms/ubuntuartfuldev 
         environment:
 
     steps:
