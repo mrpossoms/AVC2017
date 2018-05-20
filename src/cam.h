@@ -19,7 +19,7 @@ typedef struct {
 typedef struct {
 	int fd;
 	void** frame_buffers;
-#ifdef __LINUX
+#ifdef __linux__
 	struct v4l2_buffer buffer_info;
 #endif
 } cam_t;
