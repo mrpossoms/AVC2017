@@ -18,8 +18,8 @@ void* pose_estimator(void* params)
 		.interval_us = 10000
 	};
 
-	payload_t* payload = (payload_t*)params;
-	raw_state_t* state = &payload->payload.state;
+	message_t* msg = (message_t*)params;
+	raw_state_t* state = &msg->payload.state;
 	raw_action_t* act_ptr = NULL;
 
 #ifdef __LINUX__
@@ -38,7 +38,7 @@ void* pose_estimator(void* params)
 
 	if(READ_ACTION)
 	{
-		act_ptr = &payload->payload.action;
+		act_ptr = &msg->payload.action;
 	}
 
 	// terminate if the I2C bus isn't open

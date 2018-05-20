@@ -1,0 +1,32 @@
+version: 2
+
+jobs:
+  build:
+    # working_directory: ~/demo_project
+
+    docker:
+      - image: walberla/buildenv-ubuntu-gcc:5
+        environment:
+
+    steps:
+      - checkout
+
+      - run:
+          name: Compile collector
+          command: make bin/collector
+
+      - run:
+          name: Compile predictor 
+          command: make bin/predictor
+
+      - run:
+          name: Compile actuator 
+          command: make bin/actuator
+
+      #- run:
+      #    name: Compile viewer 
+      #    command: make bin/viewer
+
+      #- run:
+      #    name: Compile sim 
+      #    command: make bin/sim

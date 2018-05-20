@@ -32,8 +32,6 @@ pthread_mutex_t STATE_LOCK;
  */
 void proc_opts(int argc, const char ** argv)
 {
-	int no_opts = 1;
-
 	const char* cmds = "?cniaf:";
 	const char* prog_desc = "Collects data from sensors, compiles them into system state packets. Then forwards them over stdout";
 	const char* cmd_desc[] = {
@@ -176,13 +174,13 @@ int calibration(cam_settings_t cfg)
 
 /**
  * @brief Spawns a new position estimation thread
- * @param ex - Pointer to raw example pointer
+ * @param ex - Pointer to a message instance
  * @return 0 on success
  */
-int start_pose_thread(payload_t* ex)
+int start_pose_thread(message_t* msg)
 {
 	pthread_t pose_thread;
-	return pthread_create(&pose_thread, NULL, pose_estimator, (void*)ex);
+	return pthread_create(&pose_thread, NULL, pose_estimator, (void*)msg);
 }
 
 /**
@@ -194,27 +192,19 @@ int start_pose_thread(payload_t* ex)
  */
 int collection(cam_t* cam)
 {
-	int res = 0, fd = 1;
-	int started = 0, updates = 0;
+	int updates = 0;
 	time_t now;
-	payload_t payload = {
+	message_t msg = {
 		.header = {
 			.magic = MAGIC,
 			.type  = PAYLOAD_STATE
 		},
 	};
-	raw_state_t* state = &payload.payload.state;
+	raw_state_t* state = &msg.payload.state;
 
 	pthread_mutex_init(&STATE_LOCK, NULL);
-
-	if (READ_ACTION)
-	{
-		//pwm_set_echo(0x6);
-	}
-
 	now = time(NULL);
-
-	start_pose_thread(&payload);
+	start_pose_thread(&msg);
 
 	// wait for the bot to start moving
 	if (WAIT_FOR_MOVEMENT)
@@ -250,7 +240,7 @@ int collection(cam_t* cam)
 		}
 
 		pthread_mutex_lock(&STATE_LOCK);
-		if (write_pipeline_payload(&payload))
+		if (write_pipeline_payload(&msg))
 		{
 			b_bad("Error writing state-action pair");
 			return -3;
