@@ -5,7 +5,7 @@ jobs:
     # working_directory: ~/demo_project
 
     docker:
-      - image: r3v3nx/ubuntu 
+      - image: r3v3nx/ubuntu:v2 
         environment:
 
     steps:
