@@ -23,7 +23,7 @@ for DEPENDENCY in $(cat depends); do
 	DEPENDENCY=$(echo $DEPENDENCY | tr -d '\n');
 	echo $DEPENDENCY;
 	LIB_DIR=$(find_lib_dir $DEPENDENCY)
-	INC_DIR=${LIB_DIR/lib/include}
+	INC_DIR=$(dirname $LIB_DIR)/include
 
 
 	if [ -z $LIB_DIR ]
