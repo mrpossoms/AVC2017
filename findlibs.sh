@@ -2,29 +2,18 @@
 
 cat /dev/null > findings.mk
 
-find_lib_dir() {
-	LIB=$1
-	LIB_PATH=$(find /opt /usr/local -name $LIB -print -quit)
-
-	if [ -z $LIB_PATH ]
-	then
-		echo "";
-	else
-		echo ${LIB_PATH/\/$LIB/};
-	fi
-}
-
 MAKE_LIB=
 MAKE_INC=
 
 echo "Finding libraries..."
 
 for DEPENDENCY in $(cat depends); do
-	DEPENDENCY=$(echo $DEPENDENCY | tr -d '\n');
 	echo $DEPENDENCY;
-	LIB_DIR=$(find_lib_dir $DEPENDENCY)
+	EXACT_PATH=$(find /opt /usr/local -name "$DEPENDENCY" -print -quit)
+	LIB_DIR=$(dirname $EXACT_PATH)
+	echo $LIB_DIR	
 	INC_DIR=$(dirname $LIB_DIR)/include
-
+	
 
 	if [ -z $LIB_DIR ]
 	then
