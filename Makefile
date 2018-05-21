@@ -1,7 +1,5 @@
 $(eval OS := $(shell uname))
 
-include findings.mk
-
 CC=gcc
 CXX=g++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall -Wno-implicit-function-declaration

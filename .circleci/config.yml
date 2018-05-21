@@ -12,10 +12,6 @@ jobs:
       - checkout
 
       - run:
-          name: Find depends
-          command: ./findlibs.sh
-
-      - run:
           name: Compile collector
           command: make bin/collector
 
