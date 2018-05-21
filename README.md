@@ -2,6 +2,8 @@
 
 ![simulator running](https://raw.githubusercontent.com/mrpossoms/AVC2017/master/example.gif)
 
+Build: [![CircleCI](https://circleci.com/gh/mrpossoms/AVC2017/tree/master.svg?style=svg)](https://circleci.com/gh/mrpossoms/AVC2017/tree/master)
+
 Autonomous driving software specifically designed for Sparkfun's annual AVC competitions. The system is broken into several different programs each only performing a specific task (in the spirit of unix). The programs may be chained together in a pipeline to easily change the system's function on the fly. For example, the following command would display something like video above.
 
 ```bash
