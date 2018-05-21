@@ -1,5 +1,7 @@
 $(eval OS := $(shell uname))
 
+include findings.mk
+
 CC=gcc
 CXX=g++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall -Wno-implicit-function-declaration
@@ -74,9 +76,6 @@ magic: src/structs.h src/linmath.h src/nn.h src/seen src/json bin/data bin/scene
 bin/structsize: bin
 	$(CC) $(CFLAGS) $(INC) src/size.c -o structsize
 
-bin/viewer: $(addprefix obj/,$(VIEWER_SRC:.c=.o))
-	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) -L/usr/local/lib $(INC) $^ -o $@ $(VIEWER_LINK) $(LINK)
-
 bin/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
@@ -89,8 +88,11 @@ bin/actuator: $(addprefix obj/,$(ACTUATOR_SRC:.c=.o))
 bin/botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
+bin/viewer: $(addprefix obj/,$(VIEWER_SRC:.c=.o))
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $^ -o $@ $(VIEWER_LINK) $(LINK)
+
 bin/sim: magic
-	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(INC) $(SIM_INC) $(SIM_SRC) -o $@ $(VIEWER_LINK) $(LINK) -lpng src/seen/lib/libseen.a
+	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $(SIM_INC) $(SIM_SRC) -o $@ $(VIEWER_LINK) $(LINK) -lpng src/seen/lib/libseen.a
 
 /var/predictor/color/bad:
 	mkdir -p $@
