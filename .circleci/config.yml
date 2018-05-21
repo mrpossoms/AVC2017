@@ -27,10 +27,3 @@ jobs:
           name: Compile actuator 
           command: make bin/actuator
 
-      - run:
-          name: Compile viewer 
-          command: make bin/viewer
-
-      - run:
-          name: Compile sim 
-          command: make bin/sim
