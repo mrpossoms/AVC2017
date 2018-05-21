@@ -9,7 +9,7 @@ echo "Finding libraries..."
 
 for DEPENDENCY in $(cat depends); do
 	echo $DEPENDENCY;
-	EXACT_PATH=$(find /opt /usr/local -name "$DEPENDENCY" -print -quit)
+	EXACT_PATH=$(find /opt /usr -name "$DEPENDENCY" -print -quit)
 	LIB_DIR=$(dirname $EXACT_PATH)
 	echo $LIB_DIR	
 	INC_DIR=$(dirname $LIB_DIR)/include
