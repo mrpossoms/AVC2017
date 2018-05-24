@@ -34,6 +34,31 @@
 extern const char* PROC_NAME;
 
 typedef struct {
+	char c;
+	const char* str;
+} cli_flag_t;
+
+typedef enum {
+	ARG_TYP_FLAG = 0,
+	ARG_TYP_INT,
+	ARG_TYP_STR,
+	ARG_TYP_CALLBACK
+} cli_arg_type_t;
+
+typedef struct {
+	char flag;
+	const char* desc;
+	const char* usage;
+	struct {
+		int required;
+		int has_value;
+	} opts;
+	void* set;
+	cli_arg_type_t type;
+	int _present;
+} cli_cmd_t;
+
+typedef struct {
 	struct timeval start;
 	uint32_t interval_us;
 } timegate_t;
@@ -55,5 +80,6 @@ void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h);
 float clamp(float v);
 
 void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const char* cmd_desc[]);
+int cli(const char* prog_desc, cli_cmd_t commands[], int argc, char* const argv[]);
 
 #endif

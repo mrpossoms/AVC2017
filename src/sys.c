@@ -122,11 +122,98 @@ void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const
 	printf("%s\n", (prog_desc));
 	for (int i = 0; i < strlen((cmds)); i++)
 	{
+		const char* desc = (cmd_desc)[cmd_idx];
 		if ((cmds)[i] == ':') continue;
-		printf("-%c\t%s\n", (cmds)[i], (cmd_desc)[cmd_idx]);
+		if (cmds[i] == 'h') desc = "Show this help";
+		printf("-%c\t%s\n", (cmds)[i], desc);
 		cmd_idx++;
 	}
 	exit(0);
+}
+
+
+int cli(
+	const char* prog_desc,
+	cli_cmd_t cmds[],
+	int argc,
+	char* const argv[]
+)
+{
+	int res = 0, num_cmds = 0;
+	for (; cmds[num_cmds].flag; num_cmds++);
+
+	// allocate and build the argument string
+	char* arg_str = (char*)calloc((num_cmds + 1) * 2, sizeof(char));
+	if (!arg_str) { res = -1; goto done; } // escape on allocation failure
+	for(int s = 0, i = num_cmds; i--;)
+	{
+		const char* fstr = cmds[i].opts.has_value ? "%c:" : "%c";
+		s += sprintf(arg_str + s, fstr, cmds[i].flag);
+	}
+
+	arg_str[strlen(arg_str)] = 'h';
+
+	// process
+	int c;
+	while ((c = getopt(argc, argv, arg_str)) != -1)
+	for (int i = num_cmds; i--;)
+	{
+		cli_cmd_t* cmd = cmds + i;
+
+		if (c == 'h')
+		{
+			const char* cmd_descs[num_cmds];
+			for (int i = num_cmds; i--;) { cmd_descs[i] = cmds[i].desc; }
+			cli_help(argv, prog_desc, arg_str, cmd_descs);
+		}
+		else if (cmd->flag == c)
+		{
+			cmd->_present = 1;
+			switch(cmd->type)
+			{
+				case ARG_TYP_FLAG:
+					*((int*)cmd->set) = 1;
+					break;
+				case ARG_TYP_INT:
+					*((int*)cmd->set) = atoi(optarg);
+					break;
+				case ARG_TYP_STR:
+				{
+					char* str = *((char**)cmd->set);
+					int len = strlen(optarg);
+					str = (char*)calloc(len + 1, sizeof(char));
+					if (!str)
+					{
+						res = -(10 + i);
+						goto done;
+					}
+					strncpy(str, optarg, len);
+				} break;
+				case ARG_TYP_CALLBACK:
+					((int(*)(char,const char*))cmd->set)(c, optarg);
+					break;
+			}
+		}
+	}
+
+	// check that all required options are fulfilled
+	for (int i = num_cmds; i--;)
+	{
+		cli_cmd_t* cmd = cmds + i;
+
+		if (cmd->opts.required && !cmd->_present)
+		{
+			b_bad("Missing required %s -%c for %s",
+				cmd->opts.has_value ? "parameter" : "flag",
+				cmd->desc
+			);
+			res = -2;
+		}
+	}
+
+done:
+	free(arg_str);
+	return res;
 }
 
 
@@ -184,7 +271,7 @@ int read_pipeline_payload(message_t* msg, payload_type_t exp_type)
 
 	if (!(msg->header.type & exp_type))
 	{
-		b_bad("Incompatible msg type %lx / %lx", msg->header.type, exp_type);
+		b_bad("Incompatible msg type %lx, expected %lx", msg->header.type, exp_type);
 		return -5;
 	}
 

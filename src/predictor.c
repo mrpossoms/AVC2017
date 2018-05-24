@@ -14,89 +14,48 @@ waypoint_t* WAYPOINTS;
 waypoint_t* NEXT_WPT;
 
 int FORWARD_STATE = 0;
-int USE_DEADRECKONING = 1;
+int USE_DEADRECKONING = 0;
 
 mat_t X;
 nn_layer_t* L;
 
 float TOTAL_DISTANCE;
 
-void proc_opts(int argc, char* const *argv)
+static int arg_load_route(char flag, const char* path)
 {
-	const char* cmds = "hfr:sd:";
-	const char* prog_desc = "Collects data from sensors, compiles them into system\
-	                         state packets. Then forwards them over stdout";
-	const char* cmd_desc[] = {
-		"Show this help",
-		"Forward system state over stdout",
-		"Path for route file to load",
-		"Set one explicit waypoint that is very far away",
-		"Enable or disable deadreckoning",
-	};
-
-	int c;
-	while((c = getopt(argc, argv, cmds)) != -1)
-	switch(c)
+	// Load the route
+	int fd = open(path, O_RDONLY);
+	if (fd < 0)
 	{
-		case 'h':
-			cli_help(argv, prog_desc, cmds, cmd_desc);
-		case 'f':
-			FORWARD_STATE = 1;
-			break;
-		case 'r':
-		{
-			// Load the route
-			int fd = open(optarg, O_RDONLY);
-			if (fd < 0)
-			{
-				b_log("Loading route: '%s' failed", optarg);
-				exit(-1);
-			}
-
-			off_t all_bytes = lseek(fd, 0, SEEK_END);
-			size_t count = all_bytes / sizeof(waypoint_t);
-
-			b_log("Loading route with %d waypoints", count);
-
-			lseek(fd, 0, SEEK_SET);
-			WAYPOINTS = (waypoint_t*)calloc(count + 1, sizeof(waypoint_t));
-			size_t read_bytes = read(fd, WAYPOINTS, count * sizeof(waypoint_t));
-			if (read_bytes != count * sizeof(waypoint_t))
-			{
-				b_log("route read of %d/%dB failed", read_bytes, all_bytes);
-				exit(-1);
-			}
-			close(fd);
-
-			// connect waypoint references
-			for (int i = 0; i < count - 1; ++i)
-			{
-				WAYPOINTS[i].next = WAYPOINTS + i + 1;
-			}
-			WAYPOINTS[count - 1].next = NULL;
-
-			NEXT_WPT = WAYPOINTS;
-		}
-			break;
-		case 's':
-		{
-			b_log("Pointing to (0, 1E6, 0)");
-
-			static waypoint_t up = {
-				.position = { 0, 1E6, 0 },
-				.heading  = { 0, 1, 0 },
-				.velocity = 0.25,
-			};
-
-			WAYPOINTS = &up;
-			NEXT_WPT = WAYPOINTS;
-		}
-			break;
-		case 'd':
-			USE_DEADRECKONING = optarg[0] == 'y' ? 1 : 0;
-			break;
-
+		b_log("Loading route: '%s' failed", optarg);
+		exit(-1);
 	}
+
+	off_t all_bytes = lseek(fd, 0, SEEK_END);
+	size_t count = all_bytes / sizeof(waypoint_t);
+
+	b_log("Loading route with %d waypoints", count);
+
+	lseek(fd, 0, SEEK_SET);
+	WAYPOINTS = (waypoint_t*)calloc(count + 1, sizeof(waypoint_t));
+	size_t read_bytes = read(fd, WAYPOINTS, count * sizeof(waypoint_t));
+	if (read_bytes != count * sizeof(waypoint_t))
+	{
+		b_log("route read of %d/%dB failed", read_bytes, all_bytes);
+		exit(-1);
+	}
+	close(fd);
+
+	// connect waypoint references
+	for (int i = 0; i < count - 1; ++i)
+	{
+		WAYPOINTS[i].next = WAYPOINTS + i + 1;
+	}
+	WAYPOINTS[count - 1].next = NULL;
+
+	NEXT_WPT = WAYPOINTS;
+
+	return 0;
 }
 
 #define BUCKET_SIZE 32
@@ -169,7 +128,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 		hist[ci] = col_sum;
 		confidence += col_conf_avg;
 	}
-	
+
 	confidence /= (float)HIST_W;
 
 	// *confidence /= (float)HIST_W;
@@ -386,7 +345,25 @@ int main(int argc, char* const argv[])
 	};
 	L = l;
 
-	proc_opts(argc, argv);
+	// Define and process command line, args
+	cli_cmd_t cmds[] = {
+		{ 'f',
+			.desc = "Forward full system state over stdout",
+			.set = &FORWARD_STATE,
+		},
+		{ 'r',
+			.desc = "Path for route file to load",
+			.set = arg_load_route,
+			.type = ARG_TYP_CALLBACK
+		},
+		{ 'd',
+			.desc = "Enable deadreckoning",
+			.set = &USE_DEADRECKONING,
+		},
+		{}
+	};
+	cli("Collects data from sensors, compiles them into system\n"
+	    "state packets. Then forwards them over stdout", cmds, argc, argv);
 
 	assert(nn_mat_init(&X) == 0);
 	assert(nn_fc_init(L + 0, &X) == 0);

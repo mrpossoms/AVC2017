@@ -17,34 +17,6 @@ uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
 time_t LAST_SECOND;
 
 
-void proc_opts(int argc, char* const *argv)
-{
-	const char* cmds = "hfm:";
-	const char* prog_desc = "Recieves action vectors over stdin and actuates the platform";
-	const char* cmd_desc[] = {
-		"Show this help",
-		"Forward full system state over stdout",
-		"Mask PWM output channels. Useful for disabling throttle or steering",
-	};
-
-	int c;
-	while((c = getopt(argc, argv, cmds)) != -1)
-	switch(c)
-	{
-		case 'h':
-			cli_help(argv, prog_desc, cmds, cmd_desc);
-		case 'f':
-			FORWARD_STATE = 1;
-			break;
-		case 'm':
-			// Explicit PWM channel masking
-			PWM_CHANNEL_MSK = atoi(optarg);
-			b_log("channel mask %x", PWM_CHANNEL_MSK);
-			break;
-	}
-}
-
-
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);
@@ -66,7 +38,21 @@ int main(int argc, char* const argv[])
 		return -1;
 	}
 
-	proc_opts(argc, argv);
+	// define and process cli args
+	cli_cmd_t cmds[] = {
+		{ 'f',
+			.desc = "Forward full system state over stdout",
+			.set = &FORWARD_STATE,
+		},
+		{ 'm',
+			.desc = "Mask PWM output channels. Useful for disabling throttle or steering",
+			.set = &PWM_CHANNEL_MSK,
+			.type = ARG_TYP_INT,
+		},
+		{} // terminator
+	};
+	cli("Recieves action vectors over stdin and actuates the platform",
+	cmds, argc, argv);
 
 	if (i2c_init("/dev/i2c-1"))
 	{

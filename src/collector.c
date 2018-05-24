@@ -25,51 +25,62 @@ col_mode_t MODE;
 float VEL;
 pthread_mutex_t STATE_LOCK;
 
+
+static int arg_calibration_mode(char flag, const char* v)
+{
+	MODE = COL_MODE_ACT_CAL;
+	b_log("Calibrating action vector");
+	return 0;
+}
+
+
+static int arg_immediate_start(char flag, const char* v)
+{
+	WAIT_FOR_MOVEMENT = 0;
+	b_log("Calibrating action vector");
+	return 0;
+}
+
+static int arg_disable_action_polling(char flag, const char* v)
+{
+	READ_ACTION = 0;
+	return 0;
+}
+
 /**
  * @brief Sets program state according to specified command line flags
  * @param argc - number of arguments
  * @param argv - array of character pointers to arguments.
  */
-void proc_opts(int argc, const char ** argv)
+void proc_opts(int argc, char* const argv[])
 {
-	const char* cmds = "?cniaf:";
-	const char* prog_desc = "Collects data from sensors, compiles them into system state packets. Then forwards them over stdout";
-	const char* cmd_desc[] = {
-		"Show this help",
-		"Calibrate action vector (steering and throttle)",
-		"Normalize video frames",
-		"Start immediately, don't wait for movement",
-		"disable polling of PWM action values",
-		"set framerate in frames/second",
+	// define and process cli args
+	cli_cmd_t cmds[] = {
+		{ 'c',
+			.desc = "Calibrate action vector (steering and throttle)",
+			.set = arg_calibration_mode,
+			.type = ARG_TYP_CALLBACK
+		},
+		{ 'i',
+			.desc = "Start immediately, don't wait for movement",
+			.set = arg_immediate_start,
+			.type = ARG_TYP_CALLBACK
+		},
+		{ 'a',
+			.desc = "disable polling of PWM action values",
+			.set = arg_disable_action_polling,
+			.type = ARG_TYP_CALLBACK
+		},
+		{ 'f',
+			.desc = "set framerate in frames/second",
+			.set = &FRAME_RATE,
+			.type = ARG_TYP_INT
+		},
+		{} // terminator
 	};
 
-	for (;;)
-	{
-		int c = getopt(argc, (char *const *)argv, cmds);
-		if (c == -1) break;
-
-		switch (c)
-		{
-			case '?': // Display usage help
-			cli_help(argv, prog_desc, cmds, cmd_desc);
-			case 'c': // Calibrate
-				MODE = COL_MODE_ACT_CAL;
-				b_log("Calibrating action vector");
-				break;
-			case 'n': // Normalize video
-				NORM_VIDEO = 1;
-				break;
-			case 'i': // Start immediately
-				WAIT_FOR_MOVEMENT = 0;
-				break;
-			case 'a':
-				READ_ACTION = 0;
-				break;
-			case 'f':
-				FRAME_RATE = atoi(optarg);
-				break;
-		}
-	}
+	cli("Collects data from sensors, compiles them into system state packets. Then forwards them over stdout",
+	cmds, argc, argv);
 }
 
 /**
@@ -256,7 +267,7 @@ int collection(cam_t* cam)
 }
 
 
-int main(int argc, const char* argv[])
+int main(int argc, char* const argv[])
 {
 	PROC_NAME = argv[0];
 	proc_opts(argc, argv);
