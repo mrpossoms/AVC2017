@@ -4,14 +4,18 @@ CC=gcc
 CXX=g++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall -Wno-implicit-function-declaration
 CXXFLAGS=--std=c++11 -g
-DRIVER_SRC= drivers/BNO055_driver/bno055.c drivers/BNO055_driver/bno055_support.c drivers/drv_pwm.c i2c.c
-COLLECTOR_SRC=deadreckon.c sys.c collector.c cam.c $(DRIVER_SRC)
-PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
-PREDICTOR_SRC=predictor.c sys.c $(DRIVER_SRC)
-PREDICTOR_LINK=src/nn.h/lib/libnn.a
-ACTUATOR_SRC=actuator.c sys.c $(DRIVER_SRC)
 INC=-Isrc -Isrc/nn.h/src -Isrc/drivers -Isrc/drivers/src/BNO055_driver -Isrc/linmath -Isrc/seen/src -Isrc/json -Iml/recognizer/src
 LINK=-lm -lpthread
+
+DRIVER_SRC= drivers/BNO055_driver/bno055.c drivers/BNO055_driver/bno055_support.c drivers/drv_pwm.c i2c.c
+BASE_SRC = sys.c $(DRIVER_SRC)
+
+COLLECTOR_SRC=deadreckon.c collector.c cam.c $(BASE_SRC)
+PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
+PREDICTOR_SRC=predictor.c $(BASE_SRC)
+PREDICTOR_LINK=src/nn.h/lib/libnn.a
+ACTUATOR_SRC=actuator.c $(BASE_SRC)
+
 VIEWER_SRC=sys.c viewer.c
 VIEWER_LINK=
 BOTD_SRC=sys.c botd.c $(DRIVER_SRC)
@@ -20,8 +24,7 @@ TST_SRC=masseuse_falloff masseuse_bucket
 SIM_SRC=src/sim/sim.cpp src/sys.c src/seen/demos/src/sky.cpp
 SIM_INC=-Isrc/seen/demos/src/
 
-RECOG_SRC=nn.c recognizer.c sys.c
-RECOG_INC=-Iml/recognizer/src
+TRAINX_SRC= trainx.c $(BASE_SRC)
 
 ifeq ($(OS),Darwin)
 	VIEWER_LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
@@ -91,6 +94,10 @@ bin/viewer: $(addprefix obj/,$(VIEWER_SRC:.c=.o))
 
 bin/sim: magic
 	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $(SIM_INC) $(SIM_SRC) -o $@ $(VIEWER_LINK) $(LINK) -lpng src/seen/lib/libseen.a
+
+bin/trainx: $(addprefix obj/,$(TRAINX_SRC:.c=.o))
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng
+
 
 /var/predictor/color/bad:
 	mkdir -p $@

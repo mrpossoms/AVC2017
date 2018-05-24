@@ -163,7 +163,7 @@ int cli(
 		if (c == 'h')
 		{
 			const char* cmd_descs[num_cmds];
-			for (int i = num_cmds; i--;) { cmd_descs[i] = cmds[i].desc; }
+			for (int i = num_cmds; i--;) { cmd_descs[(num_cmds - 1) - i] = cmds[i].desc; }
 			cli_help(argv, prog_desc, arg_str, cmd_descs);
 		}
 		else if (cmd->flag == c)
@@ -179,18 +179,19 @@ int cli(
 					break;
 				case ARG_TYP_STR:
 				{
-					char* str = *((char**)cmd->set);
+					char** str = (char**)cmd->set;
 					int len = strlen(optarg);
-					str = (char*)calloc(len + 1, sizeof(char));
-					if (!str)
+					*str = (char*)calloc(len + 1, sizeof(char));
+					if (!*str)
 					{
 						res = -(10 + i);
 						goto done;
 					}
-					strncpy(str, optarg, len);
+					strncpy(*str, optarg, len);
 				} break;
 				case ARG_TYP_CALLBACK:
-					((int(*)(char,const char*))cmd->set)(c, optarg);
+					res = ((int(*)(char,const char*))cmd->set)(c, optarg);
+					if (res) { goto done; }
 					break;
 			}
 		}
@@ -205,6 +206,7 @@ int cli(
 		{
 			b_bad("Missing required %s -%c for %s",
 				cmd->opts.has_value ? "parameter" : "flag",
+				cmd->flag,
 				cmd->desc
 			);
 			res = -2;
