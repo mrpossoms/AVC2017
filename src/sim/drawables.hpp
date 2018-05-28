@@ -2,16 +2,21 @@
 class Asphalt : public Drawable {
 	mat4x4_t _world;
 	mat3x3_t _rot;
+	float _tex_rotation;
 public:
 	seen::Model* model;
 	seen::Material* mat;
 	seen::Tex disp_tex;
+	seen::Tex paint_tex;
 
 	Asphalt()
 	{
 		model = seen::MeshFactory::get_model("asphalt.obj");
 		mat = seen::TextureFactory::get_material("asphalt");
 		disp_tex = seen::TextureFactory::load_texture("asphalt.displacement.png");
+		paint_tex = seen::TextureFactory::load_texture("parking.color.png");
+
+		_tex_rotation = seen::rf() * M_PI;
 
 		mat4x4_identity(_world.v);
 
@@ -33,6 +38,7 @@ public:
 		shader["u_normal_matrix"] << _rot;
 		shader["u_world_matrix"] << _world;
 		shader["u_tex_control"] << tex_control;
+		shader["u_texcoord_rotation"] << _tex_rotation;
 		assert(gl_get_error());
 
 		model->draw(viewer);

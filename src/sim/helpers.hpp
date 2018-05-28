@@ -8,6 +8,15 @@
 	.fragment = "basic.fsh" }                 \
 
 
+#define OVERLAY_SURFACE_SHADER {              \
+	.vertex = "displacement.vsh",             \
+	.tessalation = {                          \
+		.control = "displacement.tcs",        \
+		.evaluation = "displacement.tes",     \
+	},                                        \
+	.geometry = "",                           \
+	.fragment = "basic_overlay.fsh" }         \
+
 mat4x4_t mat_from_json(json& obj)
 {
 	mat4x4_t tmp, M;

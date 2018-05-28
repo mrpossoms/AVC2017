@@ -22,6 +22,9 @@ static vec3_t tex_control = { 0, 0, 16 };
 
 bool PAUSED = false;
 bool STEER_LOCKED = false;
+bool DO_STEREO_CAPTURE = false;
+
+const float IPD = 0.05;
 
 struct {
 	Vec3 position = { 0, -0.4, 0 };
@@ -43,6 +46,12 @@ struct {
 	Vec3 heading()
 	{
 		Vec3 dir(cos(angle + M_PI / 2), 0, sin(angle + M_PI / 2));
+		return dir;
+	}
+
+	Vec3 left()
+	{
+		Vec3 dir(cos(angle - M_PI), 0, sin(angle - M_PI));
 		return dir;
 	}
 
@@ -107,7 +116,7 @@ int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
 
-	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1);
+	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 4, 0);
 	Camera camera(M_PI / 2, renderer.width, renderer.height);
 
 	ListScene scene;
@@ -129,6 +138,24 @@ int main (int argc, char* argv[])
 
 	CustomPass ground_pass([&]() {
 		// draw pass preparation
+		ShaderConfig shader_desc = OVERLAY_SURFACE_SHADER;
+		ShaderProgram& shader = *Shaders[shader_desc]->use();
+
+		shader["u_light_dir"] << light_dir;
+		shader["u_displacement_weight"] << 0.1f;
+		shader["u_tex_control"] << tex_control;
+		shader["TessLevelInner"] << 5.0f;
+		shader["TessLevelOuter"] << 5.0f;
+		shader["u_tint"] << one;
+
+		shader["us_overlay_scale"] << 0.02f;
+		shader << asphalt.mat;
+		shader["us_displacement"] << asphalt.disp_tex;
+		shader["us_overlay"] << asphalt.paint_tex;
+
+	}, &asphalt, NULL);
+
+	CustomPass bale_pass([&]() {
 		ShaderConfig shader_desc = SURFACE_SHADER;
 		ShaderProgram& shader = *Shaders[shader_desc]->use();
 
@@ -139,27 +166,19 @@ int main (int argc, char* argv[])
 		shader["TessLevelOuter"] << 5.0f;
 		shader["u_tint"] << one;
 
-		shader["us_displacement"] << asphalt.disp_tex;
-		shader << asphalt.mat;
-	}, &asphalt, NULL);
-
-	CustomPass bale_pass([&]() {
-		ShaderConfig shader_desc = SURFACE_SHADER;
-		ShaderProgram& shader = *Shaders[shader_desc]->use();
-
 		shader["TessLevelInner"] << 5.0f;
 		shader["TessLevelOuter"] << 5.0f;
-		shader["us_displacement"] << HayBale::displacement_tex();
 		shader << HayBale::material();
+		shader["us_displacement"] << HayBale::displacement_tex();
 	}, NULL);
 
+	// load all the haybales in the scene
 	mat4x4_t I;
 	mat4x4_identity(I.v);
 	mat4x4_translate_in_place(I.v, 0, 1, 0);
 	auto root = scene_json["object"];
 	populate_scene(bale_pass, root, I);
 
-	// camera.position(0, 0, 0);
 	scene.drawables().push_back(&sky_pass);
 	scene.drawables().push_back(&ground_pass);
 	scene.drawables().push_back(&bale_pass);
@@ -210,6 +229,9 @@ int main (int argc, char* argv[])
 			case GLFW_KEY_L:
 				STEER_LOCKED = false;
 				break;
+			case GLFW_KEY_S:
+				DO_STEREO_CAPTURE = true;
+				break;
 		}
 	};
 
@@ -225,20 +247,20 @@ int main (int argc, char* argv[])
 		// look for socket input
 		poll_ctrl_pipe(sock_fd);
 
+		// simulate high frequency tilting of the platform as road noise
 		Quat q = vehicle.orientation();
 		Quat tilt, roll, jitter;
+		Vec3 ja = seen::rn(); // jitter axis
 		quat_from_axis_angle(tilt.v, 1, 0, 0, 0.35);
 		quat_from_axis_angle(roll.v, 0, 0, 1, -1.0f * vehicle.speed * vehicle.steer_speed());
-
-		Vec3 ja = seen::rn(); // jitter axis
 		quat_from_axis_angle(jitter.v, ja.x, ja.y, ja.z, seen::rf(-0.01, 0.01) * vehicle.speed);
 
 		if (!PAUSED)
 		{
 			vehicle.update();
-			camera.position(vehicle.position);
 			q = tilt * roll * jitter * q;
 			camera.orientation(q);
+			camera.position(vehicle.position);
 
 			Vec3 heading = vehicle.heading();
 			raw_state_t state = {
@@ -247,6 +269,33 @@ int main (int argc, char* argv[])
 				.heading = { heading.x, heading.z, heading.y },
 				.position = { vehicle.position.x, vehicle.position.z, vehicle.position.y }
 			};
+
+			if (DO_STEREO_CAPTURE)
+			{
+				Vec3 old_pos = camera.position();
+				Vec3 offsets[] = {
+					vehicle.left() * IPD,
+					vehicle.left() * -IPD
+				};
+				const std::string names[] = { "l.png", "r.png" };
+
+				char hash[16];
+				sprintf(hash, "%lx_", random());
+
+				for (int i = 2; i--;)
+				{
+					Vec3 offset = old_pos + offsets[i];
+					camera.position(offset);
+					renderer.draw(&camera, &scene);
+					renderer.capture("./" + std::string(hash) + names[i]);
+				}
+
+				DO_STEREO_CAPTURE = false;
+			}
+			else
+			{
+				renderer.draw(&camera, &scene);
+			}
 
 			color_t rgb_buf[FRAME_W * FRAME_H], tmp[FRAME_W * FRAME_H];
 			glReadPixels(0, 0, FRAME_W, FRAME_H, GL_RGB, GL_UNSIGNED_BYTE, (void*)tmp);
@@ -273,8 +322,6 @@ int main (int argc, char* argv[])
 				return -1;
 			}
 		}
-
-		renderer.draw(&camera, &scene);
 
 		// sleep(1);
 		// usleep(1000000);
