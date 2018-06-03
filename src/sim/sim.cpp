@@ -8,7 +8,6 @@
 
 #include "sys.h"
 
-using namespace seen;
 using namespace nlohmann;
 
 #include "drawables.hpp"
@@ -116,30 +115,30 @@ int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
 
-	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 4, 0);
-	Camera camera(M_PI / 2, renderer.width, renderer.height);
+	seen::RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 4, 0);
+	seen::Camera camera(M_PI / 2, renderer.width, renderer.height);
 
-	ListScene scene;
+	seen::ListScene scene;
 
 	json scene_json;
 	i >> scene_json;
 
 	// Sky setup
-	Sky sky;
-	CustomPass sky_pass([&]() {
+	seen::Sky sky;
+	seen::CustomPass sky_pass([&]() {
 		// draw pass preparation
-		ShaderConfig shader_desc = SKY_SHADERS;
-		ShaderProgram* shader = Shaders[shader_desc]->use();
+		seen::ShaderConfig shader_desc = SKY_SHADERS;
+		seen::ShaderProgram* shader = seen::Shaders[shader_desc]->use();
 	}, &sky, NULL);
 
 
 	// Asphalt setup
 	Asphalt asphalt;
 
-	CustomPass ground_pass([&]() {
+	seen::CustomPass ground_pass([&]() {
 		// draw pass preparation
-		ShaderConfig shader_desc = OVERLAY_SURFACE_SHADER;
-		ShaderProgram& shader = *Shaders[shader_desc]->use();
+		seen::ShaderConfig shader_desc = OVERLAY_SURFACE_SHADER;
+		seen::ShaderProgram& shader = *seen::Shaders[shader_desc]->use();
 
 		shader["u_light_dir"] << light_dir;
 		shader["u_displacement_weight"] << 0.1f;
@@ -155,9 +154,9 @@ int main (int argc, char* argv[])
 
 	}, &asphalt, NULL);
 
-	CustomPass bale_pass([&]() {
-		ShaderConfig shader_desc = SURFACE_SHADER;
-		ShaderProgram& shader = *Shaders[shader_desc]->use();
+	seen::CustomPass bale_pass([&]() {
+		seen::ShaderConfig shader_desc = SURFACE_SHADER;
+		seen::ShaderProgram& shader = *seen::Shaders[shader_desc]->use();
 
 		shader["u_light_dir"] << light_dir;
 		shader["u_displacement_weight"] << 0.1f;
@@ -263,13 +262,15 @@ int main (int argc, char* argv[])
 			camera.position(vehicle.position);
 
 			Vec3 heading = vehicle.heading();
-			raw_state_t state = {
-				.vel = vehicle.speed,
-				.distance = vehicle.distance,
-				.heading = { heading.x, heading.z, heading.y },
-				.position = { vehicle.position.x, vehicle.position.z, vehicle.position.y }
-			};
 
+			raw_state_t state = {
+				rot_rate: {},
+				acc: {},
+			        vel: vehicle.speed,
+				distance: vehicle.distance,
+				heading: { heading.x, heading.z, heading.y },
+				position: { vehicle.position.x, vehicle.position.z, vehicle.position.y }
+			};
 			if (DO_STEREO_CAPTURE)
 			{
 				Vec3 old_pos = camera.position();
