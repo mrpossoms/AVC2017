@@ -1,6 +1,14 @@
 #!/bin/sh
 
+if [ -f .built ]; then
+	exit 0
+fi
+
 for DEP in $(ls -d ./*); do
+	if [ -f $DEP ]; then
+		continue
+	fi
+
 	cd $DEP
 	./get.sh
 
@@ -10,5 +18,7 @@ for DEP in $(ls -d ./*); do
 		echo "Failed to retrieve " $DEP
 	fi
 
-	cd -
+	cd ..
 done
+
+touch .built

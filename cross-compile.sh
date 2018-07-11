@@ -1,6 +1,15 @@
 #!/bin/sh
 
-export PREFIX=$(pwd)/emulation/gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu
-export PATH=$PREFIX/bin:$PATH
+export PREFIX=$TOOLCHAIN_PREFIX
+export PATH=$TOOLCHAIN/bin:$PATH
 
-make bot-utils
+echo $PREFIX
+sleep 2
+
+cd externals
+./build.sh
+if [ $? -eq 0 ]; then
+	cd ..
+	make bot-utils
+fi
+

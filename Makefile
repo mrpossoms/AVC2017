@@ -60,6 +60,8 @@ all: viewer collector masseuse
 
 src/libnn:
 	git clone https://github.com/mrpossoms/libnn src/libnn
+
+src/libnn/lib/libnn.a: src/libnn
 	make -C src/libnn static
 
 src/json:
@@ -74,7 +76,7 @@ src/seen:
 	git clone https://github.com/mrpossoms/Seen src/seen
 	make -C src/seen static
 
-magic: src/structs.h src/linmath.h src/libnn src/seen src/json bin/data bin/scene.json
+magic: src/structs.h src/linmath.h src/libnn/lib/libnn.a src/seen src/json bin/data bin/scene.json
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 bin/structsize: bin
@@ -130,5 +132,7 @@ test: tests
 	@./test_runner.py
 
 clean:
+	make -C src/libnn clean
+	make -C src/seen clean
 	@rm -rf obj
 	@rm -rf bin

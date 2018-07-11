@@ -294,7 +294,7 @@ int main(int argc, char* const argv[])
 		close(I2C_BUS);
 		I2C_BUS = -1;
 
-		return -1;
+		//return -1;
 	}
 
 	if (READ_ACTION)
@@ -310,7 +310,11 @@ int main(int argc, char* const argv[])
 	struct sched_param sch_par = {
 		.sched_priority = 50,
 	};
-	assert(sched_setscheduler(0, SCHED_RR, &sch_par) == 0);
+	
+	if (sched_setscheduler(0, SCHED_RR, &sch_par) != 0)
+	{
+		b_bad("RT-scheduling not set");
+	}
 
 	// Check to see if that action calibration file
 	// exists. If not, switch to calibration mode. Otherwise

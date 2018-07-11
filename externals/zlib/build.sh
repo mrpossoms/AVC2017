@@ -3,6 +3,6 @@ cd zlib*
 if [ -z $PREFIX ]; then
 	./configure
 else
-	./configure --prefix=$PREFIX/aarch64-linux-gnu
+	./configure --prefix=$PREFIX
 fi
 make install
