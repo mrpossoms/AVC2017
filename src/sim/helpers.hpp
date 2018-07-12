@@ -1,21 +1,22 @@
-#define SURFACE_SHADER {                      \
+#define SURFACE_SHADER {                          \
 	.vertex = "displacement.vsh",             \
+	.fragment = "basic.fsh",                  \
 	.tessalation = {                          \
-		.control = "displacement.tcs",        \
-		.evaluation = "displacement.tes",     \
+		.control = "displacement.tcs",    \
+		.evaluation = "displacement.tes"  \
 	},                                        \
-	.geometry = "",                           \
-	.fragment = "basic.fsh" }                 \
+	.geometry = "" }                          \
 
 
-#define OVERLAY_SURFACE_SHADER {              \
+#define OVERLAY_SURFACE_SHADER {                  \
 	.vertex = "displacement.vsh",             \
+	.fragment = "basic_overlay.fsh",          \
 	.tessalation = {                          \
-		.control = "displacement.tcs",        \
-		.evaluation = "displacement.tes",     \
+		.control = "displacement.tcs",    \
+		.evaluation = "displacement.tes", \
 	},                                        \
 	.geometry = "",                           \
-	.fragment = "basic_overlay.fsh" }         \
+	}                                         \
 
 mat4x4_t mat_from_json(json& obj)
 {
@@ -31,7 +32,7 @@ mat4x4_t mat_from_json(json& obj)
 	return M;
 }
 
-void populate_scene(CustomPass& pass, json& obj, mat4x4_t world)
+void populate_scene(seen::CustomPass& pass, json& obj, mat4x4_t world)
 {
 	mat4x4_t tmp, my_world;
 
