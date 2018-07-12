@@ -1,7 +1,7 @@
 $(eval OS := $(shell uname))
 
 CC=gcc
-CXX=g++
+CXX=clang++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall -Wno-implicit-function-declaration
 CXXFLAGS=--std=c++11 -g
 INC=-Isrc -Isrc/libnn/src -Isrc/drivers -Isrc/drivers/src/BNO055_driver -Isrc/linmath.h -Isrc/seen/src -Isrc/json -Iml/recognizer/src
@@ -21,7 +21,7 @@ VIEWER_LINK=
 BOTD_SRC=sys.c botd.c $(DRIVER_SRC)
 TST_SRC=masseuse_falloff masseuse_bucket
 
-SIM_SRC=src/sim/sim.cpp src/sys.c src/seen/demos/src/sky.cpp
+SIM_SRC=src/sim/sim.cpp src/sys.c
 SIM_INC=-Isrc/seen/demos/src/
 
 TRAINX_SRC= trainx.c $(BASE_SRC)
@@ -98,7 +98,7 @@ bin/viewer: $(addprefix obj/,$(VIEWER_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $^ -o $@ $(VIEWER_LINK) $(LINK)
 
 bin/sim: magic
-	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $(SIM_INC) $(SIM_SRC) -o $@ $(VIEWER_LINK) $(LINK) -lpng src/seen/lib/libseen.a
+	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $(SIM_INC) $(SIM_SRC) -o $@ -lpng src/seen/lib/libseen.a $(VIEWER_LINK) $(LINK) 
 
 bin/trainx: $(addprefix obj/,$(TRAINX_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng -lz

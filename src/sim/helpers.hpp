@@ -22,7 +22,7 @@ mat4x4_t mat_from_json(json& obj)
 	return M;
 }
 
-void populate_scene(CustomPass& pass, json& obj, mat4x4_t world)
+void populate_scene(Scene& scene, json& obj, mat4x4_t world)
 {
 	mat4x4_t tmp, my_world;
 
@@ -40,12 +40,13 @@ void populate_scene(CustomPass& pass, json& obj, mat4x4_t world)
 			mat4x4_rotate(purturbed.v, child_mat.v, 0, 1, 0, seen::rf(-0.1, 0.1));
 
 			auto bale = new HayBale();
-			mat4x4_mul(bale->world.v,  my_world.v, purturbed.v);
+			mat4x4_mul(tmp.v,  my_world.v, purturbed.v);
+			bale->world(tmp.v);
 			// mat4x4_transpose(bale->world.v, tmp.v);
-			pass.drawables.push_back(bale);
+			scene.drawables().push_back(bale);
 		}
 		else {
-			populate_scene(pass, child, my_world);
+			populate_scene(scene, child, my_world);
 		}
 	}
 }

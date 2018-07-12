@@ -24,7 +24,7 @@ bool PAUSED = false;
 bool STEER_LOCKED = false;
 
 struct {
-	Vec3 position = { 0, -0.4, 0 };
+	Vec3 position = { 0, -1, 0 };
 	float angle;
 	float speed;
 	float distance;
@@ -42,7 +42,7 @@ struct {
 
 	Vec3 heading()
 	{
-		Vec3 dir(cos(angle + M_PI / 2), 0, sin(angle + M_PI / 2));
+		Vec3 dir(cos(angle - M_PI / 2), 0, sin(angle - M_PI / 2));
 		return dir;
 	}
 
@@ -107,62 +107,95 @@ int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
 
-	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1);
+	RendererGL renderer("./data", "Sim", FRAME_W, FRAME_H, 4, 0);
 	Camera camera(M_PI / 2, renderer.width, renderer.height);
 
-	ListScene scene;
+	ListScene scene, ground_scene, hay_scene;
 
 	json scene_json;
 	i >> scene_json;
 
 	// Sky setup
-	Sky sky;
-	CustomPass sky_pass([&]() {
+	seen::Model* sky = seen::MeshFactory::get_model("sphere.obj");
+	CustomPass sky_pass([&](int index) {
 		// draw pass preparation
-		ShaderConfig shader_desc = SKY_SHADERS;
-		ShaderProgram* shader = Shaders[shader_desc]->use();
-	}, &sky, NULL);
+		//ShaderConfig shader_desc = SKY_SHADERS;
+		//ShaderProgram* shader = Shaders[shader_desc]->use();
+		seen::ShaderProgram::builtin_sky()->use();
+		glDisable(GL_CULL_FACE);
+	}, NULL);
+
+	scene.drawables().push_back(sky);
+	sky_pass.scene = &scene;
 
 
 	// Asphalt setup
 	Asphalt asphalt;
 
-	CustomPass ground_pass([&]() {
+	auto vsh = seen::Shader::vertex("basic_vsh");
+	vsh.vertex(seen::Shader::VERT_POSITION | seen::Shader::VERT_NORMAL | seen::Shader::VERT_TANGENT | seen::Shader::VERT_UV)
+	   .transformed()
+   	   .compute_binormal()
+	   .viewed().projected().pass_through("texcoord_in")
+	   .emit_position()
+	   .next(vsh.builtin("gl_Position") = vsh.local("l_pos_proj"));
+
+	auto fsh = seen::Shader::fragment("basic_fsh").preceded_by(vsh);
+	fsh.color_textured()
+	   .normal_mapped()
+	//    .shadow_mapped_vsm()
+	   .blinn()
+	;
+
+	auto primary_shader = seen::ShaderProgram::compile({ vsh, fsh });
+	seen::Light light = {
+		.position = { 0, 20, 0 },
+		.power = { 2.5, 2.5, 2.5 },
+		.is_point = true,
+		.ambience = 0.01
+	};
+
+	CustomPass ground_pass([&](int index) {
 		// draw pass preparation
-		ShaderConfig shader_desc = SURFACE_SHADER;
-		ShaderProgram& shader = *Shaders[shader_desc]->use();
+		// ShaderConfig shader_desc = SURFACE_SHADER;
+		// ShaderProgram& shader = *Shaders[shader_desc]->use();
+		//
+		// shader["u_light_dir"] << light_dir;
+		// shader["u_displacement_weight"] << 0.1f;
+		// shader["u_tex_control"] << tex_control;
+		// shader["TessLevelInner"] << 5.0f;
+		// shader["TessLevelOuter"] << 5.0f;
+		// shader["u_tint"] << one;
+		//
+		// shader["us_displacement"] << asphalt.disp_tex;
+		primary_shader->use();
 
-		shader["u_light_dir"] << light_dir;
-		shader["u_displacement_weight"] << 0.1f;
-		shader["u_tex_control"] << tex_control;
-		shader["TessLevelInner"] << 5.0f;
-		shader["TessLevelOuter"] << 5.0f;
-		shader["u_tint"] << one;
-
-		shader["us_displacement"] << asphalt.disp_tex;
-		shader << asphalt.mat;
-	}, &asphalt, NULL);
-
-	CustomPass bale_pass([&]() {
-		ShaderConfig shader_desc = SURFACE_SHADER;
-		ShaderProgram& shader = *Shaders[shader_desc]->use();
-
-		shader["TessLevelInner"] << 5.0f;
-		shader["TessLevelOuter"] << 5.0f;
-		shader["us_displacement"] << HayBale::displacement_tex();
-		shader << HayBale::material();
+		*primary_shader << &light;
+		*primary_shader << asphalt.mat;
 	}, NULL);
+	ground_scene.drawables().push_back(&asphalt);
+	ground_pass.scene = &ground_scene;
+
+	CustomPass bale_pass([&](int index) {
+		// ShaderConfig shader_desc = SURFACE_SHADER;
+		// ShaderProgram& shader = *Shaders[shader_desc]->use();
+		//
+		// shader["TessLevelInner"] << 5.0f;
+		// shader["TessLevelOuter"] << 5.0f;
+		// shader["us_displacement"] << HayBale::displacement_tex();
+		primary_shader->use();
+
+		*primary_shader << HayBale::material();
+	}, NULL);
+	bale_pass.scene = &hay_scene;
 
 	mat4x4_t I;
 	mat4x4_identity(I.v);
-	mat4x4_translate_in_place(I.v, 0, 1, 0);
+	mat4x4_translate_in_place(I.v, 0, 0, 0);
 	auto root = scene_json["object"];
-	populate_scene(bale_pass, root, I);
+	populate_scene(hay_scene, root, I);
 
 	// camera.position(0, 0, 0);
-	scene.drawables().push_back(&sky_pass);
-	scene.drawables().push_back(&ground_pass);
-	scene.drawables().push_back(&bale_pass);
 
 	int sock_fd = open_ctrl_pipe();
 
@@ -274,7 +307,7 @@ int main (int argc, char* argv[])
 			}
 		}
 
-		renderer.draw(&camera, &scene);
+		renderer.draw(&camera, { &sky_pass, &ground_pass, &bale_pass });
 
 		// sleep(1);
 		// usleep(1000000);

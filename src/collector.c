@@ -19,6 +19,7 @@ int NORM_VIDEO;
 int WAIT_FOR_MOVEMENT = 1;
 int READ_ACTION = 1;
 int FRAME_RATE = 30;
+int GEN_RANDOM = 0;
 char* MEDIA_PATH;
 calib_t CAL;
 col_mode_t MODE;
@@ -75,6 +76,11 @@ void proc_opts(int argc, char* const argv[])
 			.desc = "set framerate in frames/second",
 			.set = &FRAME_RATE,
 			.type = ARG_TYP_INT
+		},
+		{ 'r',
+			.desc = "generate random data rather than collecting.",
+			.set = &GEN_RANDOM,
+			.type = ARG_TYP_FLAG,
 		},
 		{} // terminator
 	};
@@ -266,6 +272,56 @@ int collection(cam_t* cam)
 	}
 }
 
+/**
+ * @brief Generates random data rather than collecting it from sensors
+ * @return 0 on success
+ */
+int random_data()
+{
+	int fd_rnd = open("/dev/random", O_RDONLY);
+	int updates = 0;
+	time_t now;
+	message_t msg = {
+		.header = {
+			.magic = MAGIC,
+			.type  = PAYLOAD_STATE
+		},
+	};
+	raw_state_t* state = &msg.payload.state;
+
+	if (fd_rnd < 0)
+	{
+		return -1;
+	}
+
+	for (;;)
+	{
+		// Do something while we wait for our
+		// next frame to come in...
+		++updates;
+		if (now != time(NULL))
+		{
+			b_log("%dHz (%f %f %f) %fm/s",
+				updates,
+				state->position[0],
+				state->position[1],
+				state->position[2],
+				state->vel
+			);
+			updates = 0;
+			now = time(NULL);
+		}
+
+		write(fd_rnd, state, sizeof(raw_state_t));
+
+		if (write_pipeline_payload(&msg))
+		{
+			b_bad("Error writing state-action pair");
+			return -3;
+		}
+	}
+}
+
 
 int main(int argc, char* const argv[])
 {
@@ -330,8 +386,14 @@ int main(int argc, char* const argv[])
 		assert(calib_load(ACTION_CAL_PATH, &CAL) == 0);
 	}
 
-	res = collection(cam);
-
+	if (GEN_RANDOM)
+	{
+		res = random_data();
+	}
+	else
+	{
+		res = collection(cam);
+	}
 
 	return res;
 }

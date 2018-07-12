@@ -7,6 +7,8 @@
 #include "nn.h"
 
 #define ROOT_MODEL_DIR "/var/model/"
+#define MODEL_LAYERS 3
+#define MODEL_INSTANCES 2
 
 int INPUT_FD = 0;
 
@@ -16,8 +18,12 @@ waypoint_t* NEXT_WPT;
 int FORWARD_STATE = 0;
 int USE_DEADRECKONING = 0;
 
-mat_t X;
-nn_layer_t* L;
+typedef struct {
+	mat_t X;
+	nn_layer_t layers[MODEL_LAYERS];
+} classifier_t;
+
+classifier_t class_inst[MODEL_INSTANCES];
 
 float TOTAL_DISTANCE;
 
@@ -61,18 +67,32 @@ static int arg_load_route(char flag, const char* path)
 #define BUCKET_SIZE 32
 #define HIST_W (FRAME_W / BUCKET_SIZE)
 #define HIST_MID (HIST_W >> 1)
-void avoider(raw_state_t* state, float* throttle, float* steering)
+
+typedef struct {
+	int classifier_idx;
+	int start_col, end_col;
+	color_t* rgb;
+	float* hist;
+	raw_state_t* state;
+
+	float confidence;
+	float col_conf_best;
+} class_job_t;
+
+void* col_class_worker(void* params)
 {
-	color_t rgb[FRAME_W * FRAME_H];
+	class_job_t* job = (class_job_t*)params;
+
+	// proxy variables
+	color_t* rgb = job->rgb;
+	float* hist = job->hist;
+	raw_state_t* state = job->state;
+	mat_t X = class_inst[job->classifier_idx].X;
+	nn_layer_t* L = class_inst[job->classifier_idx].layers;
+
 	const int CHROMA_W = FRAME_W / 2;
-	time_t now = time(NULL);
-	float hist[HIST_W] = {};
-	float confidence = 0;
-	float col_conf_best = 0;
 
-	yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
-
-	for (int ci = 0; ci < HIST_W; ++ci)
+	for (int ci = job->start_col; ci < job->end_col; ++ci)
 	{
 		float col_sum = 0;
 		int c = ci * BUCKET_SIZE;
@@ -85,6 +105,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 
 		for (int r = 0; r < height;)
 		{
+			// slice out patches to use for activation
 			for (int kr = 16; kr--;)
 			for (int kc = 16; kc--;)
 			{
@@ -117,19 +138,59 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 			++samples;
 			col_conf_sum += y.data.f[2];
 
-
 			r += r_stride;
 			r_stride *= 2;
 		}
 
 		float col_conf_avg = col_conf_sum / samples;
-		if (col_conf_avg > col_conf_best) { col_conf_best = col_conf_avg; }
+		if (col_conf_avg > job->col_conf_best) { job->col_conf_best = col_conf_avg; }
 
 		hist[ci] = col_sum;
-		confidence += col_conf_avg;
+		job->confidence += col_conf_avg;
 	}
 
-	confidence /= (float)HIST_W;
+	job->confidence /= (float)(job->end_col - job->start_col);
+
+	return NULL;
+}
+
+void avoider(raw_state_t* state, float* throttle, float* steering)
+{
+	color_t rgb[FRAME_W * FRAME_H];
+	time_t now = time(NULL);
+	float hist[HIST_W] = {};
+	float confidence = 0;
+	float col_conf_best = 0;
+
+	yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
+
+	class_job_t job_params[MODEL_INSTANCES] = {};
+	pthread_t job_threads[MODEL_INSTANCES];
+	int job_col_width = HIST_W / MODEL_INSTANCES;
+	for (int i = 0; i < MODEL_INSTANCES; i++)
+	{
+		job_params[i].classifier_idx = i;
+		job_params[i].start_col = i * job_col_width;
+		job_params[i].end_col = (i + 1) * job_col_width ;
+		job_params[i].rgb = rgb;
+		job_params[i].hist = hist;
+		job_params[i].state = state;
+
+		// col_class_worker(job_params + i);
+		pthread_create(job_threads + i, NULL, col_class_worker, job_params + i);
+	}
+
+	confidence = 0;
+
+	// wait for them to finish
+	for (int i = 0; i < MODEL_INSTANCES; i++)
+	{
+		pthread_join(job_threads[i], NULL);
+
+		confidence += job_params[i].confidence;
+		if (col_conf_best < job_params[i].col_conf_best) { col_conf_best = job_params[i].col_conf_best; }
+	}
+	confidence /= MODEL_INSTANCES;
 
 	// *confidence /= (float)HIST_W;
 
@@ -325,25 +386,30 @@ int main(int argc, char* const argv[])
 
 	signal(SIGINT, sig_handler);
 
-	mat_t x = {
-		.dims = { 1, 768 },
-	};
-	X = x;
+	// load and instantiate multiple instances of the model and
+	// feature vectors for paralellized classification
+	for (int i = MODEL_INSTANCES; i--;)
+	{
+		mat_t x = { .dims = { 1, 768 } };
+		nn_layer_t layers[3] = {
+			{
+				.w = nn_mat_load(ROOT_MODEL_DIR "dense.kernel"),
+				.b = nn_mat_load(ROOT_MODEL_DIR "dense.bias"),
+				.activation = nn_act_relu
+			},
+			{
+				.w = nn_mat_load(ROOT_MODEL_DIR "dense_1.kernel"),
+				.b = nn_mat_load(ROOT_MODEL_DIR "dense_1.bias"),
+				.activation = nn_act_softmax
+			},
+			{}
+		};
+		memcpy(class_inst[i].layers, layers, sizeof(layers));
+		class_inst[i].X = x;
 
-	nn_layer_t l[] = {
-		{
-			.w = nn_mat_load(ROOT_MODEL_DIR "dense.kernel"),
-			.b = nn_mat_load(ROOT_MODEL_DIR "dense.bias"),
-			.activation = nn_act_relu
-		},
-		{
-			.w = nn_mat_load(ROOT_MODEL_DIR "dense_1.kernel"),
-			.b = nn_mat_load(ROOT_MODEL_DIR "dense_1.bias"),
-			.activation = nn_act_softmax
-		},
-		{}
-	};
-	L = l;
+		nn_mat_init(&class_inst[i].X);
+		nn_init(class_inst[i].layers, &class_inst[i].X);
+	}
 
 	// Define and process command line, args
 	cli_cmd_t cmds[] = {
@@ -364,10 +430,6 @@ int main(int argc, char* const argv[])
 	};
 	cli("Collects data from sensors, compiles them into system\n"
 	    "state packets. Then forwards them over stdout", cmds, argc, argv);
-
-	assert(nn_mat_init(&X) == 0);
-	assert(nn_fc_init(L + 0, &X) == 0);
-	assert(nn_fc_init(L + 1, L[0].A) == 0);
 
 	b_log("Waiting...");
 
