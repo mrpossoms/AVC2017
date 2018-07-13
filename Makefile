@@ -1,11 +1,15 @@
 $(eval OS := $(shell uname))
 
+NN=src/libnn
+
 CC=gcc
 CXX=clang++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall -Wno-implicit-function-declaration
 CXXFLAGS=--std=c++11 -g
-INC=-Isrc -Isrc/libnn/src -Isrc/drivers -Isrc/drivers/src/BNO055_driver -Isrc/linmath.h -Isrc/seen/src -Isrc/json -Iml/recognizer/src
+INC=-Isrc -I$(NN)/src -Isrc/drivers -Isrc/drivers/src/BNO055_driver -Isrc/linmath.h -Isrc/seen/src -Isrc/json -Iml/recognizer/src
 LINK=-lm -lpthread
+
+TARGET=$(shell $(CC) -dumpmachine)
 
 DRIVER_SRC= drivers/BNO055_driver/bno055.c drivers/BNO055_driver/bno055_support.c drivers/drv_pwm.c i2c.c
 BASE_SRC = sys.c $(DRIVER_SRC)
@@ -13,7 +17,7 @@ BASE_SRC = sys.c $(DRIVER_SRC)
 COLLECTOR_SRC=deadreckon.c collector.c cam.c $(BASE_SRC)
 PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
 PREDICTOR_SRC=predictor.c $(BASE_SRC)
-PREDICTOR_LINK=src/libnn/lib/libnn.a
+PREDICTOR_LINK=$(NN)/build/$(TARGET)/lib/libnn.a
 ACTUATOR_SRC=actuator.c $(BASE_SRC)
 
 VIEWER_SRC=sys.c viewer.c
@@ -40,29 +44,29 @@ bin/tests:
 obj:
 	mkdir -p obj/drivers/BNO055_driver
 
-bin:
-	mkdir bin
-	cp actions.cal bin/
+bin/$(TARGET):
+	mkdir -p bin/$(TARGET)
+	cp actions.cal bin/$(TARGET)
 
 external:
 
 
-bin/data: bin
-	ln -sf $(shell pwd)/src/seen/demos/data/ bin/data
+bin/$(TARGET)/data: bin/$(TARGET)
+	ln -sf $(shell pwd)/src/seen/demos/data/ bin/$(TARGET)/data
 
-bin/scene.json: bin
-	cp .scene.json bin/scene.json
+bin/$(TARGET)/scene.json: bin/$(TARGET)
+	cp .scene.json bin/$(TARGET)/scene.json
 
 obj/%.o: src/%.c magic obj
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) -c $< -o $@
 
 all: viewer collector masseuse
 
-src/libnn:
-	git clone https://github.com/mrpossoms/libnn src/libnn
+$(NN):
+	git clone https://github.com/mrpossoms/libnn $(NN)
 
-src/libnn/lib/libnn.a: src/libnn
-	make -C src/libnn static
+$(NN)/lib/libnn.a: $(NN)
+	make -C $(NN) static
 
 src/json:
 	mkdir -p src/json
@@ -76,63 +80,72 @@ src/seen:
 	git clone https://github.com/mrpossoms/Seen src/seen
 	make -C src/seen static
 
-magic: src/structs.h src/linmath.h src/libnn/lib/libnn.a src/seen src/json bin/data bin/scene.json
+magic: src/structs.h src/linmath.h $(NN)/lib/libnn.a src/seen src/json bin/$(TARGET)/data bin/$(TARGET)/scene.json
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
-bin/structsize: bin
-	$(CC) $(CFLAGS) $(INC) src/size.c -o structsize
-
-bin/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
+.PHONY: collector
+collector:bin/$(TARGET)/collector
+	@echo "Built collector for" $(TARGET)
+bin/$(TARGET)/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-bin/predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
+.PHONY: predictor
+predictor:bin/$(TARGET)/predictor
+	@echo "Built predictor for" $(TARGET)
+bin/$(TARGET)/predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) $(PREDICTOR_FLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) $(PREDICTOR_LINK)
 
-bin/actuator: $(addprefix obj/,$(ACTUATOR_SRC:.c=.o))
+.PHONY: actuator
+actuator:bin/$(TARGET)/actuator
+	@echo "Built actuator for" $(TARGET)
+bin/$(TARGET)/actuator: $(addprefix obj/,$(ACTUATOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-bin/botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
+.PHONY: botd
+botd:bin/$(TARGET)/botd
+	@echo "Built botd for" $(TARGET)
+bin/$(TARGET)/botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
-bin/viewer: $(addprefix obj/,$(VIEWER_SRC:.c=.o))
+.PHONY: viewer
+viewer:bin/$(TARGET)/viewer
+	@echo "Built viewer for" $(TARGET)
+bin/$(TARGET)/viewer: $(addprefix obj/,$(VIEWER_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $^ -o $@ $(VIEWER_LINK) $(LINK)
 
-bin/sim: magic
-	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $(SIM_INC) $(SIM_SRC) -o $@ -lpng src/seen/lib/libseen.a $(VIEWER_LINK) $(LINK) 
+.PHONY: sim
+sim:bin/$(TARGET)/sim
+	@echo "Built sim for" $(TARGET)
+bin/$(TARGET)/sim: magic
+	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $(SIM_INC) $(SIM_SRC) -o $@ -lpng src/seen/lib/libseen.a $(VIEWER_LINK) $(LINK)
 
-bin/trainx: $(addprefix obj/,$(TRAINX_SRC:.c=.o))
+.PHONY: trainx
+trainx:bin/$(TARGET)/trainx
+	@echo "Built trainx for" $(TARGET)
+bin/$(TARGET)/trainx: $(addprefix obj/,$(TRAINX_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng -lz
 
-
-/var/predictor/color/bad:
-	mkdir -p $@
-	chmod -R 777 $@
-
-/var/predictor/color/good:
-	mkdir -p $@
-	chmod -R 777 $@
-
-bot-utils: bin/predictor bin/actuator bin/collector bin/trainx bin/botd
+bot-utils: bin/$(TARGET)/predictor bin/$(TARGET)/actuator bin/$(TARGET)/collector bin/$(TARGET)/trainx bin/$(TARGET)/botd
 	@echo "Built bot utilities"
 
-install-bot: bot-utils 
+install-bot: bot-utils
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/$(prog);)
 
-install-tools: bin/viewer bin/sim
+install-tools: bin/$(TARGET)/viewer bin/$(TARGET)/sim
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/$(prog);)
 
 
-tests: bin/tests magic
+tests: bin/$(TARGET)/tests magic
 	@echo "Building tests..."
 	@for source in $(TST_SRC); do\
-		($(CC) $(INC)  $(CFLAGS) $(MASSEUSE_SRC) src/tests/$$source.c  -o bin/tests/$${source%.*}.bin $(LINK)) || (exit 1);\
+		($(CC) $(INC)  $(CFLAGS) $(MASSEUSE_SRC) src/tests/$$source.c  -o bin/$(TARGET)/tests/$${source%.*}.bin $(LINK)) || (exit 1);\
 	done
 
 test: tests
 	@./test_runner.py
 
 clean:
-	make -C src/libnn clean
+	make -C $(NN) clean
 	make -C src/seen clean
 	@rm -rf obj
-	@rm -rf bin
+	@rm -rf bin/$(TARGET)

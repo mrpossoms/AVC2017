@@ -1,6 +1,7 @@
 //#include <dirent.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <semaphore.h>
 #include "sys.h"
 #include "structs.h"
 
@@ -69,6 +70,8 @@ static int arg_load_route(char flag, const char* path)
 #define HIST_MID (HIST_W >> 1)
 
 typedef struct {
+	pthread_mutex_t start_gate;
+	sem_t* sem;
 	int classifier_idx;
 	int start_col, end_col;
 	color_t* rgb;
@@ -91,6 +94,12 @@ void* col_class_worker(void* params)
 	nn_layer_t* L = class_inst[job->classifier_idx].layers;
 
 	const int CHROMA_W = FRAME_W / 2;
+
+start:
+	pthread_mutex_lock(&job->start_gate);
+
+	job->confidence = 0;
+	job->col_conf_best = 0;
 
 	for (int ci = job->start_col; ci < job->end_col; ++ci)
 	{
@@ -150,6 +159,8 @@ void* col_class_worker(void* params)
 	}
 
 	job->confidence /= (float)(job->end_col - job->start_col);
+	sem_post(job->sem);
+goto start;
 
 	return NULL;
 }
@@ -164,20 +175,35 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 
 	yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
 
-	class_job_t job_params[MODEL_INSTANCES] = {};
-	pthread_t job_threads[MODEL_INSTANCES];
+	static int setup;
+	static sem_t classifier_synch_sem;
+	static class_job_t job_params[MODEL_INSTANCES];
+	static pthread_t job_threads[MODEL_INSTANCES];
 	int job_col_width = HIST_W / MODEL_INSTANCES;
+
+	if (!setup)
+	{
+		sem_init(&classifier_synch_sem, 0, 0);
+
+		for (int i = 0; i < MODEL_INSTANCES; i++)
+		{
+			job_params[i].sem = &classifier_synch_sem;
+			job_params[i].classifier_idx = i;
+			job_params[i].start_col = i * job_col_width;
+			job_params[i].end_col = (i + 1) * job_col_width ;
+			job_params[i].rgb = rgb;
+			job_params[i].hist = hist;
+			job_params[i].state = state;
+
+			pthread_mutex_lock(&job_params[i].start_gate);
+			pthread_create(job_threads + i, NULL, col_class_worker, job_params + i);
+		}
+		setup = 1;
+	}
+
 	for (int i = 0; i < MODEL_INSTANCES; i++)
 	{
-		job_params[i].classifier_idx = i;
-		job_params[i].start_col = i * job_col_width;
-		job_params[i].end_col = (i + 1) * job_col_width ;
-		job_params[i].rgb = rgb;
-		job_params[i].hist = hist;
-		job_params[i].state = state;
-
-		// col_class_worker(job_params + i);
-		pthread_create(job_threads + i, NULL, col_class_worker, job_params + i);
+		pthread_mutex_unlock(&job_params[i].start_gate);
 	}
 
 	confidence = 0;
@@ -185,8 +211,11 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	// wait for them to finish
 	for (int i = 0; i < MODEL_INSTANCES; i++)
 	{
-		pthread_join(job_threads[i], NULL);
+		sem_wait(&classifier_synch_sem);
+	}
 
+	for (int i = 0; i < MODEL_INSTANCES; i++)
+	{
 		confidence += job_params[i].confidence;
 		if (col_conf_best < job_params[i].col_conf_best) { col_conf_best = job_params[i].col_conf_best; }
 	}

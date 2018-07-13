@@ -1,9 +1,9 @@
 cd libpng*
 
-if [ -z $PREFIX ]; then
+if [ -z $TOOLCHAIN_PREFIX ]; then
 	./configure
 else
-	./configure --prefix=$PREFIX --enable-arm-neon=no 
+	./configure --prefix=$TOOLCHAIN_PREFIX --host=$(gcc -dumpmachine) --enable-arm-neon=no 
 fi
 
 make install -j4
