@@ -157,6 +157,7 @@ int cam_wait_frame(cam_t* cam)
 
 	}
 
+	return res;
 }
 
 
@@ -171,14 +172,13 @@ int cam_config(int fd, cam_settings_t* cfg)
 		return -1;
 	}
 
-/*
+
 	res = ioctl(fd, VIDIOC_G_FMT, &format);
 	if(res < 0)
 	{
 		b_bad("Error: failed retrieving camera settings (%d)", errno);
 		return -2;
 	}
-*/
 
 	format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	format.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;

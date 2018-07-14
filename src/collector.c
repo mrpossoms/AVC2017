@@ -99,15 +99,6 @@ int poll_vision(raw_state_t* state, cam_t* cams)
 {
 	cam_wait_frame(cams);
 
-	range_t luma_range = { 128, 128 };
-	range_t cr_range = { 128, 128 };
-	range_t cb_range = { 128, 128 };
-	float luma_mu = 0;
-	float cr_mu = 0;
-	float cb_mu = 0;
-
-	raw_state_t new_frame = {};
-
 	// Downsample the intensity resolution to match that of
 	// the chroma
 	for (int j = FRAME_H; j--;)
@@ -366,7 +357,7 @@ int main(int argc, char* const argv[])
 	struct sched_param sch_par = {
 		.sched_priority = 50,
 	};
-	
+
 	if (sched_setscheduler(0, SCHED_RR, &sch_par) != 0)
 	{
 		b_bad("RT-scheduling not set");

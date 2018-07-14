@@ -31,10 +31,8 @@ void* pose_estimator(void* params)
 	assert(sched_setaffinity(0, pose_cpu_size, pose_cpu) == 0);
 #endif
 
-	float distance_rolled = 0;
 	int LAST_D_ODO_CYCLE = 0;
 	int last_odo = 0;
-	vec3 last_heading;
 
 	if(READ_ACTION)
 	{

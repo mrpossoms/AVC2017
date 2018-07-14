@@ -39,24 +39,10 @@ static void log_msg(const char* type, const char* fmt, ...)
 	va_start(ap, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
-	
+
 	fprintf(LOG_FILE, "%s\n", buf);
 }
 
-
-static void bad(const char* fmt, ...)
-{
-	va_list ap;
-	char buf[1024];
-
-	log_msg("!", fmt);
-
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-	
-	fprintf(LOG_FILE, "%s\n", buf);
-}
 
 void set_led(int on)
 {
@@ -64,6 +50,7 @@ void set_led(int on)
 	write((fd = open(LED_PATH, O_WRONLY)), on ? "1" : "0", 1);
 	close(fd);
 }
+
 
 void proc_opts(int argc, char* const argv[])
 {
@@ -125,12 +112,12 @@ void child_loop()
 		i2c_up();
 		b_log("Run finished\n");
 	}
-	
+
 	if(last_record_mode != RECORD_MODE)
 	{
 		set_led(RECORD_MODE);
 	}
-	
+
 	if(odo > app.last_odo)
 	{ // Start recording session
 		write(1, ".", 1);
@@ -159,11 +146,11 @@ void child_loop()
 
 			if(RECORD_MODE == 0)
 			{
-				argv[3] == NULL;
+				argv[3] = NULL;
 			}
 
 			posix_spawn(
-				&collector_pid, 
+				&collector_pid,
 				"collector",
 				NULL, NULL,
 				argv,
@@ -187,23 +174,21 @@ void child_loop()
 
 int main(int argc, char* const argv[])
 {
-	int res;
-	
 	PROC_NAME = argv[0];
 	proc_opts(argc, argv);
-	
+
 	LOG_FILE = fopen("/var/log/botd", "w+");
-	
+
 	if(!LOG_FILE)
 	{
 		fprintf(stderr, "Failed to open logfile (%d)\n", errno);
 		return -1;
 	}
 
-	if(!MEDIA_PATH) 
+	if(!MEDIA_PATH)
 	{
 		BAD("Please provide a training data media path\n");
-		return -1;	
+		return -1;
 	}
 
 	i2c_up();
