@@ -78,6 +78,9 @@ src/linmath.h:
 
 src/seen:
 	git clone https://github.com/mrpossoms/Seen src/seen
+
+
+src/seen/lib/libseen.a: src/seen
 	make -C src/seen static
 
 magic: src/structs.h src/linmath.h $(NN)/lib/libnn.a src/seen src/json bin/$(TARGET)/data bin/$(TARGET)/scene.json
@@ -85,48 +88,48 @@ magic: src/structs.h src/linmath.h $(NN)/lib/libnn.a src/seen src/json bin/$(TAR
 
 .PHONY: collector
 collector:bin/$(TARGET)/collector
-	@echo "Built collector for" $(TARGET)
+	@echo -e "\e[92mBuilt collector for" $(TARGET)
 bin/$(TARGET)/collector: $(addprefix obj/,$(COLLECTOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 .PHONY: predictor
 predictor:bin/$(TARGET)/predictor
-	@echo "Built predictor for" $(TARGET)
+	@echo -e "\e[92mBuilt predictor for" $(TARGET)
 bin/$(TARGET)/predictor: $(addprefix obj/,$(PREDICTOR_SRC:.c=.o))
-	$(CC) $(CFLAGS) $(PREDICTOR_FLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) $(PREDICTOR_LINK)
+	$(CC) $(CFLAGS) $(PREDICTOR_FLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(PREDICTOR_LINK) $(LINK)
 
 .PHONY: actuator
 actuator:bin/$(TARGET)/actuator
-	@echo "Built actuator for" $(TARGET)
+	@echo -e "\e[92mBuilt actuator for" $(TARGET)
 bin/$(TARGET)/actuator: $(addprefix obj/,$(ACTUATOR_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 .PHONY: botd
 botd:bin/$(TARGET)/botd
-	@echo "Built botd for" $(TARGET)
+	@echo -e "\e[92mBuilt botd for" $(TARGET)
 bin/$(TARGET)/botd: $(addprefix obj/,$(BOTD_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK)
 
 .PHONY: viewer
 viewer:bin/$(TARGET)/viewer
-	@echo "Built viewer for" $(TARGET)
+	@echo -e "\e[92mBuilt viewer for" $(TARGET)
 bin/$(TARGET)/viewer: $(addprefix obj/,$(VIEWER_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $^ -o $@ $(VIEWER_LINK) $(LINK)
 
 .PHONY: sim
 sim:bin/$(TARGET)/sim
-	@echo "Built sim for" $(TARGET)
-bin/$(TARGET)/sim: magic
+	@echo -e "\e[92mBuilt sim for" $(TARGET)
+bin/$(TARGET)/sim: magic src/seen/lib/libseen.a
 	$(CXX) $(CXXFLAGS) -DMAGIC=$(shell cat magic) $(LIB_PATHS) $(INC) $(LIB_INC) $(SIM_INC) $(SIM_SRC) -o $@ -lpng src/seen/lib/libseen.a $(VIEWER_LINK) $(LINK)
 
 .PHONY: trainx
 trainx:bin/$(TARGET)/trainx
-	@echo "Built trainx for" $(TARGET)
+	@echo -e "\e[92mBuilt trainx for" $(TARGET)
 bin/$(TARGET)/trainx: $(addprefix obj/,$(TRAINX_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng -lz
 
 bot-utils: bin/$(TARGET)/predictor bin/$(TARGET)/actuator bin/$(TARGET)/collector bin/$(TARGET)/trainx bin/$(TARGET)/botd
-	@echo "Built bot utilities"
+	@echo -e "\e[92mBuilt bot utilities"
 
 install-bot: bot-utils
 	$(foreach prog, $^, ln -s $(shell pwd)/$(prog) /usr/$(prog);)
@@ -136,7 +139,7 @@ install-tools: bin/$(TARGET)/viewer bin/$(TARGET)/sim
 
 
 tests: bin/$(TARGET)/tests magic
-	@echo "Building tests..."
+	@echo -e "\e[92mBuilding tests..."
 	@for source in $(TST_SRC); do\
 		($(CC) $(INC)  $(CFLAGS) $(MASSEUSE_SRC) src/tests/$$source.c  -o bin/$(TARGET)/tests/$${source%.*}.bin $(LINK)) || (exit 1);\
 	done

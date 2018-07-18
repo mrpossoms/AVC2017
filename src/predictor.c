@@ -86,6 +86,10 @@ void* col_class_worker(void* params)
 {
 	class_job_t* job = (class_job_t*)params;
 
+	// profiling vars
+	unsigned int cycles = 0;
+	time_t start;
+
 	// proxy variables
 	color_t* rgb = job->rgb;
 	float* hist = job->hist;
@@ -97,6 +101,15 @@ void* col_class_worker(void* params)
 
 start:
 	pthread_mutex_lock(&job->start_gate);
+	time_t now = time(NULL);
+	if (start != now)
+	{
+		b_log("col_class_thd%d %d Hz", job->classifier_idx, cycles);
+		start = now;
+		cycles = 0;
+	}
+
+	cycles++;
 
 	job->confidence = 0;
 	job->col_conf_best = 0;
@@ -124,9 +137,11 @@ start:
 				X.data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
 			}
 
+			// pass the patch through the network, make predictions
 			mat_t y = *nn_predict(L, &X);
 			col_sum += (-(y.data.f[0] + y.data.f[1]) + (y.data.f[2]));
 
+			// colorize frame for debugging if specified
 			if (FORWARD_STATE)
 			for (int kr = r_stride; kr--;)
 			for (int kc = BUCKET_SIZE; kc--;)
@@ -417,27 +432,38 @@ int main(int argc, char* const argv[])
 
 	// load and instantiate multiple instances of the model and
 	// feature vectors for paralellized classification
+	mat_t x = {
+		.dims = { 1, 768 },
+#ifdef USE_VECTORIZATION
+		.row_major = 1
+#endif
+	};
+	nn_layer_t template[] = {
+		{
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "dense.kernel", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "dense.bias", 1),
+			.activation = nn_act_relu
+		},
+		{
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "dense_1.kernel", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "dense_1.bias", 1),
+			.activation = nn_act_softmax
+		},
+		{}
+	};
+	nn_init(template, &x);
+
 	for (int i = MODEL_INSTANCES; i--;)
 	{
-		mat_t x = { .dims = { 1, 768 } };
-		nn_layer_t layers[3] = {
-			{
-				.w = nn_mat_load(ROOT_MODEL_DIR "dense.kernel"),
-				.b = nn_mat_load(ROOT_MODEL_DIR "dense.bias"),
-				.activation = nn_act_relu
-			},
-			{
-				.w = nn_mat_load(ROOT_MODEL_DIR "dense_1.kernel"),
-				.b = nn_mat_load(ROOT_MODEL_DIR "dense_1.bias"),
-				.activation = nn_act_softmax
-			},
-			{}
+		mat_t x = {
+			.dims = { 1, 768 },
+	#ifdef USE_VECTORIZATION
+			.row_major = 1
+	#endif
 		};
-		memcpy(class_inst[i].layers, layers, sizeof(layers));
 		class_inst[i].X = x;
-
 		nn_mat_init(&class_inst[i].X);
-		nn_init(class_inst[i].layers, &class_inst[i].X);
+		nn_clone(class_inst[i].layers, template, &class_inst[i].X);
 	}
 
 	// Define and process command line, args
