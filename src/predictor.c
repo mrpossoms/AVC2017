@@ -9,7 +9,7 @@
 
 #define ROOT_MODEL_DIR "/var/model/"
 #define MODEL_LAYERS 3
-#define MODEL_INSTANCES 2
+#define MODEL_INSTANCES 3
 
 int INPUT_FD = 0;
 

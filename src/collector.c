@@ -321,8 +321,8 @@ int main(int argc, char* const argv[])
 
 	int res;
 	cam_settings_t cfg = {
-		.width  = 160,
-		.height = 120,
+		.width  = FRAME_W,
+		.height = FRAME_H,
 		.frame_rate = FRAME_RATE,
 	};
 
