@@ -107,10 +107,10 @@ int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
 
-	RendererGL renderer("./data", "Sim", FRAME_W, FRAME_H, 4, 0);
+	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 4, 0);
 	Camera camera(M_PI / 2, renderer.width, renderer.height);
 
-	ListScene scene, ground_scene, hay_scene;
+	ListScene scene, ground_scene, hay_scene, shadow_scene;
 
 	json scene_json;
 	i >> scene_json;
@@ -131,6 +131,7 @@ int main (int argc, char* argv[])
 
 	// Asphalt setup
 	Asphalt asphalt;
+	HayBale::material();
 
 	auto vsh = seen::Shader::vertex("basic_vsh");
 	vsh.vertex(seen::Shader::VERT_POSITION | seen::Shader::VERT_NORMAL | seen::Shader::VERT_TANGENT | seen::Shader::VERT_UV)
@@ -143,18 +144,21 @@ int main (int argc, char* argv[])
 	auto fsh = seen::Shader::fragment("basic_fsh").preceded_by(vsh);
 	fsh.color_textured()
 	   .normal_mapped()
-	//    .shadow_mapped_vsm()
+	   .shadow_mapped_vsm()
 	   .blinn()
 	;
 
 	auto primary_shader = seen::ShaderProgram::compile({ vsh, fsh });
+	const float light_power = 40;
 	seen::Light light = {
-		.position = { 0, 20, 0 },
-		.power = { 2.5, 2.5, 2.5 },
-		.is_point = true,
+		.position = { 0, 30, 0 },
+		.power = { light_power, light_power, light_power },
+		//.is_point = true,
 		.ambience = 0.01
 	};
+	mat4x4_perspective(light.projection.v, M_PI / 2, 1, 0.1, 100);
 
+	auto shadow_pass = seen::ShadowPass(512, true);
 	CustomPass ground_pass([&](int index) {
 		// draw pass preparation
 		// ShaderConfig shader_desc = SURFACE_SHADER;
@@ -170,8 +174,12 @@ int main (int argc, char* argv[])
 		// shader["us_displacement"] << asphalt.disp_tex;
 		primary_shader->use();
 
+
+		(*primary_shader)["u_view_position"] << camera.position();
 		*primary_shader << &light;
+		*primary_shader << &shadow_pass;
 		*primary_shader << asphalt.mat;
+
 	}, NULL);
 	ground_scene.drawables().push_back(&asphalt);
 	ground_pass.scene = &ground_scene;
@@ -183,8 +191,7 @@ int main (int argc, char* argv[])
 		// shader["TessLevelInner"] << 5.0f;
 		// shader["TessLevelOuter"] << 5.0f;
 		// shader["us_displacement"] << HayBale::displacement_tex();
-		primary_shader->use();
-
+		// primary_shader->use();
 		*primary_shader << HayBale::material();
 	}, NULL);
 	bale_pass.scene = &hay_scene;
@@ -194,6 +201,11 @@ int main (int argc, char* argv[])
 	mat4x4_translate_in_place(I.v, 0, 0, 0);
 	auto root = scene_json["object"];
 	populate_scene(hay_scene, root, I);
+
+	shadow_scene.drawables().push_back(&ground_scene);
+	shadow_scene.drawables().push_back(&hay_scene);
+	shadow_pass.scene = &shadow_scene;
+	shadow_pass.lights.push_back(&light);
 
 	// camera.position(0, 0, 0);
 
@@ -293,6 +305,7 @@ int main (int argc, char* argv[])
 				((uint8_t*)tmp)[i] = c;
 			}
 
+			// flip image vertically
 			for (int i = FRAME_H; i--;)
 			{
 				memcpy(rgb_buf + (i * FRAME_W), tmp + ((FRAME_H - i) * FRAME_W), sizeof(color_t) * FRAME_W);
@@ -307,7 +320,12 @@ int main (int argc, char* argv[])
 			}
 		}
 
-		renderer.draw(&camera, { &sky_pass, &ground_pass, &bale_pass });
+		renderer.draw(&camera, {
+			&shadow_pass,
+			&sky_pass,
+			&ground_pass,
+			&bale_pass
+		});
 
 		// sleep(1);
 		// usleep(1000000);

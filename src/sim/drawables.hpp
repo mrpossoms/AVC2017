@@ -50,6 +50,7 @@ public:
 
 		// shader["u_normal_matrix"] << _rot;
 		// shader["u_world_matrix"] << world;
+		// shader << HayBale::material();
 		shader["u_displacement_weight"] << disp_weight;
 		shader["u_tex_control"] << tex_control;
 		Model::draw();

@@ -9,7 +9,7 @@
 
 #define ROOT_MODEL_DIR "/var/model/"
 #define MODEL_LAYERS 3
-#define MODEL_INSTANCES 3
+#define MODEL_INSTANCES 2
 
 int INPUT_FD = 0;
 
@@ -88,7 +88,7 @@ void* col_class_worker(void* params)
 
 	// profiling vars
 	unsigned int cycles = 0;
-	time_t start;
+	time_t start = 0;
 
 	// proxy variables
 	color_t* rgb = job->rgb;
@@ -191,18 +191,24 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
 
 	static int setup;
-	static sem_t classifier_synch_sem;
+	static sem_t* classifier_synch_sem;
 	static class_job_t job_params[MODEL_INSTANCES];
 	static pthread_t job_threads[MODEL_INSTANCES];
 	int job_col_width = HIST_W / MODEL_INSTANCES;
 
 	if (!setup)
 	{
-		sem_init(&classifier_synch_sem, 0, 0);
+		sem_unlink("avc_vis_sem");
+		classifier_synch_sem = sem_open("avc_vis_sem", O_CREAT, 0666, 0);
+		if(classifier_synch_sem == SEM_FAILED)
+		{
+			b_bad("sem_open() - failed for visual multiprocessing");
+			exit(-3);
+		}
 
 		for (int i = 0; i < MODEL_INSTANCES; i++)
 		{
-			job_params[i].sem = &classifier_synch_sem;
+			job_params[i].sem = classifier_synch_sem;
 			job_params[i].classifier_idx = i;
 			job_params[i].start_col = i * job_col_width;
 			job_params[i].end_col = (i + 1) * job_col_width ;
@@ -210,6 +216,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 			job_params[i].hist = hist;
 			job_params[i].state = state;
 
+			pthread_mutex_init(&job_params[i].start_gate, NULL);
 			pthread_mutex_lock(&job_params[i].start_gate);
 			pthread_create(job_threads + i, NULL, col_class_worker, job_params + i);
 		}
@@ -226,7 +233,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	// wait for them to finish
 	for (int i = 0; i < MODEL_INSTANCES; i++)
 	{
-		sem_wait(&classifier_synch_sem);
+		sem_wait(classifier_synch_sem);
 	}
 
 	for (int i = 0; i < MODEL_INSTANCES; i++)
@@ -234,6 +241,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 		confidence += job_params[i].confidence;
 		if (col_conf_best < job_params[i].col_conf_best) { col_conf_best = job_params[i].col_conf_best; }
 	}
+
 	confidence /= MODEL_INSTANCES;
 
 	// *confidence /= (float)HIST_W;
@@ -431,7 +439,7 @@ int main(int argc, char* const argv[])
 	signal(SIGINT, sig_handler);
 
 	// load and instantiate multiple instances of the model and
-	// feature vectors for paralellized classification
+	// feature vectors for parallelized classification
 	mat_t x = {
 		.dims = { 1, 768 },
 #ifdef USE_VECTORIZATION
@@ -440,18 +448,23 @@ int main(int argc, char* const argv[])
 	};
 	nn_layer_t template[] = {
 		{
-			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "dense.kernel", 0),
-			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "dense.bias", 1),
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "fc0.w", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "fc0.b", 1),
 			.activation = nn_act_relu
 		},
 		{
-			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "dense_1.kernel", 0),
-			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "dense_1.bias", 1),
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "fc1.w", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "fc1.b", 1),
 			.activation = nn_act_softmax
 		},
 		{}
 	};
-	nn_init(template, &x);
+
+	if (nn_init(template, &x) != 0)
+	{
+		b_bad("Error initializing NN");
+		return -1;
+	}
 
 	for (int i = MODEL_INSTANCES; i--;)
 	{
