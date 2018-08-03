@@ -128,14 +128,16 @@ start:
 		for (int r = 0; r < height;)
 		{
 			// slice out patches to use for activation
-			for (int kr = 16; kr--;)
-			for (int kc = 16; kc--;)
-			{
-				color_t color = rgb[((r + start + kr) * FRAME_W) + c + kc];
-				X.data.f[(kr * 48) + kc * 3 + 0] = (color.r / 255.0f) - 0.5f;
-				X.data.f[(kr * 48) + kc * 3 + 1] = (color.g / 255.0f) - 0.5f;
-				X.data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
-			}
+			// for (int kr = 16; kr--;)
+			// for (int kc = 16; kc--;)
+			// {
+			// 	color_t color = rgb[((r + start + kr) * FRAME_W) + c + kc];
+			// 	X.data.f[(kr * 48) + kc * 3 + 0] = (color.r / 255.0f) - 0.5f;
+			// 	X.data.f[(kr * 48) + kc * 3 + 1] = (color.g / 255.0f) - 0.5f;
+			// 	X.data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
+			// }
+			rectangle_t patch = { c, r + start, 16, 16 };
+			image_patch_f(X.data.f, rgb, patch);
 
 			// pass the patch through the network, make predictions
 			mat_t y = *nn_predict(L, &X);

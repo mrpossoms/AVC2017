@@ -16,19 +16,19 @@ BASE_SRC = sys.c $(DRIVER_SRC)
 
 COLLECTOR_SRC=deadreckon.c collector.c cam.c $(BASE_SRC)
 PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
-PREDICTOR_SRC=predictor.c $(BASE_SRC)
-PREDICTOR_LINK=$(NN)/build/$(TARGET)/lib/libnn.a
+PREDICTOR_SRC=predictor.c vision.c $(BASE_SRC)
+PREDICTOR_LINK=$(NN)/build/$(TARGET)/lib/libnn.a -lpng
 ACTUATOR_SRC=actuator.c $(BASE_SRC)
 
-VIEWER_SRC=sys.c viewer.c
-VIEWER_LINK=
+VIEWER_SRC=viewer.c vision.c sys.c
+VIEWER_LINK=-lpng
 BOTD_SRC=sys.c botd.c $(DRIVER_SRC)
 TST_SRC=masseuse_falloff masseuse_bucket
 
 SIM_SRC=src/sim/sim.cpp src/sys.c
 SIM_INC=-Isrc/seen/demos/src/
 
-TRAINX_SRC= trainx.c $(BASE_SRC)
+TRAINX_SRC= trainx.c vision.c $(BASE_SRC)
 
 ifeq ($(OS),Darwin)
 	VIEWER_LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo

@@ -34,6 +34,10 @@
 extern const char* PROC_NAME;
 
 typedef struct {
+    int x, y, w, h;
+} rectangle_t;
+
+typedef struct {
 	char c;
 	const char* str;
 } cli_flag_t;
@@ -76,7 +80,6 @@ int read_pipeline_payload(message_t* msg, payload_type_t exp_type);
 
 int calib_load(const char* path, calib_t* cal);
 
-void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h);
 float clamp(float v);
 
 void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const char* cmd_desc[]);

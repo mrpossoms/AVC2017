@@ -2,8 +2,7 @@
 #include <stdarg.h>
 #include "sys.h"
 #include "structs.h"
-
-#include <png.h>
+#include "vision.h"
 
 
 int FORWARD_STATE;
@@ -70,56 +69,6 @@ static int exists(const char* path)
 	}
 
 	return 1;
-}
-
-
-static void write_png_file_rgb(
-	const char* path,
-	int width,
-	int height,
-	const char* buffer){
-
-	FILE *fp = fopen(path, "wb");
-
-	if(!fp)
-	{
-		b_bad("Couldn't open %s for writing", path);
-		abort();
-	}
-
-	png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-	if (!png) abort();
-
-	png_infop info = png_create_info_struct(png);
-	if (!info) abort();
-
-	if (setjmp(png_jmpbuf(png))) abort();
-
-	png_init_io(png, fp);
-
-	// Output is 8bit depth, RGB format.
-	png_set_IHDR(
-		png,
-		info,
-		width, height,
-		8,
-		PNG_COLOR_TYPE_RGB,
-		PNG_INTERLACE_NONE,
-		PNG_COMPRESSION_TYPE_DEFAULT,
-		PNG_FILTER_TYPE_DEFAULT
-	);
-	png_write_info(png, info);
-
-	png_bytep rows[height];
-	for(int i = height; i--;)
-	{
-		rows[i] = (png_bytep)(buffer + i * (width * 3));
-	}
-
-	png_write_image(png, rows);
-	png_write_end(png, NULL);
-
-	fclose(fp);
 }
 
 

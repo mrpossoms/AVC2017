@@ -118,9 +118,6 @@ int main (int argc, char* argv[])
 	// Sky setup
 	seen::Model* sky = seen::MeshFactory::get_model("sphere.obj");
 	CustomPass sky_pass([&](int index) {
-		// draw pass preparation
-		//ShaderConfig shader_desc = SKY_SHADERS;
-		//ShaderProgram* shader = Shaders[shader_desc]->use();
 		seen::ShaderProgram::builtin_sky()->use();
 		glDisable(GL_CULL_FACE);
 	}, NULL);
@@ -158,7 +155,7 @@ int main (int argc, char* argv[])
 	};
 	mat4x4_perspective(light.projection.v, M_PI / 2, 1, 0.1, 100);
 
-	auto shadow_pass = seen::ShadowPass(512, true);
+	auto shadow_pass = seen::ShadowPass(512, 1);
 	CustomPass ground_pass([&](int index) {
 		// draw pass preparation
 		// ShaderConfig shader_desc = SURFACE_SHADER;
@@ -210,8 +207,6 @@ int main (int argc, char* argv[])
 	// camera.position(0, 0, 0);
 
 	int sock_fd = open_ctrl_pipe();
-
-	float t = 0;
 
 	renderer.key_pressed = [&](int key) {
 		switch (key) {
@@ -265,6 +260,7 @@ int main (int argc, char* argv[])
 		},
 	};
 
+	float t = 0;
 	while (renderer.is_running())
 	{
 		// look for socket input
@@ -319,6 +315,10 @@ int main (int argc, char* argv[])
 				return -1;
 			}
 		}
+
+		light.position.x = cos(t) * 10;
+		light.position.z = sin(t) * 10;
+		t += 0.01f;
 
 		renderer.draw(&camera, {
 			&shadow_pass,
