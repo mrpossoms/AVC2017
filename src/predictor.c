@@ -11,6 +11,15 @@
 #define MODEL_LAYERS 3
 #define MODEL_INSTANCES 2
 
+#define MAX_POOL_HALF {          \
+    .type = POOLING_MAX,         \
+    .op = {                      \
+       .padding = PADDING_VALID,  \
+       .stride = { 2, 2 },       \
+       .kernel = { 2, 2 },       \
+    }                            \
+}\
+
 int INPUT_FD = 0;
 
 waypoint_t* WAYPOINTS;
@@ -434,6 +443,8 @@ waypoint_t* best_waypoint(raw_state_t* state)
 }
 
 
+#define USE_CNN
+
 int main(int argc, char* const argv[])
 {
 	PROC_NAME = argv[0];
@@ -443,12 +454,17 @@ int main(int argc, char* const argv[])
 	// load and instantiate multiple instances of the model and
 	// feature vectors for parallelized classification
 	mat_t x = {
+#ifdef USE_CNN
+		.dims = { 16, 16, 3 },
+#else
 		.dims = { 1, 768 },
-#ifdef USE_VECTORIZATION
-		.row_major = 1
 #endif
+		.row_major = 1,
+		.is_activation_map = 1,
 	};
 	nn_layer_t template[] = {
+#ifndef USE_CNN
+		// fc2
 		{
 			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "fc0.w", 0),
 			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "fc0.b", 1),
@@ -459,6 +475,72 @@ int main(int argc, char* const argv[])
 			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "fc1.b", 1),
 			.activation = nn_act_softmax
 		},
+#else
+		// cnn2
+		{
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "c0.w", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "c0.b", 1),
+			.activation = nn_act_relu,
+			.filter = {
+				.kernel = { 3, 3 },
+				.stride = { 1, 1 },
+				.padding = PADDING_VALID,
+
+			},
+			.pool = MAX_POOL_HALF,
+		},
+		{
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "c1.w", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "c1.b", 1),
+			// .activation = nn_act_linear,
+			.activation = nn_act_softmax,
+			.filter = {
+				.kernel = { 7, 7 },
+				.stride = { 1, 1 },
+				.padding = PADDING_VALID,
+
+			},
+		},
+#endif
+
+		// // cnn3
+		// {
+		// 	.w = nn_mat_load_row_order(ROOT_MODEL_DIR "c0.w", 0),
+		// 	.b = nn_mat_load_row_order(ROOT_MODEL_DIR "c0.b", 1),
+		// 	.activation = nn_act_relu,
+		// 	.filter = {
+		// 		.kernel = { 5, 5 },
+		// 		.stride = { 1, 1 },
+		// 		.padding = PADDING_VALID,
+
+		// 	},
+		// 	.pool = MAX_POOL_HALF,
+		// },
+		// {
+		// 	.w = nn_mat_load_row_order(ROOT_MODEL_DIR "c1.w", 0),
+		// 	.b = nn_mat_load_row_order(ROOT_MODEL_DIR "c1.b", 1),
+		// 	// .activation = nn_act_linear,
+		// 	.activation = nn_act_relu,
+		// 	.filter = {
+		// 		.kernel = { 5, 5 },
+		// 		.stride = { 1, 1 },
+		// 		.padding = PADDING_VALID,
+
+		// 	},
+		// 	// .pool = MAX_POOL_HALF,
+		// },
+		// {
+		// 	.w = nn_mat_load_row_order(ROOT_MODEL_DIR "c2.w", 0),
+		// 	.b = nn_mat_load_row_order(ROOT_MODEL_DIR "c2.b", 1),
+		// 	// .activation = nn_act_linear,
+		// 	.activation = nn_act_softmax,
+		// 	.filter = {
+		// 		.kernel = { 2, 2 },
+		// 		.stride = { 1, 1 },
+		// 		.padding = PADDING_VALID,
+
+		// 	},
+		// },
 		{}
 	};
 
@@ -471,10 +553,13 @@ int main(int argc, char* const argv[])
 	for (int i = MODEL_INSTANCES; i--;)
 	{
 		mat_t x = {
+#ifdef USE_CNN
+			.dims = { 16, 16, 3 },
+#else
 			.dims = { 1, 768 },
-	#ifdef USE_VECTORIZATION
-			.row_major = 1
-	#endif
+#endif
+			.row_major = 1,
+			.is_activation_map = 1,
 		};
 		class_inst[i].X = x;
 		nn_mat_init(&class_inst[i].X);
