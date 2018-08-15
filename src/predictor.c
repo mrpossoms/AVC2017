@@ -22,6 +22,7 @@
 
 int INPUT_FD = 0;
 int FORWARD_STATE = 0;
+int DEBUG_COLORS = 0;
 int USE_DEADRECKONING = 0;
 
 typedef struct {
@@ -104,7 +105,7 @@ start:
 			col_sum += (-(y.data.f[0] + y.data.f[1]) + (y.data.f[2]));
 
 			//  if specified, colorize classified patches from frame for debugging
-			if (FORWARD_STATE)
+			if (DEBUG_COLORS)
 			for (int kr = r_stride; kr--;)
 			for (int kc = BUCKET_SIZE; kc--;)
 			{
@@ -267,6 +268,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	} lpf;
 	static time_t backup_start = 0;
 
+	if (DEBUG_COLORS)
 	{ // Color the region and target index for debugging
 		int ci;
 
@@ -470,11 +472,15 @@ int main(int argc, char* const argv[])
 	cli_cmd_t cmds[] = {
 		{ 'f',
 			.desc = "Forward full system state over stdout",
-			.set = &FORWARD_STATE,
+			.set  = &FORWARD_STATE,
+		},
+		{ 'c',
+			.desc = "Show debug colors",
+			.set  = &DEBUG_COLORS,
 		},
 		{ 'd',
 			.desc = "Enable deadreckoning",
-			.set = &USE_DEADRECKONING,
+			.set  = &USE_DEADRECKONING,
 		},
 		{}
 	};
