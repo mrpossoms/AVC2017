@@ -9,7 +9,7 @@
 
 #define ROOT_MODEL_DIR "/var/model/"
 #define MODEL_LAYERS 3
-#define MODEL_INSTANCES 2
+#define MODEL_INSTANCES 3
 
 #define MAX_POOL_HALF {          \
     .type = POOLING_MAX,         \
@@ -21,10 +21,6 @@
 }\
 
 int INPUT_FD = 0;
-
-waypoint_t* WAYPOINTS;
-waypoint_t* NEXT_WPT;
-
 int FORWARD_STATE = 0;
 int USE_DEADRECKONING = 0;
 
@@ -37,44 +33,8 @@ classifier_t class_inst[MODEL_INSTANCES];
 
 float TOTAL_DISTANCE;
 
-static int arg_load_route(char flag, const char* path)
-{
-	// Load the route
-	int fd = open(path, O_RDONLY);
-	if (fd < 0)
-	{
-		b_log("Loading route: '%s' failed", optarg);
-		exit(-1);
-	}
-
-	off_t all_bytes = lseek(fd, 0, SEEK_END);
-	size_t count = all_bytes / sizeof(waypoint_t);
-
-	b_log("Loading route with %d waypoints", count);
-
-	lseek(fd, 0, SEEK_SET);
-	WAYPOINTS = (waypoint_t*)calloc(count + 1, sizeof(waypoint_t));
-	size_t read_bytes = read(fd, WAYPOINTS, count * sizeof(waypoint_t));
-	if (read_bytes != count * sizeof(waypoint_t))
-	{
-		b_log("route read of %d/%dB failed", read_bytes, all_bytes);
-		exit(-1);
-	}
-	close(fd);
-
-	// connect waypoint references
-	for (int i = 0; i < count - 1; ++i)
-	{
-		WAYPOINTS[i].next = WAYPOINTS + i + 1;
-	}
-	WAYPOINTS[count - 1].next = NULL;
-
-	NEXT_WPT = WAYPOINTS;
-
-	return 0;
-}
-
-#define BUCKET_SIZE 32
+#define BUCKETS 8
+#define BUCKET_SIZE (FRAME_W / BUCKETS)
 #define HIST_W (FRAME_W / BUCKET_SIZE)
 #define HIST_MID (HIST_W >> 1)
 
@@ -136,15 +96,6 @@ start:
 
 		for (int r = 0; r < height;)
 		{
-			// slice out patches to use for activation
-			// for (int kr = 16; kr--;)
-			// for (int kc = 16; kc--;)
-			// {
-			// 	color_t color = rgb[((r + start + kr) * FRAME_W) + c + kc];
-			// 	X.data.f[(kr * 48) + kc * 3 + 0] = (color.r / 255.0f) - 0.5f;
-			// 	X.data.f[(kr * 48) + kc * 3 + 1] = (color.g / 255.0f) - 0.5f;
-			// 	X.data.f[(kr * 48) + kc * 3 + 2] = (color.b / 255.0f) - 0.5f;
-			// }
 			rectangle_t patch = { c, r + start, 16, 16 };
 			image_patch_f(X.data.f, rgb, patch);
 
@@ -152,7 +103,7 @@ start:
 			mat_t y = *nn_predict(L, &X);
 			col_sum += (-(y.data.f[0] + y.data.f[1]) + (y.data.f[2]));
 
-			// colorize frame for debugging if specified
+			//  if specified, colorize classified patches from frame for debugging
 			if (FORWARD_STATE)
 			for (int kr = r_stride; kr--;)
 			for (int kc = BUCKET_SIZE; kc--;)
@@ -222,10 +173,15 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 			job_params[i].sem = classifier_synch_sem;
 			job_params[i].classifier_idx = i;
 			job_params[i].start_col = i * job_col_width;
-			job_params[i].end_col = (i + 1) * job_col_width ;
+			job_params[i].end_col = (i + 1) * job_col_width;
 			job_params[i].rgb = rgb;
 			job_params[i].hist = hist;
 			job_params[i].state = state;
+
+			if (i == MODEL_INSTANCES - 1)
+			{
+				job_params[i].end_col = HIST_W;
+			}
 
 			pthread_mutex_init(&job_params[i].start_gate, NULL);
 			pthread_mutex_lock(&job_params[i].start_gate);
@@ -257,34 +213,34 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 
 	// *confidence /= (float)HIST_W;
 
-	float best = hist[HIST_W-1];
-	int cont_r[2] = { HIST_W, HIST_W };
+	float best_score = -100;//hist[HIST_W-1];
+	int cont_r[2] = { 0, HIST_W };
 
 	// Here we pick the best, most contigious horizontal range of
 	// the frame with the smallest sum of 'bad' colors, or the
 	// largest sum of good colors if they are present.
 	for (int j = HIST_W + 1; j--;)
 	{
-		float cost = 0;
+		float score = 0;
 		int cont_start = j;
 
 		// From the current column, slide all the way to the left.
 		for (int i = j; i--;)
 		{
-			// Accumulate cost for this region
-			cost += hist[i];
+			// Accumulate score for this region
+			score += hist[i];
 
 			// The score for this region also factors in the width
 			// so as the region grows without accumulating badness
 			// it becomes more attractive. If it is found to have a better
 			// score than the best, then set it as the new best.
 			const float width_weight = 1;
-			float total_cost = cost / (1 + (j - i) * width_weight);
-			if (total_cost > best)
+			float total_score = score / (1 + (j - i) * width_weight);
+			if (total_score > best_score)
 			{
 				cont_r[0] = i;
 				cont_r[1] = cont_start;
-				best = total_cost;
+				best_score = total_score;
 			}
 		}
 	}
@@ -292,14 +248,17 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	int target_idx = (cont_r[0] + cont_r[1]) >> 1;
 
 	// Decide which place in the region we should steer toward
-	if (target_idx > HIST_MID)
+
+	if (cont_r[0] > HIST_MID && cont_r[1] > HIST_MID)
 	{
 		target_idx = cont_r[1];// + cont_width * 0.75f;
 	}
-	else if (target_idx < HIST_MID)
+	else if (cont_r[0] < HIST_MID && cont_r[1] < HIST_MID)
 	{
 		target_idx = cont_r[0];// + cont_width * 0.25f;
 	}
+
+	// target_idx = (cont_r[1] + cont_r[0]) >> 1;
 
 	float fp = (target_idx / (float)HIST_W);
 	static struct {
@@ -317,7 +276,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 			state->view.luma[i * FRAME_W + ci] = 128;
 		}
 
-		ci = fp * FRAME_W;
+		ci = fp * (FRAME_W - 1);
 		for (int i = FRAME_H; i--;)
 		{
 			state->view.luma[i * FRAME_W + ci] = 0;
@@ -359,7 +318,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 }
 
 time_t LAST_SECOND;
-raw_action_t predict(raw_state_t* state, waypoint_t* goal)
+raw_action_t predict(raw_state_t* state)
 {
 	raw_action_t act = { 117, 117 };
 
@@ -368,7 +327,7 @@ raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 	avoider(state, &throttle, &steer);
 
 	// Lerp between right and left.
-	act.steering = 255 * steer; //CAL.steering.max * (1 - p) + CAL.steering.min * p;
+	act.steering = steer * 255;//CAL.steering.max * (1 - steer) + CAL.steering.min * steer;
 
 	// Use a pid controller to regulate the throttle to match the speed driven
 	act.throttle = 100 + throttle * 155;
@@ -380,68 +339,9 @@ raw_action_t predict(raw_state_t* state, waypoint_t* goal)
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);
+	sem_unlink("avc_vis_sem");
 	exit(0);
 }
-
-
-waypoint_t* best_waypoint(raw_state_t* state)
-{
-	waypoint_t* next = NEXT_WPT;
-	waypoint_t* best = NEXT_WPT;
-	float dist_sum = 0;
-
-	while(next)
-	{
-		vec3 delta;  // difference between car pos and waypoint pos
-
-		if (USE_DEADRECKONING)
-		{
-			vec3 dir;    // unit vector direction to waypoint from car pos
-			float cost;
-			float co;    // coincidence with heading
-			float dist;
-			float lowest_cost = 1E10;
-
-			vec3_sub(delta, next->position, state->position);
-			vec3_norm(dir, delta);
-			co = vec3_mul_inner(dir, state->heading);
-			dist = vec3_len(delta);
-
-			cost = dist + (2 - (co + 1));
-
-			if (dist > 0.5)
-			{
-				if (cost < lowest_cost)
-				{
-					best = next;
-					lowest_cost = cost;
-				}
-			}
-			else if (next->next == NULL)
-			{
-				return NULL;
-			}
-
-		}
-		else
-		{
-			if (!next->next) return NULL;
-
-			vec3_sub(delta, next->position, next->next->position);
-			dist_sum += vec3_len(delta);
-
-			if (dist_sum > state->distance)
-			{
-				return next;
-			}
-		}
-
-		next = next->next; // lol
-	}
-
-	return best;
-}
-
 
 #define USE_CNN
 
@@ -572,11 +472,6 @@ int main(int argc, char* const argv[])
 			.desc = "Forward full system state over stdout",
 			.set = &FORWARD_STATE,
 		},
-		{ 'r',
-			.desc = "Path for route file to load",
-			.set = arg_load_route,
-			.type = ARG_TYP_CALLBACK
-		},
 		{ 'd',
 			.desc = "Enable deadreckoning",
 			.set = &USE_DEADRECKONING,
@@ -595,31 +490,25 @@ int main(int argc, char* const argv[])
 		if (!read_pipeline_payload(&msg, PAYLOAD_STATE))
 		{
 			raw_state_t* state = &msg.payload.state;
-			raw_action_t act = predict(state, NEXT_WPT);
+			raw_action_t act = predict(state);
 
-			msg.header.type = PAYLOAD_ACTION;
-			msg.payload.pair.action = act;
+
 
 			if (USE_DEADRECKONING)
 			{
 				b_log("Reckoning...");
-				waypoint_t* next = best_waypoint(state);
-				if (next != NEXT_WPT)
-				{
-					NEXT_WPT = next;
-					b_log("next waypoint: %lx", (unsigned int)NEXT_WPT);
-				}
-
-				if (NEXT_WPT == NULL)
-				{
-					b_bad("No waypoints loaded");
-					exit(-2);
-				}
 			}
 
 			if (FORWARD_STATE)
 			{
 				msg.header.type = PAYLOAD_PAIR;
+				msg.payload.pair.action = act;
+				msg.payload.pair.state = *state;
+			}
+			else
+			{
+				msg.header.type = PAYLOAD_ACTION;
+				msg.payload.action = act;
 			}
 
 			if (write_pipeline_payload(&msg))

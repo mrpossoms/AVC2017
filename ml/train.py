@@ -40,13 +40,23 @@ def main():
     sess.run(tf.global_variables_initializer())
 
     import random
-    for e in range(0, 3000):
+    last_accuracy = 0
+    epochs = 3000
+    for e in range(0, epochs):
         sub_ts_x, sub_ts_y = minibatch(full_set, random.randint(0, len(full_set) // 100), size=50)
 
         sess.run(train_step, feed_dict={x: sub_ts_x, y: sub_ts_y})
         if e % 100 == 0:
             train_accuracy = sess.run(accuracy, feed_dict={x: sub_ts_x, y: sub_ts_y})
-            print('step %d, training accuracy %f' % (e, train_accuracy))
+            print_stats(
+                {
+                    'accuracy': last_accuracy
+                }, {
+                    'accuracy': train_accuracy,
+                    'epoch': e,
+                    'epoch_total': epochs
+                })
+            last_accuracy = train_accuracy
 
         if not IS_TRAINING:
             break

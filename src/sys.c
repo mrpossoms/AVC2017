@@ -115,6 +115,19 @@ float clamp(float v)
 }
 
 
+int path_exists(const char* path)
+{
+	struct stat path_stat;
+	if (stat(path, &path_stat))
+	{
+		b_bad("Couldn't access '%s'", path);
+		return 0;
+	}
+
+	return 1;
+}
+
+
 void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const char* cmd_desc[])
 {
 	int cmd_idx = 0;

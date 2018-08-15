@@ -59,19 +59,6 @@ static int arg_parse_capture_win(char f, char* v)
 }
 
 
-static int exists(const char* path)
-{
-	struct stat path_stat;
-	if (stat(path, &path_stat))
-	{
-		b_bad("Couldn't access '%s'", FULL_PATH);
-		return 0;
-	}
-
-	return 1;
-}
-
-
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);
@@ -124,7 +111,7 @@ int main (int argc,  char* const argv[])
 	}
 
 	// Check to ensure that the dataset base path exists
-	if (exists(CLASS_PATH) == 0)
+	if (path_exists(CLASS_PATH) == 0)
 	{
 		b_bad("Provided dataset path is not accessible");
 		return -3;
@@ -135,7 +122,7 @@ int main (int argc,  char* const argv[])
 
 	// check the class directory, if it doesn't exist, but we are
 	// in a vaild dataset directory tree, then create the class directory
-	if (exists(FULL_PATH) == 0)
+	if (path_exists(FULL_PATH) == 0)
 	{
 		b_log("creating '%s' directory and continuing", FULL_PATH);
 		if (mkdir(FULL_PATH, 0777))

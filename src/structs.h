@@ -111,8 +111,8 @@ typedef struct {
 		raw_state_t state;
 		raw_action_t action;
 		struct {
-			raw_action_t action;
 			raw_state_t state;
+			raw_action_t action;
 		} pair;
 	} payload;
 } message_t;

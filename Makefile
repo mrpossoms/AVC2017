@@ -32,7 +32,7 @@ TRAINX_SRC= trainx.c vision.c $(BASE_SRC)
 
 ifeq ($(OS),Darwin)
 	VIEWER_LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
-	VIEWER_LINK += -lopencv_videoio
+	#VIEWER_LINK += -lopencv_videoio
 else
 	VIEWER_LINK +=-lglfw3 -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm -pthread -ldl
 	CFLAGS += -D_XOPEN_SOURCE=500

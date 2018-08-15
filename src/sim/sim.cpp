@@ -304,7 +304,7 @@ int main (int argc, char* argv[])
 			// flip image vertically
 			for (int i = FRAME_H; i--;)
 			{
-				memcpy(rgb_buf + (i * FRAME_W), tmp + ((FRAME_H - i) * FRAME_W), sizeof(color_t) * FRAME_W);
+				memcpy(rgb_buf + (i * FRAME_W), tmp + (((FRAME_H - 1) - i) * FRAME_W), sizeof(color_t) * FRAME_W);
 			}
 
 			rgb_to_yuv422(state.view.luma, state.view.chroma, rgb_buf, FRAME_W, FRAME_H);

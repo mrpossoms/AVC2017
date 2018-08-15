@@ -227,7 +227,7 @@ int main(int argc, char* argv[])
 		glfwPollEvents();
 		glfwSwapBuffers(WIN);
 
-		if(USE_SLEEP) usleep(1000 * 250);
+		if(USE_SLEEP) usleep(1000 * 50);
 	}
 
 	return 0;

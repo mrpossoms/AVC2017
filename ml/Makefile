@@ -29,7 +29,7 @@ augment: $(addprefix ds/training/aug/,$(CLASSES))
 
 .PHONY: train
 train: augment
-	$(PY) trainer.py
+	$(PY) train.py
 
 .PHONY: help
 help:

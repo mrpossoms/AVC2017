@@ -77,3 +77,25 @@ def filenames_labels():
     random.shuffle(files_labels)
 
     return files_labels
+
+
+def print_stats(t_1, t):
+    width = 20
+    display_bar = [' '] * width
+
+    acc_t_1, acc_t = t_1['accuracy'], t['accuracy']
+    epoch, total = t['epoch'], t['epoch_total']
+    acc_delta = acc_t - acc_t_1
+
+    slope_i = int((width - 1) * acc_t)
+
+
+    if acc_delta > 0.01:
+        display_bar[slope_i] = '\\'
+    elif acc_delta < -0.01:
+        display_bar[slope_i] = '/'
+    else:
+        display_bar[slope_i] = '|'
+
+    line = '%03d%% |' % (acc_t * 100) + ''.join(display_bar) + '| ep: %d/%d' % (epoch, total)
+    print(line)

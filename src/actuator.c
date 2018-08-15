@@ -48,6 +48,7 @@ int main(int argc, char* const argv[])
 			.desc = "Mask PWM output channels. Useful for disabling throttle or steering",
 			.set = &PWM_CHANNEL_MSK,
 			.type = ARG_TYP_INT,
+			.opts = { .has_value = 1 },
 		},
 		{} // terminator
 	};
@@ -56,49 +57,24 @@ int main(int argc, char* const argv[])
 
 	if (i2c_init("/dev/i2c-1"))
 	{
-		b_log("Failed to init i2c bus");
+		b_bad("Failed to init i2c bus");
 		I2C_BUS = -1;
 		// return -2;
 	}
 	else
 	{
-		pwm_set_echo(PWM_CHANNEL_MSK);
+		if (pwm_set_echo(PWM_CHANNEL_MSK))
+		{
+			b_bad("pwm_set_echo() - write failed");
+		}
 	}
 
 	while(1)
 	{
 		message_t msg = {};
+		raw_action_t act = {};
 
-		if (!read_pipeline_payload(&msg, PAYLOAD_PAIR))
-		{
-			if (I2C_BUS > -1)
-			{
-				pwm_set_action(&msg.payload.action);
-			}
-			else
-			{
-				static int sim_pipe;
-				if (sim_pipe <= 0)
-				{
-					sim_pipe = open("./avc.sim.ctrl", O_WRONLY);
-					b_log("Opened pipe");
-				}
-				else
-				{
-					write(sim_pipe, &msg.payload.action, sizeof(msg.payload.action));
-				}
-			}
-
-			if (FORWARD_STATE)
-			{
-				if (write_pipeline_payload(&msg))
-				{
-					b_bad("Failed to write payload");
-					return -1;
-				}
-			}
-		}
-		else
+		if (read_pipeline_payload(&msg, PAYLOAD_PAIR))
 		{
 			b_bad("read error");
 			if (I2C_BUS > -1)
@@ -109,6 +85,35 @@ int main(int argc, char* const argv[])
 			}
 
 			return -1;
+		}
+
+		act = msg.payload.pair.action;
+
+		if (I2C_BUS > -1)
+		{
+			pwm_set_action(&msg.payload.action);
+		}
+		else
+		{
+			static int sim_pipe;
+			if (sim_pipe <= 0)
+			{
+				sim_pipe = open("./avc.sim.ctrl", O_WRONLY);
+				b_log("Opened pipe");
+			}
+			else
+			{
+				write(sim_pipe, &act, sizeof(act));
+			}
+		}
+
+		if (FORWARD_STATE)
+		{
+			if (write_pipeline_payload(&msg))
+			{
+				b_bad("Failed to write payload");
+				return -1;
+			}
 		}
 	}
 

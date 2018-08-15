@@ -26,6 +26,7 @@
 #define AVC_TERM_COLOR_OFF "\033[0m"
 
 #define ACTION_CAL_PATH "actions.cal"
+#define RESTING_PWM_PATH "resting"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -81,6 +82,8 @@ int read_pipeline_payload(message_t* msg, payload_type_t exp_type);
 int calib_load(const char* path, calib_t* cal);
 
 float clamp(float v);
+
+int path_exists(const char* path);
 
 void cli_help(char* const argv[], const char* prog_desc, const char* cmds, const char* cmd_desc[]);
 int cli(const char* prog_desc, cli_cmd_t commands[], int argc, char* const argv[]);
