@@ -3,7 +3,6 @@
 #include "sys.h"
 #include "structs.h"
 #include "i2c.h"
-#include "drv_pwm.h"
 #include "cam.h"
 #include "linmath.h"
 #include "deadreckon.h"
@@ -38,7 +37,7 @@ static int arg_calibration_mode(char flag, const char* v)
 static int arg_immediate_start(char flag, const char* v)
 {
 	WAIT_FOR_MOVEMENT = 0;
-	b_log("Calibrating action vector");
+	b_log("Starting immediately");
 	return 0;
 }
 
@@ -75,7 +74,8 @@ void proc_opts(int argc, char* const argv[])
 		{ 'f',
 			.desc = "set framerate in frames/second",
 			.set = &FRAME_RATE,
-			.type = ARG_TYP_INT
+			.type = ARG_TYP_INT,
+			.opts = { .has_value = 1 },
 		},
 		{ 'r',
 			.desc = "generate random data rather than collecting.",
@@ -344,14 +344,6 @@ int main(int argc, char* const argv[])
 		//return -1;
 	}
 
-	if (READ_ACTION)
-	{
-		pwm_set_echo(0x6);
-	}
-
-	pwm_reset_soft();
-	b_good("OK");
-
 	// Use the round-robin real-time scheduler
 	// with a high priority
 	struct sched_param sch_par = {
@@ -371,6 +363,7 @@ int main(int argc, char* const argv[])
 	{
 		MODE = COL_MODE_ACT_CAL;
 		b_bad("No %s file found. Calibrating...", ACTION_CAL_PATH);
+		calibration(cfg);
 	}
 	else
 	{

@@ -14,6 +14,8 @@ using namespace nlohmann;
 #include "drawables.hpp"
 #include "helpers.hpp"
 
+#define DEG_2_RAD(deg) (((deg) * M_PI) / 180.f)
+
 static vec3_t one = { 1, 1, 1 };
 
 static vec4_t material = { 0.1, 0.01, 1, 0.01 };
@@ -53,7 +55,8 @@ struct {
 
 	void turn(float d_theta)
 	{
-		steering_angle = d_theta;
+		const float dwell = 0.5;
+		steering_angle = (1.f - dwell) * d_theta + dwell * steering_angle;
 	}
 
 	void accelerate(float d_v)
@@ -108,7 +111,7 @@ int main (int argc, char* argv[])
 	std::ifstream i("scene.json");
 
 	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 4, 0);
-	Camera camera(M_PI / 2, renderer.width, renderer.height);
+	Camera camera(DEG_2_RAD(62.2), renderer.width, renderer.height);
 
 	ListScene scene, ground_scene, hay_scene, shadow_scene;
 
@@ -207,6 +210,7 @@ int main (int argc, char* argv[])
 	// camera.position(0, 0, 0);
 
 	int sock_fd = open_ctrl_pipe();
+	bool turn_key_pressed;
 
 	renderer.key_pressed = [&](int key) {
 		switch (key) {
@@ -215,9 +219,11 @@ int main (int argc, char* argv[])
 				break;
 			case GLFW_KEY_LEFT:
 				vehicle.turn(-0.2);
+				turn_key_pressed = true;
 				break;
 			case GLFW_KEY_RIGHT:
 				vehicle.turn(0.2);
+				turn_key_pressed = true;
 				break;
 			case GLFW_KEY_UP:
 			{
@@ -268,7 +274,7 @@ int main (int argc, char* argv[])
 
 		Quat q = vehicle.orientation();
 		Quat tilt, roll, jitter;
-		quat_from_axis_angle(tilt.v, 1, 0, 0, 0.35);
+		quat_from_axis_angle(tilt.v, 1, 0, 0, 0.22);//0.35);
 		quat_from_axis_angle(roll.v, 0, 0, 1, -1.0f * vehicle.speed * vehicle.steer_speed());
 
 		Vec3 ja = seen::rn(); // jitter axis
@@ -276,6 +282,11 @@ int main (int argc, char* argv[])
 
 		if (!PAUSED)
 		{
+			if (sock_fd < 0 && !turn_key_pressed)
+			{
+				vehicle.turn(0);
+			}
+
 			vehicle.update();
 			camera.position(vehicle.position);
 			q = tilt * roll * jitter * q;
@@ -319,6 +330,8 @@ int main (int argc, char* argv[])
 		light.position.x = cos(t) * 10;
 		light.position.z = sin(t) * 10;
 		t += 0.01f;
+
+		turn_key_pressed = false;
 
 		renderer.draw(&camera, {
 			&shadow_pass,

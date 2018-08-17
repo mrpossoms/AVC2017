@@ -45,23 +45,24 @@ void draw_path_travelled(raw_state_t* state, vec3* positions)
 {
 	glDisable(GL_TEXTURE_2D);
 
+	const float scale_factor = 0.02f;
 	glColor3f(1, 0, 0);
 	glBegin(GL_LINE_STRIP);
 		for(int i = 1024; i--;)
 		{
-			glVertex2f(positions[i][0] / 10.f, positions[i][1] / 10.f);
+			glVertex2f(positions[i][0] * scale_factor, positions[i][1] * scale_factor);
 		}
 	glEnd();
 
 	glColor3f(0, 1, 0);
 	glBegin(GL_LINES);
 			glVertex2f(
-				(state->position[0]) / 10.f,
-				(state->position[1]) / 10.f
+				(state->position[0]) * scale_factor,
+				(state->position[1]) * scale_factor
 			);
 			glVertex2f(
-				(state->position[0] + state->heading[0]) / 10.f,
-				(state->position[1] + state->heading[1]) / 10.f
+				(state->position[0] + state->heading[0]) * scale_factor,
+				(state->position[1] + state->heading[1]) * scale_factor
 			);
 	glEnd();
 }
@@ -101,6 +102,8 @@ int main(int argc, char* argv[])
 		{ 'd',
 			.desc = "Apply slight delay",
 			.set = &USE_SLEEP,
+			.type = ARG_TYP_INT,
+			.opts = { .has_value = 1 },
 		},
 		{}
 	};
@@ -156,6 +159,9 @@ int main(int argc, char* argv[])
 			rgb
 		);
 
+		int space_down = glfwGetKey(WIN, GLFW_KEY_SPACE) == GLFW_PRESS;
+
+		if (!space_down)
 		if (read_pipeline_payload(&msg, PAYLOAD_STATE))
 		{
 			return -1;
@@ -191,6 +197,7 @@ int main(int argc, char* argv[])
 
 		draw_path_travelled(state, positions);
 
+		if (BASE_PATH)
 		{
 			if (glfwGetMouseButton(WIN, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
 			{
@@ -227,7 +234,8 @@ int main(int argc, char* argv[])
 		glfwPollEvents();
 		glfwSwapBuffers(WIN);
 
-		if(USE_SLEEP) usleep(1000 * 50);
+		if (!space_down)
+		if(USE_SLEEP) usleep(1000 * USE_SLEEP);
 	}
 
 	return 0;

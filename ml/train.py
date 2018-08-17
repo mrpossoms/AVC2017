@@ -1,7 +1,7 @@
 import tensorflow as tf
 import signal
 from helpers import *
-# from fc_2 import setup_model
+#from fc_2 import setup_model
 from cnn_2 import setup_model
 # from cnn_3 import setup_model
 IS_TRAINING = True

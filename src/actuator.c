@@ -20,8 +20,7 @@ time_t LAST_SECOND;
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);
-	pwm_set_echo(0x6);
-	usleep(10000);
+	pwm_reset();
 	exit(0);
 }
 
@@ -63,10 +62,15 @@ int main(int argc, char* const argv[])
 	}
 	else
 	{
+		b_log("setting mask: %x", PWM_CHANNEL_MSK);
+
 		if (pwm_set_echo(PWM_CHANNEL_MSK))
 		{
-			b_bad("pwm_set_echo() - write failed");
+			b_bad("pwm_set_echo() - failed with msk %x", PWM_CHANNEL_MSK);
+			return -2;
 		}
+		
+		b_log("set mask");
 	}
 
 	while(1)
@@ -77,21 +81,29 @@ int main(int argc, char* const argv[])
 		if (read_pipeline_payload(&msg, PAYLOAD_PAIR))
 		{
 			b_bad("read error");
-			if (I2C_BUS > -1)
-			{
-				// stop everything
-				raw_action_t act = { 117, 117 };
-				pwm_set_action(&act);
-			}
-
 			return -1;
 		}
 
 		act = msg.payload.pair.action;
 
+		//b_log("s:%d t:%d", act.steering, act.throttle);
+
 		if (I2C_BUS > -1)
 		{
-			pwm_set_action(&msg.payload.action);
+			float s = act.steering / 256.f;
+			//float t = msg.payload.action.throttle / 255.f;
+
+			
+			//assert(0.f >= s && s <= 1.f);
+
+			act.steering = CAL.steering.min * (1 - s) + CAL.steering.max * s;
+			//msg.payload.action.throttle = CAL.throttle.max
+
+			if (pwm_set_action(&act))
+			{
+				b_bad("pwm_set_action() - failed");
+				break;
+			}
 		}
 		else
 		{
@@ -118,6 +130,8 @@ int main(int argc, char* const argv[])
 	}
 
 	b_bad("terminating");
+
+	sig_handler(0);
 
 	return 0;
 }

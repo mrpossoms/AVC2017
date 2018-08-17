@@ -30,7 +30,7 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-
+#define CLAMP(x, min, max) ((x) < (max) ? ((x) > (min) ? (x) : (min)) : (max))
 
 extern const char* PROC_NAME;
 

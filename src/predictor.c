@@ -7,9 +7,15 @@
 
 #include "nn.h"
 
+#define USE_CNN
 #define ROOT_MODEL_DIR "/var/model/"
 #define MODEL_LAYERS 3
 #define MODEL_INSTANCES 3
+
+#define BUCKETS 4
+#define BUCKET_SIZE (FRAME_W / BUCKETS)
+#define HIST_W (FRAME_W / BUCKET_SIZE)
+#define HIST_MID (HIST_W >> 1)
 
 #define MAX_POOL_HALF {          \
     .type = POOLING_MAX,         \
@@ -33,11 +39,6 @@ typedef struct {
 classifier_t class_inst[MODEL_INSTANCES];
 
 float TOTAL_DISTANCE;
-
-#define BUCKETS 8
-#define BUCKET_SIZE (FRAME_W / BUCKETS)
-#define HIST_W (FRAME_W / BUCKET_SIZE)
-#define HIST_MID (HIST_W >> 1)
 
 typedef struct {
 	pthread_mutex_t start_gate;
@@ -74,7 +75,6 @@ start:
 	time_t now = time(NULL);
 	if (start != now)
 	{
-		b_log("col_class_thd%d %d Hz", job->classifier_idx, cycles);
 		start = now;
 		cycles = 0;
 	}
@@ -249,7 +249,6 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	int target_idx = (cont_r[0] + cont_r[1]) >> 1;
 
 	// Decide which place in the region we should steer toward
-
 	if (cont_r[0] > HIST_MID && cont_r[1] > HIST_MID)
 	{
 		target_idx = cont_r[1];// + cont_width * 0.75f;
@@ -258,8 +257,6 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	{
 		target_idx = cont_r[0];// + cont_width * 0.25f;
 	}
-
-	// target_idx = (cont_r[1] + cont_r[0]) >> 1;
 
 	float fp = (target_idx / (float)HIST_W);
 	static struct {
@@ -286,8 +283,9 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	}
 
 	// filter the steering and throttle values.
-	lpf.steering =  0.8 * lpf.steering + 0.2 * (fp);
-	lpf.throttle =  0.9 * lpf.throttle + 0.1 * (confidence);
+	const float lpf_w = 0.5f;
+	lpf.steering =  (1.f - lpf_w) * lpf.steering + lpf_w * (fp);
+	lpf.throttle =  (1.f - lpf_w) * lpf.throttle + lpf_w * (confidence);
 
 	// Let the confidence infered from classifying the video
 	// frame to directly set the throttle
@@ -297,23 +295,27 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	}
 	else
 	{ // Or start backing up if, confidence is poor.
-		backup_start = now + 1;
+		// backup_start = now + 1;
 	}
 
 
 	if (confidence <= 0.25 || col_conf_best < 0.4)
 	{ // force a reverse throttle value if we are backing up
-		lpf.throttle = -0.05;
+		// lpf.throttle = -0.05;
 	}
 
 
+	// TODO
+	/*
 	if (lpf.throttle < 0.25f)
 	{ // flip steering angle if reversing
-		*steering = lpf.steering < 0.5f ? 1 : 0;
+		//*steering = lpf.steering < 0.5f ? 1 : 0;
 	}
 	else
+	*/
 	{ // otherwise steer normally
-		*steering = lpf.steering;
+		*steering = ((lpf.steering - 0.5f) * 3.f) + 0.5f;
+		*steering = CLAMP(*steering, 0, 1);
 	}
 
 	*throttle = lpf.throttle;
@@ -329,7 +331,7 @@ raw_action_t predict(raw_state_t* state)
 	avoider(state, &throttle, &steer);
 
 	// Lerp between right and left.
-	act.steering = steer * 255;//CAL.steering.max * (1 - steer) + CAL.steering.min * steer;
+	act.steering = steer * 254;//CAL.steering.max * (1 - steer) + CAL.steering.min * steer;
 
 	// Use a pid controller to regulate the throttle to match the speed driven
 	act.throttle = 100 + throttle * 155;
@@ -345,7 +347,6 @@ void sig_handler(int sig)
 	exit(0);
 }
 
-#define USE_CNN
 
 int main(int argc, char* const argv[])
 {
@@ -365,19 +366,7 @@ int main(int argc, char* const argv[])
 		.is_activation_map = 1,
 	};
 	nn_layer_t template[] = {
-#ifndef USE_CNN
-		// fc2
-		{
-			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "fc0.w", 0),
-			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "fc0.b", 1),
-			.activation = nn_act_relu
-		},
-		{
-			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "fc1.w", 0),
-			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "fc1.b", 1),
-			.activation = nn_act_softmax
-		},
-#else
+#ifdef USE_CNN
 		// cnn2
 		{
 			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "c0.w", 0),
@@ -402,6 +391,18 @@ int main(int argc, char* const argv[])
 				.padding = PADDING_VALID,
 
 			},
+		},
+#else
+		// fc2
+		{
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "fc0.w", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "fc0.b", 1),
+			.activation = nn_act_relu
+		},
+		{
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "fc1.w", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "fc1.b", 1),
+			.activation = nn_act_softmax
 		},
 #endif
 
@@ -497,8 +498,6 @@ int main(int argc, char* const argv[])
 		{
 			raw_state_t* state = &msg.payload.state;
 			raw_action_t act = predict(state);
-
-
 
 			if (USE_DEADRECKONING)
 			{

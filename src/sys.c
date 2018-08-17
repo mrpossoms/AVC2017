@@ -92,7 +92,6 @@ void b_bad(const char* fmt, ...)
 	fprintf(stderr, AVC_TERM_RED "[%s]" AVC_TERM_COLOR_OFF " %s (%d)\n", PROC_NAME, buf, errno);
 }
 
-
 void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
 {
 	for(int yi = h; yi--;)
