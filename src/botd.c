@@ -16,33 +16,10 @@ extern char** environ;
 static const char* MEDIA_PATH;
 static int RUNNING;
 static int DAEMONIZE;
-static FILE* LOG_FILE;
-
-#define GOOD(fmt...) do { log_msg(".", fmt); } while(0)
-#define BAD(fmt...) do { log_msg("!", fmt); } while(0)
-#define INFO(fmt...) do { log_msg("*", fmt); } while(0)
 
 #define LED_PATH "/sys/class/leds/led0/brightness"
 
-struct {
-	int last_odo;
-} app = {};
-
-
-static void log_msg(const char* type, const char* fmt, ...)
-{
-	va_list ap;
-	char buf[1024];
-
-	fprintf(LOG_FILE, "botd [%ld] %s: ", time(NULL), type);
-
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-
-	fprintf(LOG_FILE, "%s\n", buf);
-}
-
+static int LAST_ODO;
 
 void set_led(int on)
 {
@@ -52,146 +29,32 @@ void set_led(int on)
 }
 
 
-void proc_opts(int argc, char* const argv[])
-{
-	int c;
-	while ((c = getopt(argc, argv, "dm:")) != -1)
-	{
-		switch(c)
-		{
-			case 'd':
-				DAEMONIZE = 1;
-				break;
-			case 'm':
-				MEDIA_PATH = optarg;
-				break;
-		}
-	}
-}
-
-
 static void i2c_up()
 {
 	int res = i2c_init("/dev/i2c-1");
 
 	if(res)
 	{
-		BAD("i2c_init failed (%d)\n", res);
+		b_bad("i2c_init failed (%d)\n", res);
 		exit(-1);
 	}
 
 	pwm_set_echo(0x6);
 }
 
-int RECORD_MODE = 1;
-int DX;
-
-void child_loop()
-{
-	int odo = pwm_get_odo();
-	static int last_record_mode;
-	struct bno055_accel_t acc = {};
-
-	bno055_read_accel_xyz(&acc);
-
-	DX = (DX * 9 + acc.x) / 10;
-
-	if(DX > 256 && RECORD_MODE == 1)
-	{
-		RECORD_MODE = 0;
-	}
-	else if(DX < -256 && RECORD_MODE == 0)
-	{
-		RECORD_MODE = 1;
-	}
-	else if(abs(acc.y) > 512)
-	{ // run route
-		b_log("Running!\n");
-		i2c_uninit();
-		system("collector -i -a | predictor -r/media/training/0.route -m2");
-		i2c_up();
-		b_log("Run finished\n");
-	}
-
-	if(last_record_mode != RECORD_MODE)
-	{
-		set_led(RECORD_MODE);
-	}
-
-	if(odo > app.last_odo)
-	{ // Start recording session
-		write(1, ".", 1);
-
-		raw_action_t act = {};
-		if(pwm_get_action(&act))
-		{
-			exit(-2);
-		}
-
-		if(act.throttle > 0)
-		if(act.throttle - 1 > THROTTLE_STOPPED || act.throttle + 1 < THROTTLE_STOPPED)
-		{
-			INFO("Recording session...");
-
-			//
-			// Let the collector have the i2c bus
-			//
-			i2c_uninit();
-
-			//
-			// Start collecting!
-			//
-			pid_t collector_pid;
-			char* argv[] = { "collector", "-m", MEDIA_PATH, "-r", NULL };
-
-			if(RECORD_MODE == 0)
-			{
-				argv[3] = NULL;
-			}
-
-			posix_spawn(
-				&collector_pid,
-				"collector",
-				NULL, NULL,
-				argv,
-				NULL
-			);
-
-			// Wait for the collector process to terminate
-			// then bring the i2c bus back up
-			waitpid(collector_pid, NULL, 0);
-
-			INFO("Session finished");
-			INFO("Waiting...");
-			i2c_up();
-		}
-	}
-
-	app.last_odo = odo;
-	usleep(1000 * 50);
-}
-
+int RUN_MODE = 1;
 
 int main(int argc, char* const argv[])
 {
+	struct {
+		int x, y, z;
+	} filter = {};
+	int cooldown = 100;
+
 	PROC_NAME = argv[0];
-	proc_opts(argc, argv);
-
-	LOG_FILE = fopen("/var/log/botd", "w+");
-
-	if(!LOG_FILE)
-	{
-		fprintf(stderr, "Failed to open logfile (%d)\n", errno);
-		return -1;
-	}
-
-	if(!MEDIA_PATH)
-	{
-		BAD("Please provide a training data media path\n");
-		return -1;
-	}
 
 	i2c_up();
+	set_led(RUN_MODE);
 
 	RUNNING = 1;
 
@@ -200,9 +63,105 @@ int main(int argc, char* const argv[])
 		if(fork() != 0) return 0;
 	}
 
-	printf("I'm the child %d\n", RUNNING);
+	// b_log("I'm the child %d\n", RUNNING);
+	b_log("mode: run");
+	
 	// child
-	while(RUNNING) child_loop();
+	int odo_now;
+	while(RUNNING)
+	{
+		raw_state_t state;
+
+		int odo_delta = 0;
+		poll_i2c_devs(&state, NULL, &odo_delta);
+		odo_now += odo_delta;
+
+		filter.x = (state.acc[0] + filter.x * 9) / 10;
+		filter.y = (state.acc[1] + filter.y * 9) / 10;
+		filter.z = (state.acc[2] + filter.z * 9) / 10;
+
+		b_log("r: %d, %d, %d - f: %d, %d, %d", state.acc[0], state.acc[1], state.acc[2], filter.x, filter.y, filter.z);
+
+		if(filter.x > 512 && RUN_MODE == 0)
+		{
+			RUN_MODE = 1;
+			b_log("mode: run");
+		}
+		else if(filter.x < -512 && RUN_MODE == 1)
+		{
+			RUN_MODE = 0;
+			b_log("mode: record");
+		}
+		else if(RUN_MODE && abs(filter.y - state.acc[1]) > 512)
+		{ // run route
+			if (cooldown == 0)
+			{
+				b_log("Running!\n");
+				// i2c_uninit();
+				system("collector | predictor -f | actuator -m2 -f > /var/testing/route");
+				// i2c_up();
+				b_log("Run finished\n");
+				cooldown = 100;				
+			}
+		}
+
+		set_led(RUN_MODE);
+
+		// if(odo_now > LAST_ODO)
+		// { // Start recording session
+		// 	write(1, ".", 1);
+
+		// 	raw_action_t act = {};
+		// 	if(pwm_get_action(&act))
+		// 	{
+		// 		exit(-2);
+		// 	}
+
+		// 	if(act.throttle > 0)
+		// 	if(act.throttle - 1 > THROTTLE_STOPPED || act.throttle + 1 < THROTTLE_STOPPED)
+		// 	{
+		// 		b_log("Recording session...");
+
+		// 		//
+		// 		// Let the collector have the i2c bus
+		// 		//
+		// 		// i2c_uninit();
+
+		// 		//
+		// 		// Start collecting!
+		// 		//
+		// 		pid_t collector_pid;
+		// 		char* argv[] = { "collector", "-m", MEDIA_PATH, "-r", NULL };
+
+		// 		if(RUN_MODE == 0)
+		// 		{
+		// 			argv[3] = NULL;
+		// 		}
+
+		// 		// posix_spawn(
+		// 		// 	&collector_pid,
+		// 		// 	"collector",
+		// 		// 	NULL, NULL,
+		// 		// 	argv,
+		// 		// 	NULL
+		// 		// );
+
+		// 		// // Wait for the collector process to terminate
+		// 		// // then bring the i2c bus back up
+		// 		// waitpid(collector_pid, NULL, 0);
+
+		// 		b_log("Session finished");
+		// 		b_log("Waiting...");
+		// 		// i2c_up();
+		// 	}
+		// }
+
+		cooldown--;
+		if (cooldown < 0) { cooldown = 0; }
+
+		LAST_ODO = odo_now;
+		usleep(1000 * 50);
+	}
 
 	return 0;
 }

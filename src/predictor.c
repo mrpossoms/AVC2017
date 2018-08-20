@@ -8,11 +8,11 @@
 #include "nn.h"
 
 #define USE_CNN
-#define ROOT_MODEL_DIR "/var/model/"
+#define ROOT_MODEL_DIR "/etc/bot/predictor/model/"
 #define MODEL_LAYERS 3
-#define MODEL_INSTANCES 3
+#define MODEL_INSTANCES 2
 
-#define BUCKETS 4
+#define BUCKETS 8
 #define BUCKET_SIZE (FRAME_W / BUCKETS)
 #define HIST_W (FRAME_W / BUCKET_SIZE)
 #define HIST_MID (HIST_W >> 1)
@@ -91,7 +91,7 @@ start:
 
 		const int start = 70;
 		const int height = 64;
-		int r_stride = 1;
+		int r_stride = 4;
 		int samples = 0;
 		float col_conf_sum = 0;
 
@@ -314,7 +314,8 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	else
 	*/
 	{ // otherwise steer normally
-		*steering = ((lpf.steering - 0.5f) * 3.f) + 0.5f;
+		const float amp = 1.5f;
+		*steering = ((lpf.steering - 0.5f) * amp) + (0.5f * amp);
 		*steering = CLAMP(*steering, 0, 1);
 	}
 
@@ -353,6 +354,15 @@ int main(int argc, char* const argv[])
 	PROC_NAME = argv[0];
 
 	signal(SIGINT, sig_handler);
+
+	struct sched_param sch_par = {
+		.sched_priority = 50,
+	};
+
+	if (sched_setscheduler(0, SCHED_RR, &sch_par) != 0)
+	{
+		b_bad("RT-scheduling not set");
+	}
 
 	// load and instantiate multiple instances of the model and
 	// feature vectors for parallelized classification

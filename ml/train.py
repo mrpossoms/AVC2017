@@ -1,11 +1,15 @@
+import os
 import tensorflow as tf
 import signal
 from helpers import *
 #from fc_2 import setup_model
 from cnn_2 import setup_model
 # from cnn_3 import setup_model
-IS_TRAINING = True
 
+IS_TRAINING = True
+MODEL_STORAGE_PATH = '/etc/bot/predictor/model/'
+
+os.makedirs(MODEL_STORAGE_PATH, exist_ok=True)
 
 def handle_sig_done(*args):
     global IS_TRAINING
@@ -65,7 +69,7 @@ def main():
     for key in p:
         file_name = key.replace('_', '.')
 
-        with open('/var/model/' + file_name, mode='wb') as fp:
+        with open(MODEL_STORAGE_PATH + file_name, mode='wb') as fp:
             serialize_matrix(sess.run(p[key]), fp)
 
 

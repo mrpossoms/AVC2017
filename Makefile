@@ -1,8 +1,11 @@
 $(eval OS := $(shell uname))
 
+ifndef CC
+	CC=gcc
+endif
+
 NN=src/libnn
 
-CC=gcc
 CXX=clang++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall -Wno-implicit-function-declaration
 CXXFLAGS=--std=c++11 -g
@@ -17,7 +20,7 @@ BASE_SRC = sys.c $(DRIVER_SRC)
 COLLECTOR_SRC=deadreckon.c collector.c cam.c $(BASE_SRC)
 PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
 PREDICTOR_SRC=predictor.c vision.c $(BASE_SRC)
-PREDICTOR_LINK=$(NN)/build/$(TARGET)/lib/libnn.a -lpng
+PREDICTOR_LINK=$(NN)/build/$(TARGET)/lib/libnn.a -l:libpng.a -l:libz.a
 ACTUATOR_SRC=actuator.c $(BASE_SRC)
 
 VIEWER_SRC=viewer.c vision.c sys.c
@@ -65,8 +68,12 @@ all: viewer collector masseuse
 $(NN):
 	git clone https://github.com/mrpossoms/libnn $(NN)
 
-$(NN)/lib/libnn.a: $(NN)
+$(NN)/build/$(TARGET)/lib/libnn.a: $(NN)
 	make -C $(NN) static
+
+.PHONY: libnn
+libnn: $(NN)/build/$(TARGET)/lib/libnn.a
+	@echo "Built libnn"
 
 src/json:
 	mkdir -p src/json
@@ -83,7 +90,7 @@ src/seen:
 src/seen/lib/libseen.a: src/seen
 	make -C src/seen static
 
-magic: src/structs.h src/linmath.h $(NN)/lib/libnn.a src/seen src/json bin/$(TARGET)/data bin/$(TARGET)/scene.json
+magic: src/structs.h src/linmath.h libnn src/seen src/json bin/$(TARGET)/data bin/$(TARGET)/scene.json
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 .PHONY: collector
