@@ -6,6 +6,7 @@
 #include "structs.h"
 
 #include "nn.h"
+#include "cfg.h"
 
 #define USE_CNN
 #define ROOT_MODEL_DIR "/etc/bot/predictor/model/"
@@ -17,6 +18,8 @@
 #define HIST_W (FRAME_W / BUCKET_SIZE)
 #define HIST_MID (HIST_W >> 1)
 
+#define PATCH_SIZE 16
+
 #define MAX_POOL_HALF {          \
     .type = POOLING_MAX,         \
     .op = {                      \
@@ -26,10 +29,14 @@
     }                            \
 }\
 
+#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
+
 int INPUT_FD = 0;
 int FORWARD_STATE = 0;
 int DEBUG_COLORS = 0;
 int USE_DEADRECKONING = 0;
+int PRINT_REFRESH_RATE = 0;
+int LOG_VERBOSITY = 0;
 
 typedef struct {
 	mat_t X;
@@ -53,13 +60,17 @@ typedef struct {
 	float col_conf_best;
 } class_job_t;
 
+
+static int log_verbosity_cb(char flag, const char* v)
+{
+	LOG_VERBOSITY++;
+	return 0;
+}
+
+
 void* col_class_worker(void* params)
 {
 	class_job_t* job = (class_job_t*)params;
-
-	// profiling vars
-	unsigned int cycles = 0;
-	time_t start = 0;
 
 	// proxy variables
 	color_t* rgb = job->rgb;
@@ -72,14 +83,6 @@ void* col_class_worker(void* params)
 
 start:
 	pthread_mutex_lock(&job->start_gate);
-	time_t now = time(NULL);
-	if (start != now)
-	{
-		start = now;
-		cycles = 0;
-	}
-
-	cycles++;
 
 	job->confidence = 0;
 	job->col_conf_best = 0;
@@ -90,14 +93,14 @@ start:
 		int c = ci * BUCKET_SIZE;
 
 		const int start = 70;
-		const int height = 64;
+		const int height = 16;
 		int r_stride = 4;
 		int samples = 0;
 		float col_conf_sum = 0;
 
 		for (int r = 0; r < height;)
 		{
-			rectangle_t patch = { c, r + start, 16, 16 };
+			rectangle_t patch = { c, r + start, PATCH_SIZE, PATCH_SIZE };
 			image_patch_f(X.data.f, rgb, patch);
 
 			// pass the patch through the network, make predictions
@@ -123,7 +126,7 @@ start:
 			}
 
 			++samples;
-			col_conf_sum += y.data.f[2];
+			col_conf_sum += y.data.f[2] > y.data.f[0] && y.data.f[2] > y.data.f[1] ? 1 : 0;
 
 			r += r_stride;
 			r_stride *= 2;
@@ -146,10 +149,14 @@ goto start;
 void avoider(raw_state_t* state, float* throttle, float* steering)
 {
 	color_t rgb[FRAME_W * FRAME_H];
-	time_t now = time(NULL);
 	float hist[HIST_W] = {};
 	float confidence = 0;
 	float col_conf_best = 0;
+
+	static struct {
+		float steering;
+		float throttle;
+	} lpf;
 
 	yuv422_to_rgb(state->view.luma, state->view.chroma, rgb, FRAME_W, FRAME_H);
 
@@ -168,6 +175,9 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 			b_bad("sem_open() - failed for visual multiprocessing");
 			exit(-3);
 		}
+
+		lpf.steering = 0.5;
+		lpf.throttle = 0.5;
 
 		for (int i = 0; i < MODEL_INSTANCES; i++)
 		{
@@ -259,10 +269,6 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	}
 
 	float fp = (target_idx / (float)HIST_W);
-	static struct {
-		float steering;
-		float throttle;
-	} lpf;
 	static time_t backup_start = 0;
 
 	if (DEBUG_COLORS)
@@ -314,9 +320,11 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	else
 	*/
 	{ // otherwise steer normally
-		const float amp = 1.5f;
-		*steering = ((lpf.steering - 0.5f) * amp) + (0.5f * amp);
+		const float amp = 3.f;
+		*steering = ((lpf.steering - 0.5f) * amp) + 0.5f;
 		*steering = CLAMP(*steering, 0, 1);
+
+		LOG_LVL(2) b_log("s: %f, t: %f", lpf.steering, lpf.throttle);
 	}
 
 	*throttle = lpf.throttle;
@@ -343,7 +351,7 @@ raw_action_t predict(raw_state_t* state)
 
 void sig_handler(int sig)
 {
-	b_log("Caught signal %d", sig);
+	LOG_LVL(1) b_log("Caught signal %d", sig);
 	sem_unlink("avc_vis_sem");
 	exit(0);
 }
@@ -355,6 +363,7 @@ int main(int argc, char* const argv[])
 
 	signal(SIGINT, sig_handler);
 
+#ifdef __linux__
 	struct sched_param sch_par = {
 		.sched_priority = 50,
 	};
@@ -363,14 +372,15 @@ int main(int argc, char* const argv[])
 	{
 		b_bad("RT-scheduling not set");
 	}
+#endif
 
 	// load and instantiate multiple instances of the model and
 	// feature vectors for parallelized classification
 	mat_t x = {
 #ifdef USE_CNN
-		.dims = { 16, 16, 3 },
+		.dims = { PATCH_SIZE, PATCH_SIZE, 3 },
 #else
-		.dims = { 1, 768 },
+		.dims = { 1, PATCH_SIZE * PATCH_SIZE * 3 },
 #endif
 		.row_major = 1,
 		.is_activation_map = 1,
@@ -467,9 +477,9 @@ int main(int argc, char* const argv[])
 	{
 		mat_t x = {
 #ifdef USE_CNN
-			.dims = { 16, 16, 3 },
+			.dims = { PATCH_SIZE, PATCH_SIZE, 3 },
 #else
-			.dims = { 1, 768 },
+			.dims = { 1, PATCH_SIZE * PATCH_SIZE * 3 },
 #endif
 			.row_major = 1,
 			.is_activation_map = 1,
@@ -493,16 +503,42 @@ int main(int argc, char* const argv[])
 			.desc = "Enable deadreckoning",
 			.set  = &USE_DEADRECKONING,
 		},
+		{ 'r',
+			.desc = "Show refresh rate",
+			.set  = &PRINT_REFRESH_RATE,
+		},
+		{ 'v',
+			.desc = "Each occurrence increases log verbosity.",
+			.set  = log_verbosity_cb,
+			.type = ARG_TYP_CALLBACK,
+		},
 		{}
 	};
 	cli("Collects data from sensors, compiles them into system\n"
 	    "state packets. Then forwards them over stdout", cmds, argc, argv);
 
-	b_log("Waiting...");
+	LOG_LVL(1) b_log("Waiting...");
+
+	// profiling vars
+	unsigned int cycles = 0;
+	time_t start = 0;
 
 	while(1)
 	{
 		message_t msg = {};
+
+		if (PRINT_REFRESH_RATE)
+		{
+			time_t now = time(NULL);
+			if (start != now)
+			{
+				b_log("%dhz", cycles);
+				start = now;
+				cycles = 0;
+			}
+
+			cycles++;
+		}
 
 		if (!read_pipeline_payload(&msg, PAYLOAD_STATE))
 		{
@@ -511,7 +547,7 @@ int main(int argc, char* const argv[])
 
 			if (USE_DEADRECKONING)
 			{
-				b_log("Reckoning...");
+				LOG_LVL(1) b_log("Reckoning...");
 			}
 
 			if (FORWARD_STATE)
@@ -525,6 +561,8 @@ int main(int argc, char* const argv[])
 				msg.header.type = PAYLOAD_ACTION;
 				msg.payload.action = act;
 			}
+
+			LOG_LVL(3) b_log("s:%d t:%d", act.steering, act.throttle);
 
 			if (write_pipeline_payload(&msg))
 			{

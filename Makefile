@@ -9,7 +9,7 @@ NN=src/libnn
 CXX=clang++
 CFLAGS=-g --std=c99 -D_XOPEN_SOURCE=500 -Wall -Wno-implicit-function-declaration
 CXXFLAGS=--std=c++11 -g
-INC=-Isrc -I$(NN)/src -Isrc/drivers -Isrc/drivers/src/BNO055_driver -Isrc/linmath.h -Isrc/seen/src -Isrc/json -Iml/recognizer/src
+INC=-Isrc -I$(NN)/src -Isrc/cfg.h/src -Isrc/drivers -Isrc/drivers/src/BNO055_driver -Isrc/linmath.h -Isrc/seen/src -Isrc/json -Iml/recognizer/src
 LINK=-lm -lpthread
 
 TARGET=$(shell $(CC) -dumpmachine)
@@ -20,7 +20,7 @@ BASE_SRC = sys.c $(DRIVER_SRC)
 COLLECTOR_SRC=deadreckon.c collector.c cam.c $(BASE_SRC)
 PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
 PREDICTOR_SRC=predictor.c vision.c $(BASE_SRC)
-PREDICTOR_LINK=$(NN)/build/$(TARGET)/lib/libnn.a -l:libpng.a -l:libz.a
+PREDICTOR_LINK=$(NN)/build/$(TARGET)/lib/libnn.a
 ACTUATOR_SRC=actuator.c $(BASE_SRC)
 
 VIEWER_SRC=viewer.c vision.c sys.c
@@ -35,9 +35,11 @@ TRAINX_SRC= trainx.c vision.c $(BASE_SRC)
 
 ifeq ($(OS),Darwin)
 	VIEWER_LINK +=-lpthread -lm -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo
+	PREDICTOR_LINK += -lpng -lz
 	#VIEWER_LINK += -lopencv_videoio
 else
 	VIEWER_LINK +=-lglfw3 -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm -pthread -ldl
+	PREDICTOR_LINK += -l:libpng.a -l:libz.a
 	CFLAGS += -D_XOPEN_SOURCE=500
 endif
 
@@ -83,6 +85,9 @@ src/linmath.h:
 	git clone https://github.com/mrpossoms/linmath.h src/linmath.h
 	make -C src/linmath.h install
 
+src/cfg.h:
+	git clone https://github.com/mrpossoms/cfg.h src/cfg.h
+
 src/seen:
 	git clone https://github.com/mrpossoms/Seen src/seen
 
@@ -90,7 +95,7 @@ src/seen:
 src/seen/lib/libseen.a: src/seen
 	make -C src/seen static
 
-magic: src/structs.h src/linmath.h libnn src/seen src/json bin/$(TARGET)/data bin/$(TARGET)/scene.json
+magic: src/structs.h src/linmath.h libnn src/cfg.h src/seen src/json bin/$(TARGET)/data bin/$(TARGET)/scene.json
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 .PHONY: collector

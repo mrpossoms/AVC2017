@@ -1,5 +1,6 @@
 import tensorflow as tf
 from helpers import PATCH_SIZE
+from helpers import PATCH_SIDE 
 
 
 def setup_model(x):
@@ -10,7 +11,7 @@ def setup_model(x):
         'c1_b': tf.Variable(tf.constant(0.1, shape=[3]))
     }
 
-    x = tf.reshape(x, shape=[-1, 16, 16, 3])
+    x = tf.reshape(x, shape=[-1, PATCH_SIDE, PATCH_SIDE, 3])
 
     z0 = tf.nn.conv2d(x, p['c0_w'], [1, 1, 1, 1], 'VALID') + p['c0_b']
     a0 = tf.nn.relu(z0)

@@ -6,10 +6,12 @@
 #include "drv_pwm.h"
 #include "pid.h"
 
+#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
 
 int INPUT_FD = 0;
 int FORWARD_STATE = 0;
 int I2C_BUS;
+int LOG_VERBOSITY = 0;
 
 calib_t CAL;
 uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
@@ -22,6 +24,13 @@ void sig_handler(int sig)
 	b_log("Caught signal %d", sig);
 	pwm_reset();
 	exit(0);
+}
+
+
+static int log_verbosity_cb(char flag, const char* v)
+{
+	LOG_VERBOSITY++;
+	return 0;
 }
 
 
@@ -49,6 +58,11 @@ int main(int argc, char* const argv[])
 			.type = ARG_TYP_INT,
 			.opts = { .has_value = 1 },
 		},
+		{ 'v',
+			.desc = "Each occurrence increases log verbosity.",
+			.set  = log_verbosity_cb,
+			.type = ARG_TYP_CALLBACK,
+		},
 		{} // terminator
 	};
 	cli("Recieves action vectors over stdin and actuates the platform",
@@ -62,15 +76,15 @@ int main(int argc, char* const argv[])
 	}
 	else
 	{
-		b_log("setting mask: %x", PWM_CHANNEL_MSK);
+		LOG_LVL(1) b_log("setting mask: %x", PWM_CHANNEL_MSK);
 
 		if (pwm_set_echo(PWM_CHANNEL_MSK))
 		{
 			b_bad("pwm_set_echo() - failed with msk %x", PWM_CHANNEL_MSK);
 			return -2;
 		}
-		
-		b_log("set mask");
+
+		LOG_LVL(1) b_log("set mask");
 	}
 
 	while(1)
@@ -86,14 +100,14 @@ int main(int argc, char* const argv[])
 
 		act = msg.payload.pair.action;
 
-		//b_log("s:%d t:%d", act.steering, act.throttle);
+		LOG_LVL(2) b_log("s:%d t:%d", act.steering, act.throttle);
 
 		if (I2C_BUS > -1)
 		{
 			float s = act.steering / 256.f;
 			//float t = msg.payload.action.throttle / 255.f;
 
-			
+
 			//assert(0.f >= s && s <= 1.f);
 
 			act.steering = CAL.steering.min * (1 - s) + CAL.steering.max * s;
@@ -111,7 +125,7 @@ int main(int argc, char* const argv[])
 			if (sim_pipe <= 0)
 			{
 				sim_pipe = open("./avc.sim.ctrl", O_WRONLY);
-				b_log("Opened pipe");
+				LOG_LVL(1) b_log("Opened pipe");
 			}
 			else
 			{

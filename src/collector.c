@@ -319,6 +319,8 @@ int main(int argc, char* const argv[])
 	PROC_NAME = argv[0];
 	proc_opts(argc, argv);
 
+	cfg_base("/etc/bot/collector/");
+
 	int res;
 	cam_settings_t cfg = {
 		.width  = FRAME_W,
