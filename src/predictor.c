@@ -13,12 +13,12 @@
 #define MODEL_LAYERS 3
 #define MODEL_INSTANCES 2
 
-#define BUCKETS 8
+#define BUCKETS 16
 #define BUCKET_SIZE (FRAME_W / BUCKETS)
 #define HIST_W (FRAME_W / BUCKET_SIZE)
 #define HIST_MID (HIST_W >> 1)
 
-#define PATCH_SIZE 16
+#define PATCH_SIZE 8
 
 #define MAX_POOL_HALF {          \
     .type = POOLING_MAX,         \
@@ -94,7 +94,7 @@ start:
 
 		const int start = 70;
 		const int height = 16;
-		int r_stride = 4;
+		int r_stride = 2;
 		int samples = 0;
 		float col_conf_sum = 0;
 
@@ -406,7 +406,7 @@ int main(int argc, char* const argv[])
 			// .activation = nn_act_linear,
 			.activation = nn_act_softmax,
 			.filter = {
-				.kernel = { 7, 7 },
+				.kernel = { 3, 3 },
 				.stride = { 1, 1 },
 				.padding = PADDING_VALID,
 

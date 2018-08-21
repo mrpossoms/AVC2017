@@ -12,8 +12,8 @@
 	exit(-1);\
 }\
 
-#define FRAME_W 320
-#define FRAME_H 240
+#define FRAME_W 160
+#define FRAME_H 120
 #define PIX_DEPTH 3
 
 #define VIEW_PIXELS (FRAME_W * FRAME_H)

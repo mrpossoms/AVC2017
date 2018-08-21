@@ -6,6 +6,7 @@
 #include "cam.h"
 #include "linmath.h"
 #include "deadreckon.h"
+#include "cfg.h"
 
 typedef enum {
 	COL_MODE_NORMAL = 0,

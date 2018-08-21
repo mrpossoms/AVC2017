@@ -56,6 +56,9 @@ void* pose_estimator(void* params)
 
 		if(poll_i2c_devs(state, READ_ACTION ? act_ptr : NULL, &odo))
 		{
+			b_bad("poll_i2c_devs() - failed");
+			pthread_mutex_unlock(&STATE_LOCK);
+			exit(-1);
 			return (void*)-1;
 		}
 
