@@ -13,7 +13,7 @@
 #define MODEL_LAYERS 3
 #define MODEL_INSTANCES 2
 
-#define BUCKETS 16
+#define BUCKETS 10
 #define BUCKET_SIZE (FRAME_W / BUCKETS)
 #define HIST_W (FRAME_W / BUCKET_SIZE)
 #define HIST_MID (HIST_W >> 1)
@@ -80,6 +80,10 @@ void* col_class_worker(void* params)
 	nn_layer_t* L = class_inst[job->classifier_idx].layers;
 
 	const int CHROMA_W = FRAME_W / 2;
+	int start_row = cfg_int("classifier/start-row", 70);
+	const int height = cfg_int("classifier/rows", 16);
+	const int stride_coeff = cfg_int("classifier/stride-coeff", 2);
+	const int stride_start = cfg_int("classifier/stride-start", 2);
 
 start:
 	pthread_mutex_lock(&job->start_gate);
@@ -92,9 +96,8 @@ start:
 		float col_sum = 0;
 		int c = ci * BUCKET_SIZE;
 
-		const int start = 70;
-		const int height = 16;
-		int r_stride = 2;
+		const int start = start_row;
+		int r_stride = stride_start;
 		int samples = 0;
 		float col_conf_sum = 0;
 
@@ -129,7 +132,7 @@ start:
 			col_conf_sum += y.data.f[2] > y.data.f[0] && y.data.f[2] > y.data.f[1] ? 1 : 0;
 
 			r += r_stride;
-			r_stride *= 2;
+			r_stride *= stride_coeff;
 		}
 
 		float col_conf_avg = col_conf_sum / samples;
@@ -320,7 +323,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	else
 	*/
 	{ // otherwise steer normally
-		const float amp = 3.f;
+		const float amp = 2.f;
 		*steering = ((lpf.steering - 0.5f) * amp) + 0.5f;
 		*steering = CLAMP(*steering, 0, 1);
 
@@ -362,6 +365,8 @@ int main(int argc, char* const argv[])
 	PROC_NAME = argv[0];
 
 	signal(SIGINT, sig_handler);
+
+	cfg_base("/etc/bot/predictor/");
 
 #ifdef __linux__
 	struct sched_param sch_par = {
@@ -477,7 +482,7 @@ int main(int argc, char* const argv[])
 	{
 		mat_t x = {
 #ifdef USE_CNN
-			.dims = { PATCH_SIZE, PATCH_SIZE, 3 },
+			.dims = { 16, 16, 3 },
 #else
 			.dims = { 1, PATCH_SIZE * PATCH_SIZE * 3 },
 #endif

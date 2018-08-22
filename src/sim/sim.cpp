@@ -26,7 +26,7 @@ bool PAUSED = false;
 bool STEER_LOCKED = false;
 
 struct {
-	Vec3 position = { 0, -1, 0 };
+	Vec3 position = { 0, -0.5, 0 };
 	float angle;
 	float speed;
 	float distance;
@@ -274,7 +274,7 @@ int main (int argc, char* argv[])
 
 		Quat q = vehicle.orientation();
 		Quat tilt, roll, jitter;
-		quat_from_axis_angle(tilt.v, 1, 0, 0, 0.22);//0.35);
+		quat_from_axis_angle(tilt.v, 1, 0, 0, 0.35);
 		quat_from_axis_angle(roll.v, 0, 0, 1, -1.0f * vehicle.speed * vehicle.steer_speed());
 
 		Vec3 ja = seen::rn(); // jitter axis
