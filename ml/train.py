@@ -3,7 +3,7 @@ import tensorflow as tf
 import signal
 from helpers import *
 #from fc_2 import setup_model
-#from cnn_2_16 import setup_model
+# from cnn_2_16 import setup_model
 from cnn_2_8 import setup_model
 # from cnn_3 import setup_model
 
@@ -46,7 +46,7 @@ def main():
 
     import random
     last_accuracy = 0
-    epochs = 3000
+    epochs = 6000
     for e in range(0, epochs):
         sub_ts_x, sub_ts_y = minibatch(full_set, random.randint(0, len(full_set) // 100), size=50)
 

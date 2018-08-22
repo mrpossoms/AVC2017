@@ -265,11 +265,13 @@ int write_pipeline_payload(message_t* msg)
 
 int read_pipeline_payload(message_t* msg, payload_type_t exp_type)
 {
-	size_t expected_size = sizeof(dataset_hdr_t);
+	size_t expected_size = sizeof(dataset_hdr_t), gotten = 0;
 	if (!msg) return -1;
 
-	if (read(0, &msg->header, expected_size) != expected_size)
+	gotten = read(0, &msg->header, expected_size);
+	if (gotten != expected_size)
 	{
+		b_bad("read_pipeline_payload() - header size wrong, expected %dB, got %dB", expected_size, gotten);
 		return -2;
 	}
 
@@ -308,7 +310,7 @@ int read_pipeline_payload(message_t* msg, payload_type_t exp_type)
 
 	while(needed)
 	{
-		size_t gotten = read(0, buf + off, needed);
+		gotten = read(0, buf + off, needed);
 		needed -= gotten;
 		off += gotten;
 	}

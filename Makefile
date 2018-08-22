@@ -38,6 +38,7 @@ ifeq ($(OS),Darwin)
 	PREDICTOR_LINK += -lpng -lz
 	#VIEWER_LINK += -lopencv_videoio
 else
+	CXX=g++
 	VIEWER_LINK +=-lglfw3 -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm -pthread -ldl
 	PREDICTOR_LINK += -l:libpng.a -l:libz.a
 	CFLAGS += -D_XOPEN_SOURCE=500
@@ -140,7 +141,7 @@ trainx:bin/$(TARGET)/trainx
 bin/$(TARGET)/trainx: $(addprefix obj/,$(TRAINX_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng -lz
 
-bot-utils: bin/$(TARGET)/predictor bin/$(TARGET)/actuator bin/$(TARGET)/collector bin/$(TARGET)/trainx bin/$(TARGET)/botd
+bot-utils: bin/$(TARGET)/predictor bin/$(TARGET)/actuator bin/$(TARGET)/collector bin/$(TARGET)/botd
 	@echo -e "\e[92mBuilt bot utilities"
 
 install-bot: bot-utils

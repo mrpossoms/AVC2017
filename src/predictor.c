@@ -80,10 +80,10 @@ void* col_class_worker(void* params)
 	nn_layer_t* L = class_inst[job->classifier_idx].layers;
 
 	const int CHROMA_W = FRAME_W / 2;
-	int start_row = cfg_int("classifier/start-row", 70);
-	const int height = cfg_int("classifier/rows", 16);
-	const int stride_coeff = cfg_int("classifier/stride-coeff", 2);
-	const int stride_start = cfg_int("classifier/stride-start", 2);
+	int start_row = cfg_int("classifier/start-row", 30);
+	const int height = cfg_int("classifier/rows", 32);
+	const int stride_coeff = cfg_int("classifier/stride-coeff", 1);
+	const int stride_start = cfg_int("classifier/stride-start", 8);
 
 start:
 	pthread_mutex_lock(&job->start_gate);
@@ -482,7 +482,7 @@ int main(int argc, char* const argv[])
 	{
 		mat_t x = {
 #ifdef USE_CNN
-			.dims = { 16, 16, 3 },
+			.dims = { PATCH_SIZE, PATCH_SIZE, 3 },
 #else
 			.dims = { 1, PATCH_SIZE * PATCH_SIZE * 3 },
 #endif
