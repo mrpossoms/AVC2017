@@ -1,7 +1,7 @@
 #include "vision.h"
 #include <png.h>
 
-void write_png_file_rgb(
+int write_png_file_rgb(
     const char* path,
     int width,
     int height,
@@ -12,16 +12,16 @@ void write_png_file_rgb(
     if(!fp)
     {
         b_bad("Couldn't open %s for writing", path);
-        abort();
+        return -1;
     }
 
     png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!png) abort();
+    if (!png) return -2;
 
     png_infop info = png_create_info_struct(png);
-    if (!info) abort();
+    if (!info) return -3;
 
-    if (setjmp(png_jmpbuf(png))) abort();
+    if (setjmp(png_jmpbuf(png))) return -4;
 
     png_init_io(png, fp);
 
@@ -48,6 +48,8 @@ void write_png_file_rgb(
     png_write_end(png, NULL);
 
     fclose(fp);
+
+    return 0;
 }
 
 

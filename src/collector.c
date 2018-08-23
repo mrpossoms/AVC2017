@@ -17,7 +17,7 @@ typedef enum {
 int I2C_BUS;
 int NORM_VIDEO;
 int WAIT_FOR_MOVEMENT = 1;
-int READ_ACTION = 1;
+int READ_ACTION = 0;
 int FRAME_RATE = 30;
 int GEN_RANDOM = 0;
 char* MEDIA_PATH;
@@ -42,9 +42,9 @@ static int arg_immediate_start(char flag, const char* v)
 	return 0;
 }
 
-static int arg_disable_action_polling(char flag, const char* v)
+static int arg_enable_action_polling(char flag, const char* v)
 {
-	READ_ACTION = 0;
+	READ_ACTION = 1;
 	return 0;
 }
 
@@ -68,8 +68,8 @@ void proc_opts(int argc, char* const argv[])
 			.type = ARG_TYP_CALLBACK
 		},
 		{ 'a',
-			.desc = "disable polling of PWM action values",
-			.set = arg_disable_action_polling,
+			.desc = "enable polling of PWM action values",
+			.set = arg_enable_action_polling,
 			.type = ARG_TYP_CALLBACK
 		},
 		{ 'f',

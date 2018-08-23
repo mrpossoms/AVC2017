@@ -323,7 +323,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	else
 	*/
 	{ // otherwise steer normally
-		const float amp = 2.f;
+		const float amp = cfg_float("steering_amp", 1.0f);
 		*steering = ((lpf.steering - 0.5f) * amp) + 0.5f;
 		*steering = CLAMP(*steering, 0, 1);
 

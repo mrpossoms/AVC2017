@@ -4,7 +4,7 @@
 #include "structs.h"
 #include "sys.h"
 
-void write_png_file_rgb(
+int write_png_file_rgb(
     const char* path,
     int width,
     int height,

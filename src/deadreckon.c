@@ -57,9 +57,11 @@ void* pose_estimator(void* params)
 		if(poll_i2c_devs(state, READ_ACTION ? act_ptr : NULL, &odo))
 		{
 			b_bad("poll_i2c_devs() - failed");
-			pthread_mutex_unlock(&STATE_LOCK);
-			exit(-1);
-			return (void*)-1;
+
+			// pthread_mutex_unlock(&STATE_LOCK);
+			// exit(-1);
+			// return (void*)-1;
+
 		}
 
 		const float wheel_cir = 0.082 * M_PI / 4.0;
@@ -102,10 +104,10 @@ void* pose_estimator(void* params)
 
 		state->distance += delta;
 
-		pthread_mutex_unlock(&STATE_LOCK);
-
 		POSE_CYCLES++;
 		last_odo = odo;
+cycle_abort:
+		pthread_mutex_unlock(&STATE_LOCK);
 		timegate_close(&tg);
 	}
 }
