@@ -10,19 +10,18 @@
 
 int INPUT_FD = 0;
 int FORWARD_STATE = 0;
-int I2C_BUS;
+int I2C_BUS = 0;
 int LOG_VERBOSITY = 0;
 
-calib_t CAL;
+calib_t CAL = {};
 uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
-
-time_t LAST_SECOND;
 
 
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);
-	pwm_reset();
+	pwm_set_echo(0xff);
+	// pwm_reset();
 	exit(0);
 }
 
@@ -116,7 +115,6 @@ int main(int argc, char* const argv[])
 			if (pwm_set_action(&act))
 			{
 				b_bad("pwm_set_action() - failed");
-				break;
 			}
 		}
 		else

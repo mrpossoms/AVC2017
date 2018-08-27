@@ -110,7 +110,7 @@ int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
 
-	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 4, 0);
+	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 3, 0);
 	Camera camera(DEG_2_RAD(62.2), renderer.width, renderer.height);
 
 	ListScene scene, ground_scene, hay_scene, shadow_scene;
