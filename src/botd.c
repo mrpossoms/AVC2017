@@ -13,9 +13,6 @@
 
 #define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
 
-extern char** environ;
-
-static const char* MEDIA_PATH;
 static int RUNNING;
 static int DAEMONIZE;
 static int LOG_VERBOSITY = 0;
@@ -27,6 +24,13 @@ void set_led(int on)
 	int fd;
 	write((fd = open(LED_PATH, O_WRONLY)), on ? "1" : "0", 1);
 	close(fd);
+}
+
+
+static int log_verbosity_cb(char flag, const char* v)
+{
+	LOG_VERBOSITY++;
+	return 0;
 }
 
 
@@ -48,6 +52,18 @@ pid_t BOT_JOB_PID = 0;
 
 int main(int argc, char* const argv[])
 {
+	// define and process cli args
+	cli_cmd_t cmds[] = {
+		{ 'v',
+			.desc = "Each occurrence increases log verbosity.",
+			.set  = log_verbosity_cb,
+			.type = ARG_TYP_CALLBACK,
+		},
+		{} // terminator
+	};
+	cli("Runs in the background and automatically executes pipelines of robot programs",
+	cmds, argc, argv);
+
 	struct {
 		int x, y, z;
 	} filter = {};
@@ -67,7 +83,7 @@ int main(int argc, char* const argv[])
 
 	// b_log("I'm the child %d\n", RUNNING);
 	b_log("mode: run");
-	
+
 	// child
 	while(RUNNING)
 	{
@@ -94,34 +110,36 @@ int main(int argc, char* const argv[])
 		}
 
 		// b_log("r: %d, %d, %d - f: %d, %d, %d", state.acc[0], state.acc[1], state.acc[2], filter.x, filter.y, filter.z);
-		LOG_LVL(0) b_log("t: %d, s: %d", act.throttle, act.steering);
+		LOG_LVL(3) b_log("t: %d, s: %d", act.throttle, act.steering);
 
 		if(filter.x > 512 && RUN_MODE == 0)
 		{
 			RUN_MODE = 1;
-			b_log("mode: run");
+			LOG_LVL(2) b_log("mode: run");
 		}
 		else if(filter.x < -512 && RUN_MODE == 1)
 		{
 			RUN_MODE = 0;
-			b_log("mode: record");
+			LOG_LVL(2) b_log("mode: record");
 		}
 
 		set_led(RUN_MODE);
-		
+
 		if(act.throttle > 118 && !BOT_JOB_PID)
 		{ // run route
 			char** argv = NULL;
 
 			if (RUN_MODE)
 			{
-				b_log("Running!\n");
+				LOG_LVL(1) b_log("Running!\n");
 				// i2c_uninit();
 				static char* argv_run[] = { "sh", "-c", "collector -i | predictor -f | actuator -vvv -m2 -f > /var/testing/route", NULL };
 				argv = argv_run;
 			}
 			else
 			{
+				LOG_LVL(1) b_log("Recording!\n");
+
 				static char* argv_train[] = { "sh", "-c", "collector -i > /var/training/route", NULL };
 				argv = argv_train;
 			}
@@ -133,7 +151,7 @@ int main(int argc, char* const argv[])
 				argv,
 				NULL
 			);
-			b_log("%d started", BOT_JOB_PID);
+			LOG_LVL(1) b_log("%d started", BOT_JOB_PID);
 		}
 		else if(act.throttle < 110 && BOT_JOB_PID)
 		{
@@ -145,58 +163,9 @@ int main(int argc, char* const argv[])
 			//  waitpid(BOT_JOB_PID, NULL, 0);
 			system("killall -s2 actuator collector");
 
-			b_log("%d Run finished", act.throttle);
+			LOG_LVL(1) b_log("%d Run finished", act.throttle);
 			BOT_JOB_PID = 0;
 		}
-
-		// if(odo_now > LAST_ODO)
-		// { // Start recording session
-		// 	write(1, ".", 1);
-
-		// 	raw_action_t act = {};
-		// 	if(pwm_get_action(&act))
-		// 	{
-		// 		exit(-2);
-		// 	}
-
-		// 	if(act.throttle > 0)
-		// 	if(act.throttle - 1 > THROTTLE_STOPPED || act.throttle + 1 < THROTTLE_STOPPED)
-		// 	{
-		// 		b_log("Recording session...");
-
-		// 		//
-		// 		// Let the collector have the i2c bus
-		// 		//
-		// 		// i2c_uninit();
-
-		// 		//
-		// 		// Start collecting!
-		// 		//
-				// pid_t collector_pid;
-				// char* argv[] = { "collector", "-m", MEDIA_PATH, "-r", NULL };
-
-				// if(RUN_MODE == 0)
-				// {
-				// 	argv[3] = NULL;
-				// }
-
-				// posix_spawn(
-				// 	&collector_pid,
-				// 	"collector",
-				// 	NULL, NULL,
-				// 	argv,
-				// 	NULL
-				// );
-
-		// 		// // Wait for the collector process to terminate
-		// 		// // then bring the i2c bus back up
-		// 		// waitpid(collector_pid, NULL, 0);
-
-		// 		b_log("Session finished");
-		// 		b_log("Waiting...");
-		// 		// i2c_up();
-		// 	}
-		// }
 
 		cooldown--;
 		if (cooldown < 0) { cooldown = 0; }

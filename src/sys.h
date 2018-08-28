@@ -25,7 +25,7 @@
 #define AVC_TERM_RED "\033[1;31m"
 #define AVC_TERM_COLOR_OFF "\033[0m"
 
-#define ACTION_CAL_PATH "actions.cal"
+#define ACTION_CAL_PATH "/etc/bot/actuator/actions.cal"
 #define RESTING_PWM_PATH "resting"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
