@@ -13,13 +13,13 @@ jobs:
 
       - run:
           name: Compile collector
-          command: make bin/collector
+          command: make collector
 
       - run:
           name: Compile predictor 
-          command: make bin/predictor
+          command: make predictor
 
       - run:
           name: Compile actuator 
-          command: make bin/actuator
+          command: make actuator
 
