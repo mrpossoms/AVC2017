@@ -10,6 +10,7 @@
 #include "deadreckon.h"
 
 extern int READ_ACTION;
+extern int LOG_VERBOSITY;
 int POSE_CYCLES;
 
 void* pose_estimator(void* params)
@@ -31,14 +32,12 @@ void* pose_estimator(void* params)
 	assert(sched_setaffinity(0, pose_cpu_size, pose_cpu) == 0);
 #endif
 
-	float distance_rolled = 0;
 	int LAST_D_ODO_CYCLE = 0;
 	int last_odo = 0;
-	vec3 last_heading;
 
 	if(READ_ACTION)
 	{
-		act_ptr = &msg->payload.action;
+		act_ptr = &msg->payload.pair.action;
 	}
 
 	// terminate if the I2C bus isn't open
@@ -49,16 +48,20 @@ void* pose_estimator(void* params)
 
 	while(1)
 	{
-		timegate_open(&tg);
-
 		int odo = 0;
 		struct bno055_quaternion_t iq;
 
+		timegate_open(&tg);
 		pthread_mutex_lock(&STATE_LOCK);
 
-		if(poll_i2c_devs(state, READ_ACTION ? act_ptr : NULL, &odo))
+		if(poll_i2c_devs(state, act_ptr, &odo))
 		{
-			return (void*)-1;
+			b_bad("poll_i2c_devs() - failed");
+
+			// pthread_mutex_unlock(&STATE_LOCK);
+			// exit(-1);
+			// return (void*)-1;
+
 		}
 
 		const float wheel_cir = 0.082 * M_PI / 4.0;
@@ -101,10 +104,10 @@ void* pose_estimator(void* params)
 
 		state->distance += delta;
 
-		pthread_mutex_unlock(&STATE_LOCK);
-
 		POSE_CYCLES++;
 		last_odo = odo;
+cycle_abort:
+		pthread_mutex_unlock(&STATE_LOCK);
 		timegate_close(&tg);
 	}
 }

@@ -156,21 +156,36 @@ int poll_i2c_devs(raw_state_t* state, raw_action_t* action, int* odo)
 	uint8_t mode = 0;
 	int res;
 
+	if(!state) return 3;
+
 	if(action)
 	{
 		res = pwm_get_action(action);
-		if(res) return res;
+		if(res) 
+		{
+			b_bad("pwm_get_action() - failed");
+
+			return res;
+		}
 	}
 
 	if(odo)
 	{
 		*odo = pwm_get_odo();
-		if(*odo < 0) return *odo;
+		if(*odo < 0)
+		{
+			b_bad("pwm_get_odo() - failed");
+			return *odo;
+		}
 	}
 
 	res = bno055_get_operation_mode(&mode);
+	if(res) 
+	{
+		b_bad("bno055_get_operation_mode() - failed");
 
-	if(!state) return 3;
+		return res;
+	}
 
 	if(bno055_read_accel_xyz((struct bno055_accel_t*)state->acc))
 	{

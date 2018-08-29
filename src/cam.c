@@ -21,7 +21,7 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 {
 
 	int fd = open(path, O_RDWR);
-	int res;
+	int res = 0;
 
 	if(fd < 0)
 	{
@@ -102,7 +102,10 @@ cam_t cam_open(const char* path, cam_settings_t* cfg)
 		}
 
 		bzero(fbs[i], bufferinfo.length);
-		ioctl(fd, VIDIOC_QBUF, &bufferinfo);
+
+		res = ioctl(fd, VIDIOC_QBUF, &bufferinfo);
+
+		if (res) b_bad("cam_open(): VIDIOC_QBUF");
 	}
 
 
@@ -136,7 +139,25 @@ int cam_request_frame(cam_t* cam)
 
 int cam_wait_frame(cam_t* cam)
 {
-	ioctl(cam->fd, VIDIOC_DQBUF, &cam->buffer_info);
+	int res = ioctl(cam->fd, VIDIOC_DQBUF, &cam->buffer_info);
+
+	if (res != 0) b_bad("cam_wait_frame(): VIDIOC_DQBUF");
+
+	switch(res)
+	{
+		case EAGAIN:
+			b_bad("EAGAIN");
+			break;
+		case EINVAL:
+			b_bad("EINVAL");
+			break;
+		case EIO:
+			b_bad("EIO");
+			break;
+
+	}
+
+	return res;
 }
 
 
@@ -151,14 +172,13 @@ int cam_config(int fd, cam_settings_t* cfg)
 		return -1;
 	}
 
-/*
-	res = ioctl(fd, VIDIOC_G_FMT, &format);
-	if(res < 0)
-	{
-		b_bad("Error: failed retrieving camera settings (%d)", errno);
-		return -2;
-	}
-*/
+
+	// res = ioctl(fd, VIDIOC_G_FMT, &format);
+	// if(res < 0)
+	// {
+	// 	b_bad("Error: failed retrieving camera settings (%d)", errno);
+	// 	return -2;
+	// }
 
 	format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	format.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;

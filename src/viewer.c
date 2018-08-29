@@ -18,6 +18,7 @@
 
 GLFWwindow* WIN;
 GLuint frameTex;
+int USE_SLEEP;
 
 static void setupGL()
 {
@@ -27,6 +28,7 @@ static void setupGL()
 	glEnable(GL_TEXTURE_2D);
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
 }
+
 
 static void createTexture(GLuint* tex)
 {
@@ -38,44 +40,79 @@ static void createTexture(GLuint* tex)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
-void yuv422_to_lum8(color_t* yuv, uint8_t* lum8, int w, int h)
+
+void draw_path_travelled(raw_state_t* state, vec3* positions)
 {
-	for(int i = w * h; i--;)
-	{
-		lum8[i] = yuv[i].y;
-	}
+	glDisable(GL_TEXTURE_2D);
+
+	const float scale_factor = 0.02f;
+	glColor3f(1, 0, 0);
+	glBegin(GL_LINE_STRIP);
+		for(int i = 1024; i--;)
+		{
+			glVertex2f(positions[i][0] * scale_factor, positions[i][1] * scale_factor);
+		}
+	glEnd();
+
+	glColor3f(0, 1, 0);
+	glBegin(GL_LINES);
+			glVertex2f(
+				(state->position[0]) * scale_factor,
+				(state->position[1]) * scale_factor
+			);
+			glVertex2f(
+				(state->position[0] + state->heading[0]) * scale_factor,
+				(state->position[1] + state->heading[1]) * scale_factor
+			);
+	glEnd();
 }
 
-
-void display_static()
+void frame_to_canon(float x_frame, float y_frame, float* x, float* y)
 {
-	static int rand_fd;
-	static uint8_t lum[FRAME_W * FRAME_H];
-
-	if(!rand_fd)
-	{
-		rand_fd = open("/dev/random", O_RDONLY);
-	}
-
-	read(rand_fd, lum, VIEW_PIXELS);
-
-	glTexImage2D(
-		GL_TEXTURE_2D,
-		0,
-		GL_LUMINANCE, // one color channel
-		FRAME_W,
-		FRAME_H,
-		0, // no border
-		GL_LUMINANCE,
-		GL_UNSIGNED_BYTE,
-		lum
-	);
+	*x = ((x_frame / 640.f) - 0.5) * 2;
+	*y = ((y_frame / 480.f) - 0.5) * -2;
 }
 
+void frame_to_pix(float x_frame, float y_frame, int* x, int* y)
+{
+	*x = (x_frame / 640.f) * FRAME_W;
+	*y = (y_frame / 480.f) * FRAME_H;
+}
+
+int LABEL_CLASS;
+char* BASE_PATH;
 
 int main(int argc, char* argv[])
 {
 	PROC_NAME = argv[0];
+
+	cli_cmd_t cmds[] = {
+		{ 'c',
+			.desc = "Specify class number for saving images",
+			.set = &LABEL_CLASS,
+			.type = ARG_TYP_INT,
+			.opts = { .has_value = 1 },
+		},
+		{ 'p',
+			.desc = "Set base path",
+			.set = &BASE_PATH,
+			.type = ARG_TYP_STR,
+			.opts = { .has_value = 1 },
+		},
+		{ 'd',
+			.desc = "Apply slight delay",
+			.set = &USE_SLEEP,
+			.type = ARG_TYP_INT,
+			.opts = { .has_value = 1 },
+		},
+		{}
+	};
+	const char* prog_desc = "";
+
+	if (cli(prog_desc, cmds, argc, argv))
+	{
+		return -2;
+	}
 
 	if (!glfwInit()){
 		return -1;
@@ -99,13 +136,12 @@ int main(int argc, char* argv[])
 
 	vec3 positions[1024];
 	int pos_idx = 0;
-	int use_sleep = 0;
 	int img_fd = 0;
 
 	if(argc >= 2)
 	{
 		img_fd = open(argv[1], O_RDONLY);
-		//use_sleep = 1;
+		//USE_SLEEP = 1;
 	}
 
 	raw_state_t* state = NULL;
@@ -123,6 +159,9 @@ int main(int argc, char* argv[])
 			rgb
 		);
 
+		int space_down = glfwGetKey(WIN, GLFW_KEY_SPACE) == GLFW_PRESS;
+
+		if (!space_down)
 		if (read_pipeline_payload(&msg, PAYLOAD_STATE))
 		{
 			return -1;
@@ -156,32 +195,47 @@ int main(int argc, char* argv[])
 			glVertex2f( 1, -1);
 		glEnd();
 
-		glDisable(GL_TEXTURE_2D);
+		draw_path_travelled(state, positions);
 
-		glColor3f(1, 0, 0);
-		glBegin(GL_LINE_STRIP);
-			for(int i = 1024; i--;)
+		if (BASE_PATH)
+		{
+			if (glfwGetMouseButton(WIN, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
 			{
-				glVertex2f(positions[i][0] / 10.f, positions[i][1] / 10.f);
-			}
-		glEnd();
+				double x, y;
+				glfwGetCursorPos(WIN, &x, &y);
 
-		glColor3f(0, 1, 0);
-		glBegin(GL_LINES);
-				glVertex2f(
-					(state->position[0]) / 10.f,
-					(state->position[1]) / 10.f
-				);
-				glVertex2f(
-					(state->position[0] + state->heading[0]) / 10.f,
-					(state->position[1] + state->heading[1]) / 10.f
-				);
-		glEnd();
+				float ul[2];
+				float lr[2];
+
+				frame_to_canon(x, y, ul + 0, ul + 1);
+				frame_to_canon(x + 16, y + 16, lr + 0, lr + 1);
+
+				rectangle_t patch_rec = { .w = 16, .h = 16 };
+				color_t patch[16 * 16];
+				frame_to_pix(x, y, &patch_rec.x, &patch_rec.y);
+				image_patch_b(patch, rgb, patch_rec);
+
+				char file_path[PATH_MAX] = {}, base_path[PATH_MAX] = {};
+				snprintf(base_path, PATH_MAX, "%s/%d", BASE_PATH, LABEL_CLASS);
+				mkdir(base_path, 0777);
+				snprintf(file_path, PATH_MAX, "%s/%lx", base_path, random());
+				write_png_file_rgb(file_path, patch_rec.w, patch_rec.h, (char*)patch);
+
+				glBegin(GL_QUADS);
+					glColor4f(1, 0, 0, 0.5);
+					glVertex2f(ul[0], ul[1]);
+					glVertex2f(lr[0], ul[1]);
+					glVertex2f(lr[0], lr[1]);
+					glVertex2f(ul[0], lr[1]);
+				glEnd();
+			}
+		}
 
 		glfwPollEvents();
 		glfwSwapBuffers(WIN);
 
-		if(use_sleep) usleep(1000 * 250);
+		if (!space_down)
+		if(USE_SLEEP) usleep(1000 * USE_SLEEP);
 	}
 
 	return 0;

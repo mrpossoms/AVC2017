@@ -12,8 +12,8 @@
 	exit(-1);\
 }\
 
-#define FRAME_W 352
-#define FRAME_H 240
+#define FRAME_W 160
+#define FRAME_H 120
 #define PIX_DEPTH 3
 
 #define VIEW_PIXELS (FRAME_W * FRAME_H)
@@ -111,8 +111,8 @@ typedef struct {
 		raw_state_t state;
 		raw_action_t action;
 		struct {
-			raw_action_t action;
 			raw_state_t state;
+			raw_action_t action;
 		} pair;
 	} payload;
 } message_t;

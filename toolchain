@@ -1,0 +1,2 @@
+export TOOLCHAIN=/home/kirk/toolchains/gcc-linaro-7.3.1-2018.05-x86_64_armv8l-linux-gnueabihf
+export TOOLCHAIN_PREFIX=$TOOLCHAIN/armv8l-linux-gnueabihf

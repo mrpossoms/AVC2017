@@ -109,14 +109,14 @@ def filenames_labels():
     return files_labels
 
 
-def array_from_file(path):
-    img = Image.open(path).convert('RGB')
-    return np.array(img)[0:PATCH_SIDE,0:PATCH_SIDE,:]
-
-
 def show_example(X, i, title=None):
     test = Image.fromarray(((X[i]) * 256).reshape((PATCH_SIDE, PATCH_SIDE, 3)).astype(np.uint8))
     test.show(title=title)
+
+
+def array_from_file(path):
+    img = Image.open(path).convert('RGB')
+    return np.array(img)[0:PATCH_SIDE,0:PATCH_SIDE,:]
 
 
 def minibatch(files_labels, index, size=100):

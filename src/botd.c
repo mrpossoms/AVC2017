@@ -10,53 +10,15 @@
 #include "sys.h"
 #include "i2c.h"
 #include "drv_pwm.h"
+#include "cfg.h"
 
-extern char** environ;
+#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
 
-static const char* MEDIA_PATH;
 static int RUNNING;
 static int DAEMONIZE;
-static FILE* LOG_FILE;
+static int LOG_VERBOSITY = 0;
 
-#define GOOD(fmt...) do { log_msg(".", fmt); } while(0)
-#define BAD(fmt...) do { log_msg("!", fmt); } while(0)
-#define INFO(fmt...) do { log_msg("*", fmt); } while(0)
-
-#define LED_PATH "/sys/class/leds/led0/brightness"
-
-struct {
-	int last_odo;
-} app = {};
-
-
-static void log_msg(const char* type, const char* fmt, ...)
-{
-	va_list ap;
-	char buf[1024];
-
-	fprintf(LOG_FILE, "botd [%ld] %s: ", time(NULL), type);
-
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-	
-	fprintf(LOG_FILE, "%s\n", buf);
-}
-
-
-static void bad(const char* fmt, ...)
-{
-	va_list ap;
-	char buf[1024];
-
-	log_msg("!", fmt);
-
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-	
-	fprintf(LOG_FILE, "%s\n", buf);
-}
+#define LED_PATH "/sys/class/leds/led1/brightness"
 
 void set_led(int on)
 {
@@ -65,21 +27,11 @@ void set_led(int on)
 	close(fd);
 }
 
-void proc_opts(int argc, char* const argv[])
+
+static int log_verbosity_cb(char flag, const char* v)
 {
-	int c;
-	while ((c = getopt(argc, argv, "dm:")) != -1)
-	{
-		switch(c)
-		{
-			case 'd':
-				DAEMONIZE = 1;
-				break;
-			case 'm':
-				MEDIA_PATH = optarg;
-				break;
-		}
-	}
+	LOG_VERBOSITY++;
+	return 0;
 }
 
 
@@ -89,124 +41,42 @@ static void i2c_up()
 
 	if(res)
 	{
-		BAD("i2c_init failed (%d)\n", res);
+		b_bad("i2c_init failed (%d)\n", res);
 		exit(-1);
 	}
 
 	pwm_set_echo(0x6);
 }
 
-int RECORD_MODE = 1;
-int DX;
-
-void child_loop()
-{
-	int odo = pwm_get_odo();
-	static int last_record_mode;
-	struct bno055_accel_t acc = {};
-
-	bno055_read_accel_xyz(&acc);
-
-	DX = (DX * 9 + acc.x) / 10;
-
-	if(DX > 256 && RECORD_MODE == 1)
-	{
-		RECORD_MODE = 0;
-	}
-	else if(DX < -256 && RECORD_MODE == 0)
-	{
-		RECORD_MODE = 1;
-	}
-	else if(abs(acc.y) > 512)
-	{ // run route
-		b_log("Running!\n");
-		i2c_uninit();
-		system("collector -i -a | predictor -r/media/training/0.route -m2");
-		i2c_up();
-		b_log("Run finished\n");
-	}
-	
-	if(last_record_mode != RECORD_MODE)
-	{
-		set_led(RECORD_MODE);
-	}
-	
-	if(odo > app.last_odo)
-	{ // Start recording session
-		write(1, ".", 1);
-
-		raw_action_t act = {};
-		if(pwm_get_action(&act))
-		{
-			exit(-2);
-		}
-
-		if(act.throttle > 0)
-		if(act.throttle - 1 > THROTTLE_STOPPED || act.throttle + 1 < THROTTLE_STOPPED)
-		{
-			INFO("Recording session...");
-
-			//
-			// Let the collector have the i2c bus
-			//
-			i2c_uninit();
-
-			//
-			// Start collecting!
-			//
-			pid_t collector_pid;
-			char* argv[] = { "collector", "-m", MEDIA_PATH, "-r", NULL };
-
-			if(RECORD_MODE == 0)
-			{
-				argv[3] == NULL;
-			}
-
-			posix_spawn(
-				&collector_pid, 
-				"collector",
-				NULL, NULL,
-				argv,
-				NULL
-			);
-
-			// Wait for the collector process to terminate
-			// then bring the i2c bus back up
-			waitpid(collector_pid, NULL, 0);
-
-			INFO("Session finished");
-			INFO("Waiting...");
-			i2c_up();
-		}
-	}
-
-	app.last_odo = odo;
-	usleep(1000 * 50);
-}
-
+int RUN_MODE = 1;
+pid_t BOT_JOB_PID = 0;
 
 int main(int argc, char* const argv[])
 {
-	int res;
-	
-	PROC_NAME = argv[0];
-	proc_opts(argc, argv);
-	
-	LOG_FILE = fopen("/var/log/botd", "w+");
-	
-	if(!LOG_FILE)
-	{
-		fprintf(stderr, "Failed to open logfile (%d)\n", errno);
-		return -1;
-	}
+	// define and process cli args
+	cli_cmd_t cmds[] = {
+		{ 'v',
+			.desc = "Each occurrence increases log verbosity.",
+			.set  = log_verbosity_cb,
+			.type = ARG_TYP_CALLBACK,
+		},
+		{} // terminator
+	};
+	cli("Runs in the background and automatically executes pipelines of robot programs",
+	cmds, argc, argv);
 
-	if(!MEDIA_PATH) 
-	{
-		BAD("Please provide a training data media path\n");
-		return -1;	
-	}
+	cfg_base("/etc/bot/botd/");
+
+	struct {
+		float x, y, z;
+	} filter = {};
+
+	int cooldown = 100;
+
+	PROC_NAME = argv[0];
 
 	i2c_up();
+	set_led(RUN_MODE);
 
 	RUNNING = 1;
 
@@ -215,9 +85,100 @@ int main(int argc, char* const argv[])
 		if(fork() != 0) return 0;
 	}
 
-	printf("I'm the child %d\n", RUNNING);
+	// b_log("I'm the child %d\n", RUNNING);
+	b_log("mode: run");
+
 	// child
-	while(RUNNING) child_loop();
+	while(RUNNING)
+	{
+		raw_state_t state;
+		raw_action_t act;
+
+		if (poll_i2c_devs(&state, &act, NULL))
+		{
+			b_bad("poll_i2c_devs() - failed");
+			sleep(1);
+			continue;
+		}
+
+		if (!act.throttle || !act.throttle)
+		{
+			continue;
+		}
+
+		if (BOT_JOB_PID == 0)
+		{
+			filter.x = (state.acc[0] + filter.x * 9) / 10.f;
+			filter.y = (state.acc[1] + filter.y * 9) / 10.f;
+			filter.z = (state.acc[2] + filter.z * 9) / 10.f;
+		}
+
+		// b_log("r: %d, %d, %d - f: %d, %d, %d", state.acc[0], state.acc[1], state.acc[2], filter.x, filter.y, filter.z);
+		LOG_LVL(3) b_log("t: %d, s: %d", act.throttle, act.steering);
+
+		if(filter.x > 512 && RUN_MODE == 0)
+		{
+			RUN_MODE = 1;
+			LOG_LVL(2) b_log("mode: run");
+		}
+		else if(filter.x < -512 && RUN_MODE == 1)
+		{
+			RUN_MODE = 0;
+			LOG_LVL(2) b_log("mode: record");
+		}
+
+		set_led(RUN_MODE);
+
+		if(act.throttle > 118 && !BOT_JOB_PID)
+		{ // run route
+			char** argv = NULL;
+
+			if (RUN_MODE)
+			{
+				LOG_LVL(1) b_log("Running!\n");
+				// i2c_uninit();
+				static char* argv_run[] = { "sh", "-c", "", NULL };
+				argv_run[2] = cfg_str("run_cmd", "collector -ia | predictor -f | actuator -m2 -f > /var/testing/route");
+				argv = argv_run;
+			}
+			else
+			{
+				LOG_LVL(1) b_log("Recording!\n");
+
+				static char* argv_train[] = { "sh", "-c", "", NULL };
+				argv_train[2] = cfg_str("record_cmd", "collector -ia > /var/training/route");
+				argv = argv_train;
+			}
+
+			// posix_spawn(
+			// 	&BOT_JOB_PID,
+			// 	"/bin/sh",
+			// 	NULL, NULL,
+			// 	argv,
+			// 	NULL
+			// );
+			system(argv[2]);
+			LOG_LVL(1) b_log("%d started", BOT_JOB_PID);
+		}
+		else if(act.throttle < 110 && BOT_JOB_PID)
+		{
+			// if (kill(BOT_JOB_PID, 2))
+			// {
+			// 	b_bad("Signalling processes to terminate failed");
+			// }
+
+			//  waitpid(BOT_JOB_PID, NULL, 0);
+			system("killall -s2 actuator collector");
+
+			LOG_LVL(0) b_good("%d Run finished", act.throttle);
+			BOT_JOB_PID = 0;
+		}
+
+		cooldown--;
+		if (cooldown < 0) { cooldown = 0; }
+
+		usleep(1000 * 50);
+	}
 
 	return 0;
 }

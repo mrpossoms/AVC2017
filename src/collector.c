@@ -3,10 +3,12 @@
 #include "sys.h"
 #include "structs.h"
 #include "i2c.h"
-#include "drv_pwm.h"
 #include "cam.h"
 #include "linmath.h"
 #include "deadreckon.h"
+#include "cfg.h"
+
+#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
 
 typedef enum {
 	COL_MODE_NORMAL = 0,
@@ -17,13 +19,21 @@ typedef enum {
 int I2C_BUS;
 int NORM_VIDEO;
 int WAIT_FOR_MOVEMENT = 1;
-int READ_ACTION = 1;
+int READ_ACTION = 0;
 int FRAME_RATE = 30;
-char* MEDIA_PATH;
+int GEN_RANDOM = 0;
+int LOG_VERBOSITY = 0;
 calib_t CAL;
 col_mode_t MODE;
 float VEL;
 pthread_mutex_t STATE_LOCK;
+
+
+static int log_verbosity_cb(char flag, const char* v)
+{
+	LOG_VERBOSITY++;
+	return 0;
+}
 
 
 static int arg_calibration_mode(char flag, const char* v)
@@ -37,13 +47,13 @@ static int arg_calibration_mode(char flag, const char* v)
 static int arg_immediate_start(char flag, const char* v)
 {
 	WAIT_FOR_MOVEMENT = 0;
-	b_log("Calibrating action vector");
+	b_log("Starting immediately");
 	return 0;
 }
 
-static int arg_disable_action_polling(char flag, const char* v)
+static int arg_enable_action_polling(char flag, const char* v)
 {
-	READ_ACTION = 0;
+	READ_ACTION = 1;
 	return 0;
 }
 
@@ -67,14 +77,25 @@ void proc_opts(int argc, char* const argv[])
 			.type = ARG_TYP_CALLBACK
 		},
 		{ 'a',
-			.desc = "disable polling of PWM action values",
-			.set = arg_disable_action_polling,
+			.desc = "enable polling of PWM action values",
+			.set = arg_enable_action_polling,
 			.type = ARG_TYP_CALLBACK
 		},
 		{ 'f',
 			.desc = "set framerate in frames/second",
 			.set = &FRAME_RATE,
-			.type = ARG_TYP_INT
+			.type = ARG_TYP_INT,
+			.opts = { .has_value = 1 },
+		},
+		{ 'r',
+			.desc = "generate random data rather than collecting.",
+			.set = &GEN_RANDOM,
+			.type = ARG_TYP_FLAG,
+		},
+		{ 'v',
+			.desc = "Each occurrence increases log verbosity.",
+			.set  = log_verbosity_cb,
+			.type = ARG_TYP_CALLBACK,
 		},
 		{} // terminator
 	};
@@ -92,15 +113,6 @@ void proc_opts(int argc, char* const argv[])
 int poll_vision(raw_state_t* state, cam_t* cams)
 {
 	cam_wait_frame(cams);
-
-	range_t luma_range = { 128, 128 };
-	range_t cr_range = { 128, 128 };
-	range_t cb_range = { 128, 128 };
-	float luma_mu = 0;
-	float cr_mu = 0;
-	float cb_mu = 0;
-
-	raw_state_t new_frame = {};
 
 	// Downsample the intensity resolution to match that of
 	// the chroma
@@ -231,6 +243,83 @@ int collection(cam_t* cam)
 		// Do something while we wait for our
 		// next frame to come in...
 		++updates;
+
+
+		if (poll_vision(state, cam))
+		{
+			b_bad("Error capturing frame");
+			return -2;
+		}
+
+		pthread_mutex_lock(&STATE_LOCK);
+
+		if (now != time(NULL))
+		{
+			LOG_LVL(1) b_log("%dHz (%f %f %f) %fm/s",
+				updates,
+				state->position[0],
+				state->position[1],
+				state->position[2],
+				state->vel
+			);
+
+			LOG_LVL(3) b_log("act: t: %d, s: %d",
+				(int)msg.payload.pair.action.throttle,
+				(int)msg.payload.pair.action.steering
+			);
+
+			updates = 0;
+			now = time(NULL);
+		}
+
+		if (write_pipeline_payload(&msg))
+		{
+			b_bad("Error writing state-action pair");
+			return -3;
+		}
+		pthread_mutex_unlock(&STATE_LOCK);
+
+
+		if (state->vel == 0 && WAIT_FOR_MOVEMENT)
+		{
+			exit(0);
+		}
+
+		if (msg.payload.pair.action.throttle < 114 && READ_ACTION)
+		{
+			// terminated
+			exit(1);
+		}
+	}
+}
+
+/**
+ * @brief Generates random data rather than collecting it from sensors
+ * @return 0 on success
+ */
+int random_data()
+{
+	int fd_rnd = open("/dev/random", O_RDONLY);
+	int updates = 0;
+	time_t now;
+	message_t msg = {
+		.header = {
+			.magic = MAGIC,
+			.type  = PAYLOAD_STATE
+		},
+	};
+	raw_state_t* state = &msg.payload.state;
+
+	if (fd_rnd < 0)
+	{
+		return -1;
+	}
+
+	for (;;)
+	{
+		// Do something while we wait for our
+		// next frame to come in...
+		++updates;
 		if (now != time(NULL))
 		{
 			b_log("%dHz (%f %f %f) %fm/s",
@@ -244,24 +333,12 @@ int collection(cam_t* cam)
 			now = time(NULL);
 		}
 
-		if (poll_vision(state, cam))
-		{
-			b_bad("Error capturing frame");
-			return -2;
-		}
+		write(fd_rnd, state, sizeof(raw_state_t));
 
-		pthread_mutex_lock(&STATE_LOCK);
 		if (write_pipeline_payload(&msg))
 		{
 			b_bad("Error writing state-action pair");
 			return -3;
-		}
-		pthread_mutex_unlock(&STATE_LOCK);
-
-
-		if (state->vel == 0 && WAIT_FOR_MOVEMENT)
-		{
-			exit(0);
 		}
 	}
 }
@@ -272,10 +349,12 @@ int main(int argc, char* const argv[])
 	PROC_NAME = argv[0];
 	proc_opts(argc, argv);
 
+	cfg_base("/etc/bot/collector/");
+
 	int res;
 	cam_settings_t cfg = {
-		.width  = 160,
-		.height = 120,
+		.width  = FRAME_W,
+		.height = FRAME_H,
 		.frame_rate = FRAME_RATE,
 	};
 
@@ -294,23 +373,19 @@ int main(int argc, char* const argv[])
 		close(I2C_BUS);
 		I2C_BUS = -1;
 
-		return -1;
+		//return -1;
 	}
-
-	if (READ_ACTION)
-	{
-		pwm_set_echo(0x6);
-	}
-
-	pwm_reset_soft();
-	b_good("OK");
 
 	// Use the round-robin real-time scheduler
 	// with a high priority
 	struct sched_param sch_par = {
 		.sched_priority = 50,
 	};
-	assert(sched_setscheduler(0, SCHED_RR, &sch_par) == 0);
+
+	if (sched_setscheduler(0, SCHED_RR, &sch_par) != 0)
+	{
+		b_bad("RT-scheduling not set");
+	}
 
 	// Check to see if that action calibration file
 	// exists. If not, switch to calibration mode. Otherwise
@@ -320,14 +395,21 @@ int main(int argc, char* const argv[])
 	{
 		MODE = COL_MODE_ACT_CAL;
 		b_bad("No %s file found. Calibrating...", ACTION_CAL_PATH);
+		calibration(cfg);
 	}
 	else
 	{
 		assert(calib_load(ACTION_CAL_PATH, &CAL) == 0);
 	}
 
-	res = collection(cam);
-
+	if (GEN_RANDOM)
+	{
+		res = random_data();
+	}
+	else
+	{
+		res = collection(cam);
+	}
 
 	return res;
 }

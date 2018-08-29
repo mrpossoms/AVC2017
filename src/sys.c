@@ -1,5 +1,8 @@
 #include "sys.h"
 #include <stdio.h>
+#include <syslog.h>
+#include <sys/time.h>
+#include <sys/select.h>
 
 
 void timegate_open(timegate_t* tg)
@@ -57,15 +60,29 @@ int calib_load(const char* path, calib_t* cal)
 }
 
 const char* PROC_NAME;
+static int LOG_OPEN;
+
+static void init_logs()
+{
+	if (!LOG_OPEN)
+	{
+		openlog(NULL, LOG_NDELAY, LOG_CRON); 
+		LOG_OPEN = 1;
+	}
+}
+
 void b_log(const char* fmt, ...)
 {
 	char buf[1024];
 	va_list ap;
 
+	init_logs();
+
 	va_start(ap, fmt);
 	vsnprintf(buf, (size_t)sizeof(buf), fmt, ap);
 	va_end(ap);
 	fprintf(stderr, "[%s] %s (%d)\n", PROC_NAME, buf, errno);
+	syslog(LOG_CRON | LOG_INFO, ":O %s (%d)\n", buf, errno);
 }
 
 
@@ -74,10 +91,13 @@ void b_good(const char* fmt, ...)
 	char buf[1024];
 	va_list ap;
 
+	init_logs();
+
 	va_start(ap, fmt);
 	vsnprintf(buf, (size_t)sizeof(buf), fmt, ap);
 	va_end(ap);
 	fprintf(stderr, AVC_TERM_GREEN "[%s]" AVC_TERM_COLOR_OFF " %s (%d)\n", PROC_NAME, buf, errno);
+	syslog(LOG_CRON | LOG_NOTICE, AVC_TERM_GREEN ":)" AVC_TERM_COLOR_OFF " %s (%d)\n", buf, errno);
 }
 
 
@@ -86,12 +106,15 @@ void b_bad(const char* fmt, ...)
 	char buf[1024];
 	va_list ap;
 
+	init_logs();
+
 	va_start(ap, fmt);
 	vsnprintf(buf, (size_t)sizeof(buf), fmt, ap);
 	va_end(ap);
 	fprintf(stderr, AVC_TERM_RED "[%s]" AVC_TERM_COLOR_OFF " %s (%d)\n", PROC_NAME, buf, errno);
-}
+	syslog(LOG_CRON | LOG_ERR, AVC_TERM_RED ":(" AVC_TERM_COLOR_OFF " %s (%d)\n", buf, errno);
 
+}
 
 void yuv422_to_rgb(uint8_t* luma, chroma_t* uv, color_t* rgb, int w, int h)
 {
@@ -112,6 +135,19 @@ float clamp(float v)
 {
 	v = v > 255 ? 255 : v;
 	return  v < 0 ? 0 : v;
+}
+
+
+int path_exists(const char* path)
+{
+	struct stat path_stat;
+	if (stat(path, &path_stat))
+	{
+		b_bad("Couldn't access '%s'", path);
+		return 0;
+	}
+
+	return 1;
 }
 
 
@@ -253,11 +289,14 @@ int write_pipeline_payload(message_t* msg)
 
 int read_pipeline_payload(message_t* msg, payload_type_t exp_type)
 {
-	size_t expected_size = sizeof(dataset_hdr_t);
+	size_t expected_size = sizeof(dataset_hdr_t), gotten = 0;
 	if (!msg) return -1;
 
-	if (read(0, &msg->header, expected_size) != expected_size)
+	gotten = read(0, &msg->header, expected_size);
+
+	if (gotten != expected_size)
 	{
+		b_bad("read_pipeline_payload() - header size wrong, expected %dB, got %dB", expected_size, gotten);
 		return -2;
 	}
 
@@ -296,7 +335,7 @@ int read_pipeline_payload(message_t* msg, payload_type_t exp_type)
 
 	while(needed)
 	{
-		size_t gotten = read(0, buf + off, needed);
+		gotten = read(0, buf + off, needed);
 		needed -= gotten;
 		off += gotten;
 	}
