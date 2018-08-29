@@ -8,6 +8,8 @@
 #include "deadreckon.h"
 #include "cfg.h"
 
+#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
+
 typedef enum {
 	COL_MODE_NORMAL = 0,
 	COL_MODE_ACT_CAL,
@@ -20,11 +22,18 @@ int WAIT_FOR_MOVEMENT = 1;
 int READ_ACTION = 0;
 int FRAME_RATE = 30;
 int GEN_RANDOM = 0;
-char* MEDIA_PATH;
+int LOG_VERBOSITY = 0;
 calib_t CAL;
 col_mode_t MODE;
 float VEL;
 pthread_mutex_t STATE_LOCK;
+
+
+static int log_verbosity_cb(char flag, const char* v)
+{
+	LOG_VERBOSITY++;
+	return 0;
+}
 
 
 static int arg_calibration_mode(char flag, const char* v)
@@ -82,6 +91,11 @@ void proc_opts(int argc, char* const argv[])
 			.desc = "generate random data rather than collecting.",
 			.set = &GEN_RANDOM,
 			.type = ARG_TYP_FLAG,
+		},
+		{ 'v',
+			.desc = "Each occurrence increases log verbosity.",
+			.set  = log_verbosity_cb,
+			.type = ARG_TYP_CALLBACK,
 		},
 		{} // terminator
 	};
@@ -229,18 +243,7 @@ int collection(cam_t* cam)
 		// Do something while we wait for our
 		// next frame to come in...
 		++updates;
-		if (now != time(NULL))
-		{
-			b_log("%dHz (%f %f %f) %fm/s",
-				updates,
-				state->position[0],
-				state->position[1],
-				state->position[2],
-				state->vel
-			);
-			updates = 0;
-			now = time(NULL);
-		}
+
 
 		if (poll_vision(state, cam))
 		{
@@ -249,6 +252,26 @@ int collection(cam_t* cam)
 		}
 
 		pthread_mutex_lock(&STATE_LOCK);
+
+		if (now != time(NULL))
+		{
+			LOG_LVL(1) b_log("%dHz (%f %f %f) %fm/s",
+				updates,
+				state->position[0],
+				state->position[1],
+				state->position[2],
+				state->vel
+			);
+
+			LOG_LVL(3) b_log("act: t: %d, s: %d",
+				(int)msg.payload.pair.action.throttle,
+				(int)msg.payload.pair.action.steering
+			);
+
+			updates = 0;
+			now = time(NULL);
+		}
+
 		if (write_pipeline_payload(&msg))
 		{
 			b_bad("Error writing state-action pair");
@@ -260,6 +283,12 @@ int collection(cam_t* cam)
 		if (state->vel == 0 && WAIT_FOR_MOVEMENT)
 		{
 			exit(0);
+		}
+
+		if (msg.payload.pair.action.throttle < 114 && READ_ACTION)
+		{
+			// terminated
+			exit(1);
 		}
 	}
 }

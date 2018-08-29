@@ -5,6 +5,7 @@
 #include "i2c.h"
 #include "drv_pwm.h"
 #include "pid.h"
+#include "cfg.h"
 
 #define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
 
@@ -36,6 +37,11 @@ static int log_verbosity_cb(char flag, const char* v)
 int main(int argc, char* const argv[])
 {
 	PROC_NAME = argv[0];
+
+	cfg_base("/etc/bot/actuator/");
+
+	int max_throttle = cfg_int("max-throttle", 130); 
+	int min_throttle = cfg_int("min-throttle", 117); 
 
 	signal(SIGINT, sig_handler);
 
@@ -94,6 +100,7 @@ int main(int argc, char* const argv[])
 		if (read_pipeline_payload(&msg, PAYLOAD_PAIR))
 		{
 			b_bad("read error");
+			sig_handler(2);
 			return -1;
 		}
 
@@ -104,13 +111,16 @@ int main(int argc, char* const argv[])
 		if (I2C_BUS > -1)
 		{
 			float s = act.steering / 256.f;
-			//float t = msg.payload.action.throttle / 255.f;
+			float t = msg.payload.action.throttle / 255.f;
 
 
 			//assert(0.f >= s && s <= 1.f);
 
 			act.steering = CAL.steering.min * (1 - s) + CAL.steering.max * s;
-			//msg.payload.action.throttle = CAL.throttle.max
+			act.throttle = CAL.throttle.min * (1 - t) + CAL.throttle.max * t;
+
+			if (act.throttle > max_throttle) { act.throttle = max_throttle; }
+			if (act.throttle < min_throttle) { act.throttle = min_throttle; }
 
 			if (pwm_set_action(&act))
 			{

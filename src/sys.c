@@ -1,6 +1,8 @@
 #include "sys.h"
 #include <stdio.h>
 #include <syslog.h>
+#include <sys/time.h>
+#include <sys/select.h>
 
 
 void timegate_open(timegate_t* tg)
@@ -291,6 +293,7 @@ int read_pipeline_payload(message_t* msg, payload_type_t exp_type)
 	if (!msg) return -1;
 
 	gotten = read(0, &msg->header, expected_size);
+
 	if (gotten != expected_size)
 	{
 		b_bad("read_pipeline_payload() - header size wrong, expected %dB, got %dB", expected_size, gotten);

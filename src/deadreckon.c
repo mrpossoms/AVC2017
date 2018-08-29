@@ -10,6 +10,7 @@
 #include "deadreckon.h"
 
 extern int READ_ACTION;
+extern int LOG_VERBOSITY;
 int POSE_CYCLES;
 
 void* pose_estimator(void* params)
@@ -36,7 +37,7 @@ void* pose_estimator(void* params)
 
 	if(READ_ACTION)
 	{
-		act_ptr = &msg->payload.action;
+		act_ptr = &msg->payload.pair.action;
 	}
 
 	// terminate if the I2C bus isn't open
@@ -47,14 +48,13 @@ void* pose_estimator(void* params)
 
 	while(1)
 	{
-		timegate_open(&tg);
-
 		int odo = 0;
 		struct bno055_quaternion_t iq;
 
+		timegate_open(&tg);
 		pthread_mutex_lock(&STATE_LOCK);
 
-		if(poll_i2c_devs(state, READ_ACTION ? act_ptr : NULL, &odo))
+		if(poll_i2c_devs(state, act_ptr, &odo))
 		{
 			b_bad("poll_i2c_devs() - failed");
 

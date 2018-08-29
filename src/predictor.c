@@ -272,7 +272,6 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	}
 
 	float fp = (target_idx / (float)HIST_W);
-	static time_t backup_start = 0;
 
 	if (DEBUG_COLORS)
 	{ // Color the region and target index for debugging
@@ -302,26 +301,19 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	{
 		lpf.throttle = confidence;
 	}
-	else
-	{ // Or start backing up if, confidence is poor.
-		// backup_start = now + 1;
-	}
-
 
 	if (confidence <= 0.25 || col_conf_best < 0.4)
 	{ // force a reverse throttle value if we are backing up
-		// lpf.throttle = -0.05;
+		lpf.throttle = -0.05;
 	}
 
 
 	// TODO
-	/*
 	if (lpf.throttle < 0.25f)
 	{ // flip steering angle if reversing
-		//*steering = lpf.steering < 0.5f ? 1 : 0;
+		*steering = lpf.steering < 0.5f ? 1 : 0;
 	}
 	else
-	*/
 	{ // otherwise steer normally
 		const float amp = cfg_float("steering_amp", 1.0f);
 		*steering = ((lpf.steering - 0.5f) * amp) + 0.5f;

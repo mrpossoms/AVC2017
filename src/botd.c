@@ -10,6 +10,7 @@
 #include "sys.h"
 #include "i2c.h"
 #include "drv_pwm.h"
+#include "cfg.h"
 
 #define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
 
@@ -17,7 +18,7 @@ static int RUNNING;
 static int DAEMONIZE;
 static int LOG_VERBOSITY = 0;
 
-#define LED_PATH "/sys/class/leds/led0/brightness"
+#define LED_PATH "/sys/class/leds/led1/brightness"
 
 void set_led(int on)
 {
@@ -64,9 +65,12 @@ int main(int argc, char* const argv[])
 	cli("Runs in the background and automatically executes pipelines of robot programs",
 	cmds, argc, argv);
 
+	cfg_base("/etc/bot/botd/");
+
 	struct {
-		int x, y, z;
+		float x, y, z;
 	} filter = {};
+
 	int cooldown = 100;
 
 	PROC_NAME = argv[0];
@@ -104,9 +108,9 @@ int main(int argc, char* const argv[])
 
 		if (BOT_JOB_PID == 0)
 		{
-			filter.x = (state.acc[0] + filter.x * 9) / 10;
-			filter.y = (state.acc[1] + filter.y * 9) / 10;
-			filter.z = (state.acc[2] + filter.z * 9) / 10;
+			filter.x = (state.acc[0] + filter.x * 9) / 10.f;
+			filter.y = (state.acc[1] + filter.y * 9) / 10.f;
+			filter.z = (state.acc[2] + filter.z * 9) / 10.f;
 		}
 
 		// b_log("r: %d, %d, %d - f: %d, %d, %d", state.acc[0], state.acc[1], state.acc[2], filter.x, filter.y, filter.z);
@@ -133,24 +137,27 @@ int main(int argc, char* const argv[])
 			{
 				LOG_LVL(1) b_log("Running!\n");
 				// i2c_uninit();
-				static char* argv_run[] = { "sh", "-c", "collector -i | predictor -f | actuator -vvv -m2 -f > /var/testing/route", NULL };
+				static char* argv_run[] = { "sh", "-c", "", NULL };
+				argv_run[2] = cfg_str("run_cmd", "collector -ia | predictor -f | actuator -m2 -f > /var/testing/route");
 				argv = argv_run;
 			}
 			else
 			{
 				LOG_LVL(1) b_log("Recording!\n");
 
-				static char* argv_train[] = { "sh", "-c", "collector -i > /var/training/route", NULL };
+				static char* argv_train[] = { "sh", "-c", "", NULL };
+				argv_train[2] = cfg_str("record_cmd", "collector -ia > /var/training/route");
 				argv = argv_train;
 			}
 
-			posix_spawn(
-				&BOT_JOB_PID,
-				"/bin/sh",
-				NULL, NULL,
-				argv,
-				NULL
-			);
+			// posix_spawn(
+			// 	&BOT_JOB_PID,
+			// 	"/bin/sh",
+			// 	NULL, NULL,
+			// 	argv,
+			// 	NULL
+			// );
+			system(argv[2]);
 			LOG_LVL(1) b_log("%d started", BOT_JOB_PID);
 		}
 		else if(act.throttle < 110 && BOT_JOB_PID)
@@ -163,14 +170,14 @@ int main(int argc, char* const argv[])
 			//  waitpid(BOT_JOB_PID, NULL, 0);
 			system("killall -s2 actuator collector");
 
-			LOG_LVL(1) b_log("%d Run finished", act.throttle);
+			LOG_LVL(0) b_good("%d Run finished", act.throttle);
 			BOT_JOB_PID = 0;
 		}
 
 		cooldown--;
 		if (cooldown < 0) { cooldown = 0; }
 
-		usleep(1000 * 250);
+		usleep(1000 * 50);
 	}
 
 	return 0;
