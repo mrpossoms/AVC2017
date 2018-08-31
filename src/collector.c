@@ -8,7 +8,6 @@
 #include "deadreckon.h"
 #include "cfg.h"
 
-#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
 
 typedef enum {
 	COL_MODE_NORMAL = 0,
@@ -16,24 +15,23 @@ typedef enum {
 	COL_MODE_ROUTE,
 } col_mode_t;
 
+struct {
+	int wait_for_movement;
+	int read_action;
+	int frame_rate;
+	int gen_random;
+} cli_cfg = {
+	.wait_for_movement = 1,
+	.read_action = 0,
+	.frame_rate = 30,
+	.gen_random = 0,
+};
+
 int I2C_BUS;
-int NORM_VIDEO;
-int WAIT_FOR_MOVEMENT = 1;
-int READ_ACTION = 0;
-int FRAME_RATE = 30;
-int GEN_RANDOM = 0;
-int LOG_VERBOSITY = 0;
 calib_t CAL;
 col_mode_t MODE;
 float VEL;
 pthread_mutex_t STATE_LOCK;
-
-
-static int log_verbosity_cb(char flag, const char* v)
-{
-	LOG_VERBOSITY++;
-	return 0;
-}
 
 
 static int arg_calibration_mode(char flag, const char* v)
@@ -46,14 +44,14 @@ static int arg_calibration_mode(char flag, const char* v)
 
 static int arg_immediate_start(char flag, const char* v)
 {
-	WAIT_FOR_MOVEMENT = 0;
+	cli_cfg.wait_for_movement = 0;
 	b_log("Starting immediately");
 	return 0;
 }
 
 static int arg_enable_action_polling(char flag, const char* v)
 {
-	READ_ACTION = 1;
+	cli_cfg.read_action = 1;
 	return 0;
 }
 
@@ -83,20 +81,16 @@ void proc_opts(int argc, char* const argv[])
 		},
 		{ 'f',
 			.desc = "set framerate in frames/second",
-			.set = &FRAME_RATE,
+			.set = &cli_cfg.frame_rate,
 			.type = ARG_TYP_INT,
 			.opts = { .has_value = 1 },
 		},
 		{ 'r',
 			.desc = "generate random data rather than collecting.",
-			.set = &GEN_RANDOM,
+			.set = &cli_cfg.gen_random,
 			.type = ARG_TYP_FLAG,
 		},
-		{ 'v',
-			.desc = "Each occurrence increases log verbosity.",
-			.set  = log_verbosity_cb,
-			.type = ARG_TYP_CALLBACK,
-		},
+		CLI_CMD_LOG_VERBOSITY,
 		{} // terminator
 	};
 
@@ -230,7 +224,7 @@ int collection(cam_t* cam)
 	start_pose_thread(&msg);
 
 	// wait for the bot to start moving
-	if (WAIT_FOR_MOVEMENT)
+	if (cli_cfg.wait_for_movement)
 	while (state->vel <= 0)
 	{
 		usleep(100000);
@@ -280,12 +274,12 @@ int collection(cam_t* cam)
 		pthread_mutex_unlock(&STATE_LOCK);
 
 
-		if (state->vel == 0 && WAIT_FOR_MOVEMENT)
+		if (state->vel == 0 && cli_cfg.wait_for_movement)
 		{
 			exit(0);
 		}
 
-		if (msg.payload.pair.action.throttle < 114 && READ_ACTION)
+		if (msg.payload.pair.action.throttle < 114 && cli_cfg.read_action)
 		{
 			// terminated
 			exit(1);
@@ -355,7 +349,7 @@ int main(int argc, char* const argv[])
 	cam_settings_t cfg = {
 		.width  = FRAME_W,
 		.height = FRAME_H,
-		.frame_rate = FRAME_RATE,
+		.frame_rate = cli_cfg.frame_rate,
 	};
 
 	b_log("Sensors...");
@@ -402,7 +396,7 @@ int main(int argc, char* const argv[])
 		assert(calib_load(ACTION_CAL_PATH, &CAL) == 0);
 	}
 
-	if (GEN_RANDOM)
+	if (cli_cfg.gen_random)
 	{
 		res = random_data();
 	}

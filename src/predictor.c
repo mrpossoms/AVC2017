@@ -29,14 +29,14 @@
     }                            \
 }\
 
-#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
-
 int INPUT_FD = 0;
-int FORWARD_STATE = 0;
-int DEBUG_COLORS = 0;
-int USE_DEADRECKONING = 0;
-int PRINT_REFRESH_RATE = 0;
-int LOG_VERBOSITY = 0;
+
+struct {
+	int forward_state;
+	int debug_colors;
+	int use_deadreckoning;
+	int print_refresh_rate;
+} cli_cfg = { };
 
 typedef struct {
 	mat_t X;
@@ -111,7 +111,7 @@ start:
 			col_sum += (-(y.data.f[0] + y.data.f[1]) + (y.data.f[2]));
 
 			//  if specified, colorize classified patches from frame for debugging
-			if (DEBUG_COLORS)
+			if (cli_cfg.debug_colors)
 			for (int kr = r_stride; kr--;)
 			for (int kc = BUCKET_SIZE; kc--;)
 			{
@@ -273,7 +273,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 
 	float fp = (target_idx / (float)HIST_W);
 
-	if (DEBUG_COLORS)
+	if (cli_cfg.debug_colors)
 	{ // Color the region and target index for debugging
 		int ci;
 
@@ -490,25 +490,21 @@ int main(int argc, char* const argv[])
 	cli_cmd_t cmds[] = {
 		{ 'f',
 			.desc = "Forward full system state over stdout",
-			.set  = &FORWARD_STATE,
+			.set  = &cli_cfg.forward_state,
 		},
 		{ 'c',
 			.desc = "Show debug colors",
-			.set  = &DEBUG_COLORS,
+			.set  = &cli_cfg.debug_colors,
 		},
 		{ 'd',
 			.desc = "Enable deadreckoning",
-			.set  = &USE_DEADRECKONING,
+			.set  = &cli_cfg.use_deadreckoning,
 		},
 		{ 'r',
 			.desc = "Show refresh rate",
-			.set  = &PRINT_REFRESH_RATE,
+			.set  = &cli_cfg.print_refresh_rate,
 		},
-		{ 'v',
-			.desc = "Each occurrence increases log verbosity.",
-			.set  = log_verbosity_cb,
-			.type = ARG_TYP_CALLBACK,
-		},
+		CLI_CMD_LOG_VERBOSITY,
 		{}
 	};
 	cli("Collects data from sensors, compiles them into system\n"
@@ -524,7 +520,7 @@ int main(int argc, char* const argv[])
 	{
 		message_t msg = {};
 
-		if (PRINT_REFRESH_RATE)
+		if (cli_cfg.print_refresh_rate)
 		{
 			time_t now = time(NULL);
 			if (start != now)
@@ -542,12 +538,12 @@ int main(int argc, char* const argv[])
 			raw_state_t* state = &msg.payload.state;
 			raw_action_t act = predict(state);
 
-			if (USE_DEADRECKONING)
+			if (cli_cfg.use_deadreckoning)
 			{
 				LOG_LVL(1) b_log("Reckoning...");
 			}
 
-			if (FORWARD_STATE)
+			if (cli_cfg.forward_state)
 			{
 				msg.header.type = PAYLOAD_PAIR;
 				msg.payload.pair.action = act;

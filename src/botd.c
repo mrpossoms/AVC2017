@@ -12,11 +12,8 @@
 #include "drv_pwm.h"
 #include "cfg.h"
 
-#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
-
 static int RUNNING;
 static int DAEMONIZE;
-static int LOG_VERBOSITY = 0;
 
 #define LED_PATH "/sys/class/leds/led1/brightness"
 
@@ -25,13 +22,6 @@ void set_led(int on)
 	int fd;
 	write((fd = open(LED_PATH, O_WRONLY)), on ? "1" : "0", 1);
 	close(fd);
-}
-
-
-static int log_verbosity_cb(char flag, const char* v)
-{
-	LOG_VERBOSITY++;
-	return 0;
 }
 
 
@@ -55,11 +45,7 @@ int main(int argc, char* const argv[])
 {
 	// define and process cli args
 	cli_cmd_t cmds[] = {
-		{ 'v',
-			.desc = "Each occurrence increases log verbosity.",
-			.set  = log_verbosity_cb,
-			.type = ARG_TYP_CALLBACK,
-		},
+		CLI_CMD_LOG_VERBOSITY,
 		{} // terminator
 	};
 	cli("Runs in the background and automatically executes pipelines of robot programs",

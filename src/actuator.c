@@ -10,27 +10,24 @@
 #define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
 
 int INPUT_FD = 0;
-int FORWARD_STATE = 0;
 int I2C_BUS = 0;
-int LOG_VERBOSITY = 0;
 
 calib_t CAL = {};
-uint8_t PWM_CHANNEL_MSK = 0x6; // all echo
+
+struct {
+	uint8_t pwm_channel_msk; // all echo
+	int forward_state;
+} cli_cfg = {
+	.pwm_channel_msk = 0x6,
+	.forward_state = 0,
+};
 
 
 void sig_handler(int sig)
 {
 	b_log("Caught signal %d", sig);
 	pwm_set_echo(0xff);
-	// pwm_reset();
 	exit(0);
-}
-
-
-static int log_verbosity_cb(char flag, const char* v)
-{
-	LOG_VERBOSITY++;
-	return 0;
 }
 
 
@@ -40,8 +37,8 @@ int main(int argc, char* const argv[])
 
 	cfg_base("/etc/bot/actuator/");
 
-	int max_throttle = cfg_int("max-throttle", 130); 
-	int min_throttle = cfg_int("min-throttle", 117); 
+	int max_throttle = cfg_int("max-throttle", 130);
+	int min_throttle = cfg_int("min-throttle", 117);
 
 	signal(SIGINT, sig_handler);
 
@@ -55,19 +52,15 @@ int main(int argc, char* const argv[])
 	cli_cmd_t cmds[] = {
 		{ 'f',
 			.desc = "Forward full system state over stdout",
-			.set = &FORWARD_STATE,
+			.set = &cli_cfg.forward_state,
 		},
 		{ 'm',
 			.desc = "Mask PWM output channels. Useful for disabling throttle or steering",
-			.set = &PWM_CHANNEL_MSK,
+			.set = &cli_cfg.pwm_channel_msk,
 			.type = ARG_TYP_INT,
 			.opts = { .has_value = 1 },
 		},
-		{ 'v',
-			.desc = "Each occurrence increases log verbosity.",
-			.set  = log_verbosity_cb,
-			.type = ARG_TYP_CALLBACK,
-		},
+		CLI_CMD_LOG_VERBOSITY,
 		{} // terminator
 	};
 	cli("Recieves action vectors over stdin and actuates the platform",
@@ -81,11 +74,11 @@ int main(int argc, char* const argv[])
 	}
 	else
 	{
-		LOG_LVL(1) b_log("setting mask: %x", PWM_CHANNEL_MSK);
+		LOG_LVL(1) b_log("setting mask: %x", cli_cfg.pwm_channel_msk);
 
-		if (pwm_set_echo(PWM_CHANNEL_MSK))
+		if (pwm_set_echo(cli_cfg.pwm_channel_msk))
 		{
-			b_bad("pwm_set_echo() - failed with msk %x", PWM_CHANNEL_MSK);
+			b_bad("pwm_set_echo() - failed with msk %x", cli_cfg.pwm_channel_msk);
 			return -2;
 		}
 
@@ -113,9 +106,6 @@ int main(int argc, char* const argv[])
 			float s = act.steering / 256.f;
 			float t = msg.payload.action.throttle / 255.f;
 
-
-			//assert(0.f >= s && s <= 1.f);
-
 			act.steering = CAL.steering.min * (1 - s) + CAL.steering.max * s;
 			act.throttle = CAL.throttle.min * (1 - t) + CAL.throttle.max * t;
 
@@ -141,7 +131,7 @@ int main(int argc, char* const argv[])
 			}
 		}
 
-		if (FORWARD_STATE)
+		if (cli_cfg.forward_state)
 		{
 			if (write_pipeline_payload(&msg))
 			{

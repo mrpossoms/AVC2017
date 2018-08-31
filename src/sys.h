@@ -32,7 +32,16 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define CLAMP(x, min, max) ((x) < (max) ? ((x) > (min) ? (x) : (min)) : (max))
 
+#define LOG_LVL(n) if (LOG_VERBOSITY >= (n))
+
+#define CLI_CMD_LOG_VERBOSITY { 'v',\
+	.desc = "Each occurrence increases log verbosity.",\
+	.set  = log_verbosity_cli_cb,\
+	.type = ARG_TYP_CALLBACK,\
+}\
+
 extern const char* PROC_NAME;
+extern int LOG_VERBOSITY;
 
 typedef struct {
     int x, y, w, h;
@@ -68,6 +77,7 @@ typedef struct {
 	uint32_t interval_us;
 } timegate_t;
 
+int log_verbosity_cli_cb(char flag, const char* v);
 void b_log(const char* fmt, ...);
 void b_good(const char* fmt, ...);
 void b_bad(const char* fmt, ...);

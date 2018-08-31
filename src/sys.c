@@ -4,6 +4,7 @@
 #include <sys/time.h>
 #include <sys/select.h>
 
+int LOG_VERBOSITY;
 
 void timegate_open(timegate_t* tg)
 {
@@ -66,10 +67,18 @@ static void init_logs()
 {
 	if (!LOG_OPEN)
 	{
-		openlog(NULL, LOG_NDELAY, LOG_CRON); 
+		openlog(NULL, LOG_NDELAY, LOG_CRON);
 		LOG_OPEN = 1;
 	}
 }
+
+
+int log_verbosity_cli_cb(char flag, const char* v)
+{
+	LOG_VERBOSITY++;
+	return 0;
+}
+
 
 void b_log(const char* fmt, ...)
 {
