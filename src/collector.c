@@ -27,7 +27,12 @@ struct {
 	.gen_random = 0,
 };
 
+struct {
+	float meters_to_travel;
+} cfg;
+
 int I2C_BUS;
+int* READ_ACTION = &cli_cfg.read_action;
 calib_t CAL;
 col_mode_t MODE;
 float VEL;
@@ -96,6 +101,14 @@ void proc_opts(int argc, char* const argv[])
 
 	cli("Collects data from sensors, compiles them into system state packets. Then forwards them over stdout",
 	cmds, argc, argv);
+}
+
+/**
+ * @brief Loads configuration file values
+ */
+void load_cfg()
+{
+	cfg.meters_to_travel = cfg_float("meters-to-travel", 0.f); // zero means never stop
 }
 
 /**
@@ -249,12 +262,13 @@ int collection(cam_t* cam)
 
 		if (now != time(NULL))
 		{
-			LOG_LVL(1) b_log("%dHz (%f %f %f) %fm/s",
+			LOG_LVL(1) b_log("%dHz (%f %f %f) %fm/s %fm",
 				updates,
 				state->position[0],
 				state->position[1],
 				state->position[2],
-				state->vel
+				state->vel,
+				state->distance
 			);
 
 			LOG_LVL(3) b_log("act: t: %d, s: %d",
@@ -279,7 +293,10 @@ int collection(cam_t* cam)
 			exit(0);
 		}
 
-		if (msg.payload.pair.action.throttle < 114 && cli_cfg.read_action)
+		int killswitch = msg.payload.pair.action.throttle < 114 && cli_cfg.read_action;
+		int finished = cfg.meters_to_travel > 0 && state->distance > cfg.meters_to_travel;
+
+		if (killswitch || finished)
 		{
 			// terminated
 			exit(1);
@@ -344,6 +361,7 @@ int main(int argc, char* const argv[])
 	proc_opts(argc, argv);
 
 	cfg_base("/etc/bot/collector/");
+	load_cfg();
 
 	int res;
 	cam_settings_t cfg = {
@@ -354,12 +372,6 @@ int main(int argc, char* const argv[])
 
 	b_log("Sensors...");
 
-	cam_t cam[2] = {
-		cam_open("/dev/video0", &cfg),
-		//cam_open("/dev/video1", &cfg),
-	};
-
-
 	if ((res = i2c_init("/dev/i2c-1")))
 	{
 		b_bad("I2C init failed (%d)", res);
@@ -369,6 +381,12 @@ int main(int argc, char* const argv[])
 
 		//return -1;
 	}
+	pwm_reset_soft();
+
+	cam_t cam[2] = {
+		cam_open("/dev/video0", &cfg),
+		//cam_open("/dev/video1", &cfg),
+	};
 
 	// Use the round-robin real-time scheduler
 	// with a high priority

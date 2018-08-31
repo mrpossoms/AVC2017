@@ -6,10 +6,9 @@
 #include "i2c.h"
 #include "drv_pwm.h"
 #include "linmath.h"
-// #include "curves.h"
 #include "deadreckon.h"
 
-extern int READ_ACTION;
+extern int* READ_ACTION;
 extern int LOG_VERBOSITY;
 int POSE_CYCLES;
 
@@ -35,7 +34,7 @@ void* pose_estimator(void* params)
 	int LAST_D_ODO_CYCLE = 0;
 	int last_odo = 0;
 
-	if(READ_ACTION)
+	if(*READ_ACTION)
 	{
 		act_ptr = &msg->payload.pair.action;
 	}
@@ -64,8 +63,8 @@ void* pose_estimator(void* params)
 
 		}
 
-		const float wheel_cir = 0.082 * M_PI / 4.0;
-		float delta = (odo - last_odo) * wheel_cir;
+		const float wheel_cir_4 = 0.082 * M_PI / 4.0;
+		float delta = (odo - last_odo) * wheel_cir_4;
 		int cycles_d = POSE_CYCLES - LAST_D_ODO_CYCLE;
 
 		if(delta)
@@ -106,7 +105,7 @@ void* pose_estimator(void* params)
 
 		POSE_CYCLES++;
 		last_odo = odo;
-cycle_abort:
+
 		pthread_mutex_unlock(&STATE_LOCK);
 		timegate_close(&tg);
 	}

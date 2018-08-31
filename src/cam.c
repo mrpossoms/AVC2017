@@ -15,7 +15,6 @@
 #include "sys.h"
 #include "cam.h"
 
-#define CAM_FPS 5
 
 cam_t cam_open(const char* path, cam_settings_t* cfg)
 {
@@ -163,7 +162,6 @@ int cam_wait_frame(cam_t* cam)
 
 int cam_config(int fd, cam_settings_t* cfg)
 {
-	int res = 0;
 	struct v4l2_format format;
 
 	if(!cfg)
@@ -198,7 +196,5 @@ int cam_config(int fd, cam_settings_t* cfg)
 	parm.parm.capture.timeperframe.numerator = 1;
 	parm.parm.capture.timeperframe.denominator = cfg->frame_rate;
 
-	res = ioctl(fd, VIDIOC_S_PARM, &parm);
-
-	return 0;
+	return ioctl(fd, VIDIOC_S_PARM, &parm);
 }
