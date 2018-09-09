@@ -19,12 +19,9 @@ public:
 		vec3_t tex_control = { 0, 0, 500 };
 		seen::ShaderProgram& shader = *seen::ShaderProgram::active();
 
-		shader["u_tex_control"] << tex_control;
-		shader["u_texcoord_rotation"] << _tex_rotation;
-		assert(seen::gl_get_error());
-
+		//shader["u_tex_control"] << tex_control;
+		//shader["u_texcoord_rotation"] << _tex_rotation;
 		Model::draw();
-		assert(gl_get_error());
 	}
 };
 
@@ -40,13 +37,6 @@ public:
 
 	void draw()
 	{
-		assert(gl_get_error());
-		// mat3x3_t _rot;
-		// for(int i = 9; i--;)
-		// {
-		// 	_rot.v[i % 3][i / 3] = world.v[i % 3][i / 3];
-		// }
-
 		vec3_t tex_control = { 0, 0, 2 };
 		seen::ShaderProgram& shader = *seen::ShaderProgram::active();
 
@@ -56,7 +46,6 @@ public:
 		shader["u_displacement_weight"] << disp_weight;
 		shader["u_tex_control"] << tex_control;
 		Model::draw();
-		assert(gl_get_error());
 	}
 
 	static seen::Material* material()

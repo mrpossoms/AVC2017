@@ -10,7 +10,7 @@
 
 #define USE_CNN
 #define ROOT_MODEL_DIR "/etc/bot/predictor/model/"
-#define MODEL_LAYERS 3
+#define MODEL_LAYERS 4
 #define MODEL_INSTANCES 2
 
 #define BUCKETS 10
@@ -18,12 +18,12 @@
 #define HIST_W (FRAME_W / BUCKET_SIZE)
 #define HIST_MID (HIST_W >> 1)
 
-#define PATCH_SIZE 8
+#define PATCH_SIZE 12
 
 #define MAX_POOL_HALF {          \
     .type = POOLING_MAX,         \
     .op = {                      \
-       .padding = PADDING_VALID,  \
+       .padding = PADDING_VALID, \
        .stride = { 2, 2 },       \
        .kernel = { 2, 2 },       \
     }                            \
@@ -230,7 +230,7 @@ void avoider(raw_state_t* state, float* throttle, float* steering)
 	float best_score = -100;//hist[HIST_W-1];
 	int cont_r[2] = { 0, HIST_W };
 
-	// Here we pick the best, most contigious horizontal range of
+	// Here we pick the best, most contiguous horizontal range of
 	// the frame with the smallest sum of 'bad' colors, or the
 	// largest sum of good colors if they are present.
 	for (int j = HIST_W + 1; j--;)
@@ -400,13 +400,24 @@ int main(int argc, char* const argv[])
 		{
 			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "c1.w", 0),
 			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "c1.b", 1),
-			// .activation = nn_act_linear,
-			.activation = nn_act_softmax,
+			.activation = nn_act_linear,
+			//.activation = nn_act_softmax,
 			.filter = {
 				.kernel = { 3, 3 },
 				.stride = { 1, 1 },
 				.padding = PADDING_VALID,
 
+			},
+		},
+		{
+			.w = nn_mat_load_row_order(ROOT_MODEL_DIR "c2.w", 0),
+			.b = nn_mat_load_row_order(ROOT_MODEL_DIR "c2.b", 1),
+			//.activation = nn_act_linear,
+			.activation = nn_act_softmax,
+			.filter = {
+				.kernel = { 1, 1 },
+				.stride = { 1, 1 },
+				.padding = PADDING_VALID,
 			},
 		},
 #else

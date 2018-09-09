@@ -32,7 +32,7 @@ mat4x4_t mat_from_json(json& obj)
 	return M;
 }
 
-void populate_scene(Scene& scene, json& obj, mat4x4_t world)
+void populate_scene(seen::Scene& scene, json& obj, mat4x4_t world)
 {
 	mat4x4_t tmp, my_world;
 
@@ -53,7 +53,7 @@ void populate_scene(Scene& scene, json& obj, mat4x4_t world)
 			mat4x4_mul(tmp.v,  my_world.v, purturbed.v);
 			bale->world(tmp.v);
 			// mat4x4_transpose(bale->world.v, tmp.v);
-			scene.drawables().push_back(bale);
+			scene.insert(bale);
 		}
 		else {
 			populate_scene(scene, child, my_world);

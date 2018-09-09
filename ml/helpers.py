@@ -1,7 +1,7 @@
 import numpy as np
 
 TRAINING_SET_BASE='ds/training/aug'
-PATCH_SIDE = 8
+PATCH_SIDE = 12
 PATCH_SIZE = PATCH_SIDE * PATCH_SIDE * 3
 
 

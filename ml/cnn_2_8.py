@@ -5,9 +5,9 @@ from helpers import PATCH_SIDE
 
 def setup_model(x):
     p = {
-        'c0_w': tf.Variable(tf.truncated_normal([3, 3, 3, 32], stddev=0.01)),
-        'c0_b': tf.Variable(tf.constant(0.1, shape=[32])),
-        'c1_w': tf.Variable(tf.truncated_normal([3, 3, 32, 3], stddev=0.01)),
+        'c0_w': tf.Variable(tf.truncated_normal([3, 3, 3, 16], stddev=0.01)),
+        'c0_b': tf.Variable(tf.constant(0.1, shape=[16])),
+        'c1_w': tf.Variable(tf.truncated_normal([5, 5, 16, 3], stddev=0.01)),
         'c1_b': tf.Variable(tf.constant(0.1, shape=[3]))
     }
 

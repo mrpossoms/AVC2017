@@ -16,9 +16,18 @@
 
 // #define RENDER_DEMO
 
+#ifdef __linux__
+#define WIN_W (640)
+#define WIN_H (480)
+#else
+#define WIN_W (640 >> 1)
+#define WIN_H (480 >> 1)
+#endif
+
 GLFWwindow* WIN;
 GLuint frameTex;
 int USE_SLEEP;
+int FORWARD_STATE;
 
 static void setupGL()
 {
@@ -69,14 +78,14 @@ void draw_path_travelled(raw_state_t* state, vec3* positions)
 
 void frame_to_canon(float x_frame, float y_frame, float* x, float* y)
 {
-	*x = ((x_frame / 640.f) - 0.5) * 2;
-	*y = ((y_frame / 480.f) - 0.5) * -2;
+	*x = ((x_frame / (float)WIN_W) - 0.5) * 2;
+	*y = ((y_frame / (float)WIN_H) - 0.5) * -2;
 }
 
 void frame_to_pix(float x_frame, float y_frame, int* x, int* y)
 {
-	*x = (x_frame / 640.f) * FRAME_W;
-	*y = (y_frame / 480.f) * FRAME_H;
+	*x = (x_frame / (float)WIN_W) * FRAME_W;
+	*y = (y_frame / (float)WIN_H) * FRAME_H;
 }
 
 int LABEL_CLASS;
@@ -105,6 +114,10 @@ int main(int argc, char* argv[])
 			.type = ARG_TYP_INT,
 			.opts = { .has_value = 1 },
 		},
+		{ 'f',
+			.desc = "Forward full system state over stdout",
+			.set = &FORWARD_STATE,
+		},
 		{}
 	};
 	const char* prog_desc = "";
@@ -120,13 +133,14 @@ int main(int argc, char* argv[])
 
 	b_log("Magic %d\n", MAGIC);
 
-	WIN = glfwCreateWindow(640, 480, "AVC 2017", NULL, NULL);
+	WIN = glfwCreateWindow(WIN_W, WIN_H, "AVC 2017", NULL, NULL);
 
 	if (!WIN){
 		glfwTerminate();
 		return -2;
 	}
 
+	srandom(time(NULL));
 	glfwMakeContextCurrent(WIN);
 	setupGL();
 	createTexture(&frameTex);
@@ -236,6 +250,15 @@ int main(int argc, char* argv[])
 
 		if (!space_down)
 		if(USE_SLEEP) usleep(1000 * USE_SLEEP);
+
+		if (FORWARD_STATE)
+		{
+			if (write_pipeline_payload(&msg))
+			{
+				b_bad("Failed to write payload");
+				return -1;
+			}
+		}
 	}
 
 	return 0;

@@ -4,7 +4,8 @@ import signal
 from helpers import *
 #from fc_2 import setup_model
 # from cnn_2_16 import setup_model
-from cnn_2_8 import setup_model
+#from cnn_2_8 import setup_model
+from cnn_3_12 import setup_model
 # from cnn_3 import setup_model
 
 IS_TRAINING = True
@@ -46,9 +47,12 @@ def main():
 
     import random
     last_accuracy = 0
-    epochs = 6000
+    minibatch_size = 100
+    epochs = (len(full_set) // minibatch_size) * 20
+
     for e in range(0, epochs):
-        sub_ts_x, sub_ts_y = minibatch(full_set, random.randint(0, len(full_set) // 100), size=50)
+        # sub_ts_x, sub_ts_y = minibatch(full_set, random.randint(0, len(full_set) // 100), size=100)
+        sub_ts_x, sub_ts_y = minibatch(full_set, e % (len(full_set) // minibatch_size), size=100)
 
         sess.run(train_step, feed_dict={x: sub_ts_x, y: sub_ts_y})
         if e % 100 == 0:

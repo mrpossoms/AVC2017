@@ -5,7 +5,7 @@ BIN=bin/armv8l-linux-gnueabihf
 if [ $1 = "all" ]; then
 	PROGS=$(ls -p $BIN | grep -v /)
 elif [ $1 = "nn" ]; then
-	scp /etc/bot/predictor/model/* root@172.20.10.12:/etc/bot/predictor/model
+	scp /etc/bot/predictor/model/* root@$BOT_ADDR:/etc/bot/predictor/model
 	exit 0
 else
 	PROGS=$1

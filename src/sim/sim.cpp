@@ -118,23 +118,23 @@ int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
 
-	RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 3, 2);
-	Camera camera(DEG_2_RAD(62.2), renderer.width, renderer.height);
+	seen::RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 4, 0);
+	seen::Camera camera(DEG_2_RAD(62.2), renderer.width, renderer.height);
 
-	ListScene scene, ground_scene, hay_scene, shadow_scene;
+	seen::ListScene sky_scene, ground_scene, hay_scene, shadow_scene;
 
 	json scene_json;
 	i >> scene_json;
 
 	// Sky setup
 	seen::Model* sky = seen::MeshFactory::get_model("sphere.obj");
-	CustomPass sky_pass([&](int index) {
-		seen::ShaderProgram::builtin_sky()->use();
+	seen::CustomPass sky_pass([&](int index) {
+		seen::ShaderProgram::builtin_sky().use();
 		glDisable(GL_CULL_FACE);
-	}, NULL);
+	});
 
-	scene.drawables().push_back(sky);
-	sky_pass.scene = &scene;
+	sky_scene = { sky };
+	sky_pass.scene = &sky_scene;
 
 	// Asphalt setup
 	Asphalt asphalt;
@@ -155,19 +155,18 @@ int main (int argc, char* argv[])
 	   .blinn()
 	;
 
-	auto primary_shader = seen::ShaderProgram::compile({ vsh, fsh });
+	seen::ShaderProgram& primary_shader = seen::ShaderProgram::compile("primary", { vsh, fsh });
 	const float light_power = 40;
 	seen::Light light = {
 		.position = { 0, 30, 0 },
 		.power = { light_power, light_power, light_power },
-		//.is_point = true,
 		.ambience = 0.01
 	};
 	mat4x4_perspective(light.projection.v, M_PI / 2, 1, 0.1, 100);
 
 
 	auto shadow_pass = seen::ShadowPass(512, 1);
-	CustomPass ground_pass([&](int index) {
+	seen::CustomPass ground_pass([&](int index) {
 		// draw pass preparation
 		// ShaderConfig shader_desc = SURFACE_SHADER;
 		// ShaderProgram& shader = *Shaders[shader_desc]->use();
@@ -180,19 +179,19 @@ int main (int argc, char* argv[])
 		// shader["u_tint"] << one;
 		//
 		// shader["us_displacement"] << asphalt.disp_tex;
-		primary_shader->use();
+		primary_shader.use();
 
 
-		(*primary_shader)["u_view_position"] << camera.position();
-		*primary_shader << &light;
-		*primary_shader << &shadow_pass;
-		*primary_shader << asphalt.mat;
+		primary_shader["u_view_position"] << camera.position();
+		primary_shader << &light;
+		primary_shader << &shadow_pass;
+		primary_shader << asphalt.mat;
 
-	}, NULL);
-	ground_scene.drawables().push_back(&asphalt);
+	});
+	ground_scene.insert(&asphalt);
 	ground_pass.scene = &ground_scene;
 
-	CustomPass bale_pass([&](int index) {
+	seen::CustomPass bale_pass([&](int index) {
 		// ShaderConfig shader_desc = SURFACE_SHADER;
 		// ShaderProgram& shader = *Shaders[shader_desc]->use();
 		//
@@ -200,8 +199,8 @@ int main (int argc, char* argv[])
 		// shader["TessLevelOuter"] << 5.0f;
 		// shader["us_displacement"] << HayBale::displacement_tex();
 		// primary_shader->use();
-		*primary_shader << HayBale::material();
-	}, NULL);
+		primary_shader << HayBale::material();
+	});
 	bale_pass.scene = &hay_scene;
 
 	// load all the haybales in the scene
@@ -211,8 +210,8 @@ int main (int argc, char* argv[])
 	auto root = scene_json["object"];
 	populate_scene(hay_scene, root, I);
 
-	shadow_scene.drawables().push_back(&ground_scene);
-	shadow_scene.drawables().push_back(&hay_scene);
+	shadow_scene.insert(&ground_scene);
+	shadow_scene.insert(&hay_scene);
 	shadow_pass.scene = &shadow_scene;
 	shadow_pass.lights.push_back(&light);
 
@@ -306,13 +305,16 @@ int main (int argc, char* argv[])
 			Vec3 heading = vehicle.heading();
 
 			raw_state_t state = {
-				rot_rate: {},
-				acc: {},
-			        vel: vehicle.speed,
-				distance: vehicle.distance,
-				heading: { heading.x, heading.z, heading.y },
-				position: { vehicle.position.x, vehicle.position.z, vehicle.position.y }
+				.rot_rate = {},
+				.acc = {},
+			        .vel = vehicle.speed,
+				.distance = vehicle.distance,
+				.heading = { heading.x, heading.z, heading.y },
+				.position = { vehicle.position.x, vehicle.position.z, vehicle.position.y }
 			};
+
+			std::vector<seen::RenderingPass*> passes = { &shadow_pass, &sky_pass, &ground_pass, &bale_pass };
+
 			if (DO_STEREO_CAPTURE)
 			{
 				Vec3 old_pos = camera.position();
@@ -329,7 +331,7 @@ int main (int argc, char* argv[])
 				{
 					Vec3 offset = old_pos + offsets[i];
 					camera.position(offset);
-					renderer.draw(&camera, &scene);
+					renderer.draw(&camera, passes);
 					renderer.capture("./" + std::string(hash) + names[i]);
 				}
 
@@ -337,7 +339,7 @@ int main (int argc, char* argv[])
 			}
 			else
 			{
-				renderer.draw(&camera, &scene);
+				renderer.draw(&camera, passes);
 			}
 
 			color_t rgb_buf[FRAME_W * FRAME_H], tmp[FRAME_W * FRAME_H];
