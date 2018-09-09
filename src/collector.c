@@ -236,6 +236,13 @@ int collection(cam_t* cam)
 	now = time(NULL);
 	start_pose_thread(&msg);
 
+	// burn the first frames
+	for (int i = 15; i--;)
+	{
+		cam_request_frame(cam);
+		poll_vision(state, cam);
+	}
+
 	// wait for the bot to start moving
 	if (cli_cfg.wait_for_movement)
 	while (state->vel <= 0)

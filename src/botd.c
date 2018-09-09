@@ -143,6 +143,7 @@ int main(int argc, char* const argv[])
 			// 	argv,
 			// 	NULL
 			// );
+			LOG_LVL(2) b_log("running: '%s'", argv[2]);
 			system(argv[2]);
 			LOG_LVL(1) b_log("%d started", BOT_JOB_PID);
 		}
