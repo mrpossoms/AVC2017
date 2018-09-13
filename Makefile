@@ -14,8 +14,10 @@ LINK=-lm -lpthread
 
 TARGET=$(shell $(CC) -dumpmachine)
 
-DRIVER_SRC= drivers/BNO055_driver/bno055.c drivers/BNO055_driver/bno055_support.c drivers/drv_pwm.c i2c.c
-BASE_SRC = sys.c $(DRIVER_SRC)
+DRIVER_SRC=drivers/BNO055_driver/bno055.c drivers/BNO055_driver/bno055_support.c drivers/drv_pwm.c i2c.c
+BASE_SRC=sys.c $(DRIVER_SRC)
+
+EXT_DEPENDS=src/linmath.h libnn src/cfg.h src/seen src/json bin/$(TARGET)/data bin/$(TARGET)/scene.json
 
 COLLECTOR_SRC=deadreckon.c collector.c cam.c $(BASE_SRC)
 PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
@@ -53,8 +55,6 @@ bin/$(TARGET):
 	mkdir -p bin/$(TARGET)
 	cp actions.cal bin/$(TARGET)
 
-external:
-
 
 bin/$(TARGET)/data: bin/$(TARGET)
 	ln -sf $(shell pwd)/src/seen/demos/data/ bin/$(TARGET)/data
@@ -62,7 +62,7 @@ bin/$(TARGET)/data: bin/$(TARGET)
 bin/$(TARGET)/scene.json: bin/$(TARGET)
 	cp .scene.json bin/$(TARGET)/scene.json
 
-obj/%.o: src/%.c magic obj
+obj/%.o: src/%.c magic obj $(EXT_DEPENDS)
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) -c $< -o $@
 
 all: viewer collector masseuse
@@ -95,7 +95,7 @@ src/seen:
 src/seen/lib/libseen.a: src/seen
 	make -C src/seen static
 
-magic: src/structs.h src/linmath.h libnn src/cfg.h src/seen src/json bin/$(TARGET)/data bin/$(TARGET)/scene.json
+magic: src/structs.h
 	cksum src/structs.h | awk '{split($$0,a," "); print a[1]}' > magic
 
 .PHONY: collector
