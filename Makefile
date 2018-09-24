@@ -24,6 +24,7 @@ PREDICTOR_FLAGS=-funsafe-math-optimizations -march=native -O3 -ftree-vectorize
 PREDICTOR_SRC=predictor.c vision.c $(BASE_SRC)
 PREDICTOR_LINK=$(NN)/build/$(TARGET)/lib/libnn.a
 ACTUATOR_SRC=actuator.c $(BASE_SRC)
+FEATURES_SRC=features.c vision.c $(BASE_SRC)
 
 VIEWER_SRC=viewer.c vision.c sys.c
 VIEWER_LINK=-lpng
@@ -138,6 +139,12 @@ bin/$(TARGET)/sim: magic src/seen/lib/libseen.a
 trainx:bin/$(TARGET)/trainx
 	@echo -e "\e[92mBuilt trainx for" $(TARGET)
 bin/$(TARGET)/trainx: $(addprefix obj/,$(TRAINX_SRC:.c=.o))
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng -lz
+
+.PHONY: features
+features: bin/$(TARGET)/features
+	@echo -e "\e[92mBuilt $@ for" $(TARGET)
+bin/$(TARGET)/features: $(addprefix obj/,$(FEATURES_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng -lz
 
 bot-utils: bin/$(TARGET)/predictor bin/$(TARGET)/actuator bin/$(TARGET)/collector bin/$(TARGET)/botd
