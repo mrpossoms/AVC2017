@@ -118,7 +118,7 @@ int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
 
-	seen::RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 4, 0);
+	seen::RendererGL renderer("./data", "Sim", FRAME_W, FRAME_H, 3, 3);
 	seen::Camera camera(DEG_2_RAD(62.2), renderer.width, renderer.height);
 
 	seen::ListScene sky_scene, ground_scene, hay_scene, shadow_scene;

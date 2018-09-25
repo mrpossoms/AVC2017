@@ -56,7 +56,7 @@ void draw_path_travelled(raw_state_t* state, vec3* positions)
 
 	const float scale_factor = 0.02f;
 	glColor3f(1, 0, 0);
-	glBegin(GL_LINE_STRIP);
+	glBegin(GL_POINTS);
 		for(int i = 1024; i--;)
 		{
 			glVertex2f(positions[i][0] * scale_factor, positions[i][1] * scale_factor);

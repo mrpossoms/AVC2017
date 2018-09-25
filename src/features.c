@@ -5,12 +5,13 @@
 #include "pid.h"
 #include "cfg.h"
 
-#define SLAM_FEATURES 128
+#define SLAM_FEATURES 256
+#define SLAM_BUCKET_ROWS 10
+#define SLAM_BUCKET_COLS 10
 #define KERN 2
 
 
 typedef struct {
-    color_t id[KERN * KERN];
     unsigned int x, y;
     chroma_t id_color;
     float strength;
@@ -21,6 +22,7 @@ typedef struct {
 typedef struct {
     uint16_t detected;
     vis_feature_t prints[SLAM_FEATURES];
+    uint8_t buckets[SLAM_BUCKET_ROWS][SLAM_BUCKET_COLS];
 } msg_features_t;
 
 
@@ -44,8 +46,6 @@ vis_feature_t feature(color_t* patch, int w, int h)
         mean[0] += patch[i].r;
         mean[1] += patch[i].g;
         mean[2] += patch[i].b;
-
-        f.id[i] = patch[i];
     }
 
     mean[0] /= pixels;
@@ -65,81 +65,8 @@ vis_feature_t feature(color_t* patch, int w, int h)
     return f;
 }
 
-float feature_cmp(vis_feature_t* c0, vis_feature_t* c1)
-{
-    int dist = 0;
-
-    for (int i = KERN * KERN; i--;)
-    {
-        int dr = c0->id[i].r - c1->id[i].r;
-        int dg = c0->id[i].g - c1->id[i].g;
-        int db = c0->id[i].b - c1->id[i].b;
-        dist += sqrt(dr * dr + dg * dg + db * db);
-    }
-
-    dist /= (KERN * KERN);
-
-    return dist;
-}
 
 msg_features_t feats = {};
-
-void match_existing(color_t* rgb)
-{
-    for (int i = 0; i < feats.detected; ++i)
-    {
-        const int win = KERN * 2;
-        const int win_off = (win - KERN) / 2;
-        vis_feature_t* fi = feats.prints + i;
-
-
-        int r_min = CLAMP(fi->y - (win_off * 10), win_off, FRAME_H - win_off);
-        int r_max = CLAMP(fi->y + KERN + (win_off * 10) , win_off, FRAME_H - win_off);
-        int c_min = CLAMP(fi->x - win_off, win_off, FRAME_W - win_off);
-        int c_max = CLAMP(fi->x + KERN, win_off, FRAME_W - win_off);
-
-        float best_score = 64;
-        vis_feature_t best_f;
-        for (int r = r_min; r < r_max; r += 1)
-        for (int c = c_min; c < c_max; c += 1)
-        {
-            color_t patch[KERN * KERN];
-            rectangle_t dims = { c, r, KERN, KERN };
-            image_patch_b(patch, rgb, dims);
-            vis_feature_t new_f = feature(patch, dims.w, dims.h);
-            new_f.x = dims.x;
-            new_f.y = dims.y;
-
-            if (new_f.strength <= 32) { continue; }
-
-            // match is close enough, update
-            float score = feature_cmp(fi, &new_f);
-            if (score < 32.f)
-            {
-                best_score = score;
-                best_f = new_f;
-                // best_f.life = fi->life + 1;
-                // goto found;
-            }
-        }
-
-        if (best_score < 32)
-        {
-            fi->x = best_f.x;
-            fi->y = best_f.y;
-            fi->id_color.cb = fi->x * (255.f / (float)FRAME_W);
-            fi->id_color.cr = fi->y * (255.f / (float)FRAME_H);
-            fi->life++;
-        }
-        else
-        {
-            // missing, remove feature i
-            feats.detected--;
-            feats.prints[i] = feats.prints[feats.detected];
-            i--;
-        }
-    }
-}
 
 void find_features(raw_state_t* raw)
 {
@@ -154,10 +81,10 @@ void find_features(raw_state_t* raw)
         raw->view.luma[r * FRAME_W + c] = 0;
     }
 
+    memset(feats.buckets, 0, sizeof(feats.buckets));
+
     // match existing features
     feats.detected = 0;
-
-    b_log("%d persisted", feats.detected);
 
     // find new features
     while (feats.detected < SLAM_FEATURES)
@@ -182,18 +109,31 @@ void find_features(raw_state_t* raw)
         }
     }
 
+    int d_col = FRAME_W / SLAM_BUCKET_COLS;
+    int d_row = FRAME_H / SLAM_BUCKET_ROWS;
     for (int i = feats.detected; i--;)
     {
         vis_feature_t f = feats.prints[i];
-        // if (f.life > 10)
+
         {
             raw->view.luma[f.y * FRAME_W + f.x] = 255;
             raw->view.chroma[f.y * (FRAME_W >> 1) + (f.x >> 1)] = f.id_color;
         }
+
+        feats.buckets[f.y / d_row][f.x / d_col]++;
     }
 
+    for (int r = 0; r < FRAME_H; r += 1)
+    for (int c = 0; c < FRAME_W; c += 1)
+    {
+        int count = feats.buckets[r / d_row][c / d_col];
 
-    b_log("%d features", feats.detected);
+        if(count <= 0) continue;
+
+        raw->view.luma[r * FRAME_W + c] = count;
+        raw->view.chroma[r * (FRAME_W >> 1) + (c >> 1)].cb = c * (255.f / (float)FRAME_W);
+        raw->view.chroma[r * (FRAME_W >> 1) + (c >> 1)].cr = r * (255.f / (float)FRAME_H);
+    }
 }
 
 
