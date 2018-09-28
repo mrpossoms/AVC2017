@@ -147,6 +147,14 @@ features: bin/$(TARGET)/features
 bin/$(TARGET)/features: $(addprefix obj/,$(FEATURES_SRC:.c=.o))
 	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng -lz
 
+.PHONY: size
+size: bin/$(TARGET)/size
+	@echo -e "\e[92mBuilt $@ for" $(TARGET)
+bin/$(TARGET)/size: $(addprefix obj/,size.o)
+	$(CC) $(CFLAGS) -DMAGIC=$(shell cat magic) $(INC) $^ -o $@ $(LINK) -lpng -lz
+
+
+
 bot-utils: bin/$(TARGET)/predictor bin/$(TARGET)/actuator bin/$(TARGET)/collector bin/$(TARGET)/botd
 	@echo -e "\e[92mBuilt bot utilities"
 

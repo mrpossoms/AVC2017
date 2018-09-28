@@ -7,13 +7,15 @@ import numpy as np
 import math
 import struct
 import os
+import io
+import signal
 # from libs.utils import corrupt
 
 FRAME_W = 160
 FRAME_H = 120
-VIEW_PIXELS = (FRAME_W * FRAME_H)
-LUMA_PIXELS = (FRAME_W * FRAME_H)
-CHRO_PIXELS = (FRAME_W / 2 * FRAME_H)
+VIEW_PIXELS = int(FRAME_W * FRAME_H)
+LUMA_PIXELS = int(FRAME_W * FRAME_H)
+CHRO_PIXELS = int(FRAME_W / 2 * FRAME_H)
 
 
 def clamp(n, min_, max_):
@@ -21,32 +23,29 @@ def clamp(n, min_, max_):
 
 
 class AvcRawState():
-    @staticmethod
-    def formats():
-        return [
-            # typedef struct {
-            #     uint64_t magic;
-            #     payload_type_t type;
-            # } dataset_hdr_t;
-            "QI",
-            # int16_t  rot_rate[3];
-            # int16_t  acc[3];
-            # float    vel;
-            # float    distance;
-            # vec3     heading;
-            # vec3     position;
-            "hhhhhhffffffff",
-            # uint8_t luma[LUMA_PIXELS];
-            "B" * int(LUMA_PIXELS),
-            # chroma_t chroma[CHRO_PIXELS];
-            "BB" * int(CHRO_PIXELS),
-
-        ]
+    formats = [
+        # typedef struct {
+        #     uint64_t magic;
+        #     payload_type_t type;
+        # } dataset_hdr_t;
+        "QQ",
+        # int16_t  rot_rate[3];
+        # int16_t  acc[3];
+        # float    vel;
+        # float    distance;
+        # vec3     heading;
+        # vec3     position;
+        "hhhhhhffffffff",
+        # uint8_t luma[LUMA_PIXELS];
+        "B" * LUMA_PIXELS,
+        # chroma_t chroma[CHRO_PIXELS];
+        "BB" * CHRO_PIXELS,
+    ]
 
     @staticmethod
     def size():
         size_sum = 0
-        for fmt in AvcRawState.formats():
+        for fmt in AvcRawState.formats:
             size_sum += struct.calcsize(fmt)
 
         return size_sum
@@ -56,14 +55,24 @@ class AvcRawState():
         return os.fstat(fp.fileno()).st_size // AvcRawState.size()
 
     def __init__(self, fp):
-        fmts = AvcRawState.formats()
-        self.header = struct.unpack(fmts[0], fp.read(struct.calcsize(fmts[0])))
-        self.pose   = struct.unpack(fmts[1], fp.read(struct.calcsize(fmts[1])))
-        self.luma   = struct.unpack(fmts[2], fp.read(struct.calcsize(fmts[2])))
-        self.chroma = struct.unpack(fmts[3], fp.read(struct.calcsize(fmts[3])))
+        fmts = AvcRawState.formats
+        self.header = list(struct.unpack(fmts[0], fp.read(struct.calcsize(fmts[0]))))
+        self.pose   = list(struct.unpack(fmts[1], fp.read(struct.calcsize(fmts[1]))))
+        self.luma   = np.frombuffer(fp.read(LUMA_PIXELS), dtype=np.uint8)
+        self.chroma = np.frombuffer(fp.read(CHRO_PIXELS << 1), dtype=np.uint8)
+        #self.luma   = list(struct.unpack(fmts[2], fp.read(struct.calcsize(fmts[2]))))
+        #self.chroma = list(struct.unpack(fmts[3], fp.read(struct.calcsize(fmts[3]))))
+        # _ = fp.read(struct.calcsize(fmts[4]))
 
-    # @property
-    def rgb(self, as_byte=True):
+    def write(self, fp):
+        fmts = AvcRawState.formats
+        fp.write(struct.pack(fmts[0], *tuple(self.header)))
+        fp.write(struct.pack(fmts[1], *tuple(self.pose)))
+        fp.write(self.luma.tobytes())
+        fp.write(self.chroma.tobytes())
+
+    @property
+    def rgb(self):
         _rgb = []
 
         for yi in range(FRAME_H):
@@ -80,26 +89,59 @@ class AvcRawState():
                     ])
             _rgb.append(row)
 
-        if as_byte:
-            return np.array(_rgb)
-        else:
-            return np.array(_rgb) / 255.0
+        return np.array(_rgb)
 
-    # @rgb.setter
-    # def rgb(self, rgb):
-    #     pass
+    @rgb.setter
+    def rgb(self, rgb):
+        for yi in range(FRAME_H):
+            for xi in range(FRAME_W):
+                i = yi * FRAME_W + xi
+                j = yi * (FRAME_W >> 1) + (xi >> 1)
+                r, g, b = rgb[yi][xi]
 
-    
+                self.luma[i] = clamp((r + g + b) // 3, 0, 255)
+
+                # r = luma[i] + 1.14 * uv[0]
+                # (uv[0] - 128) = r - luma[i] / 1.14
+                self.chroma[(j << 1) + 0] = clamp(128 + int((r - self.luma[i]) / 1.14), 0, 255)
+                self.chroma[(j << 1) + 1] = clamp(128 + int((b - self.luma[i]) / 2.033), 0, 255)
+
+                # b = luma[i] + 2.033 * (uv[1])
+                # (b - luma[i]) / 2.033 = uv[1]
+
+                # r = l + A
+                # g = l + B
+                # b = l + C
+
 
 def avc_state_frame(fp, n):
     return [AvcRawState(fp).rgb for _ in range(n)]
 
+def unpool(value, name='unpool'):
+    """N-dimensional version of the unpooling operation from
+    https://www.robots.ox.ac.uk/~vgg/rg/papers/Dosovitskiy_Learning_to_Generate_2015_CVPR_paper.pdf
+
+    :param value: A Tensor of shape [b, d0, d1, ..., dn, ch]
+    :return: A Tensor of shape [b, 2*d0, 2*d1, ..., 2*dn, ch]
+    """
+    with tf.name_scope(name) as scope:
+        sh = value.get_shape().as_list()
+        dim = len(sh[1:-1])
+        out = (tf.reshape(value, [-1] + sh[-dim:]))
+        for i in range(dim, 0, -1):
+            out = tf.concat([out, tf.zeros_like(out)], i)
+        out_size = [-1] + [s * 2 for s in sh[1:-1]] + [sh[-1]]
+        out = tf.reshape(out, out_size, name=scope)
+    return out
 
 # %%
 def autoencoder(input_shape=[None, 784],
                 n_filters=[3, 10, 10, 10],
                 filter_sizes=[3, 3, 3, 3],
-                corruption=False):
+                strides=[2, 2, 2, 2],
+                pool=[False, False, False, False],
+                corruption=False,
+                parameters={}):
     """Build a deep denoising autoencoder w/ tied weights.
 
     Parameters
@@ -127,11 +169,13 @@ def autoencoder(input_shape=[None, 784],
     ValueError
         Description
     """
+    import helpers
+
     # %%
+    PADDING = 'SAME'
     # input to the network
     x = tf.placeholder(
         tf.float32, input_shape, name='x')
-
 
     # %%
     # ensure 2-d is converted to square tensor.
@@ -157,21 +201,36 @@ def autoencoder(input_shape=[None, 784],
     # Build the encoder
     encoder = []
     shapes = []
+
     for layer_i, n_output in enumerate(n_filters[1:]):
         n_input = current_input.get_shape().as_list()[3]
+        n_stride = strides[layer_i]
         shapes.append(current_input.get_shape().as_list())
-        W = tf.Variable(
-            tf.random_uniform([
-                filter_sizes[layer_i],
-                filter_sizes[layer_i],
-                n_input, n_output],
-                -1.0 / math.sqrt(n_input),
-                1.0 / math.sqrt(n_input)))
+        k_sz = filter_sizes[layer_i]
+        den = math.sqrt(n_input)
+
+        W = tf.Variable(tf.random_uniform([k_sz, k_sz, n_input, n_output], -1.0 / den, 1.0 / den))
         b = tf.Variable(tf.zeros([n_output]))
+
+        w_name = 'w_cnn_enc_' + str(layer_i)
+        b_name = 'b_cnn_enc_' + str(layer_i)
+
+        for name in [w_name, b_name]:
+            if name in parameters:
+                with open('ae_model/' + name, 'rb') as fp:
+                    if name is w_name:
+                        W = tf.Variable(helpers.deserialize_matrix(fp))
+                    elif name is b_name:
+                        b = tf.Variable(helpers.deserialize_matrix(fp))
+
+        parameters[w_name] = W
+        parameters[b_name] = b
         encoder.append(W)
         output = tf.nn.relu(
             tf.add(tf.nn.conv2d(
-                current_input, W, strides=[1, 2, 2, 1], padding='SAME'), b))
+                current_input, W, strides=[1, n_stride, n_stride, 1], padding=PADDING), b))
+        if pool[layer_i]:
+            output = tf.nn.max_pool(output, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding=PADDING)
         current_input = output
 
     # %%
@@ -182,18 +241,33 @@ def autoencoder(input_shape=[None, 784],
 
     encoder.reverse()
     shapes.reverse()
+    pool.reverse()
+    strides.reverse()
+    filter_sizes.reverse()
 
     # %%
     # Build the decoder using the same weights
     for layer_i, shape in enumerate(shapes):
         W = encoder[layer_i]
         b = tf.Variable(tf.zeros([W.get_shape().as_list()[2]]))
+        n_input = current_input.get_shape().as_list()[3]
+        k_sz = filter_sizes[layer_i]
+        den = math.sqrt(n_input)
+        #W = tf.Variable(tf.random_uniform([k_sz, k_sz, n_input, n_output], -1.0 / den, 1.0 / den))
+        #b = tf.Variable(tf.zeros([encoder[layer_i].get_shape().as_list()[2]]))
+        #parameters['w_cnn_dec_' + str(layer_i)] = W
+        #parameters['b_cnn_dec_' + str(layer_i)] = b
+        n_stride = strides[layer_i]
+        if pool[layer_i]:
+            current_input = unpool(current_input, name="unpool" + str(layer_i))
+
         output = tf.nn.relu(tf.add(
             tf.nn.conv2d_transpose(
                 current_input, W,
                 tf.stack([tf.shape(x)[0], shape[1], shape[2], shape[3]]),
-                strides=[1, 2, 2, 1], padding='SAME'), b))
+                strides=[1, n_stride, n_stride, 1], padding=PADDING), b))
         current_input = output
+        print(current_input.get_shape().as_list())
 
     # %%
     # now have the reconstruction through the network
@@ -202,34 +276,81 @@ def autoencoder(input_shape=[None, 784],
     cost = tf.reduce_sum(tf.square(y - x_tensor))
 
     # %%
-    return {'x': x, 'z': z, 'y': y, 'cost': cost}
+    return {'x': x, 'z': z, 'y': y, 'cost': cost, 'parameters': parameters}
 
-def next_batch(fp, n=10):
+
+def next_batch(fp, n=10, shuffle=True, data='full'):
     batch = []
+    examples = AvcRawState.count(fp)
+    size = AvcRawState.size()
 
     for _ in range(n):
-        batch.append(AvcRawState(fp).rgb(as_byte=False))
+        if shuffle:
+            fp.seek(np.random.randint(0, examples - 1) * size, io.SEEK_SET)
+
+        if data is 'full':
+            batch.append(AvcRawState(fp))
+        elif data is 'rgb':
+            batch.append(AvcRawState(fp).rgb / 255.0)
+        elif data is 'luma':
+            batch.append(AvcRawState(fp).luma / 255.0)
 
     return np.array(batch)
 
+
+RUNNING = True
+
+
+def handle_sig_done(*args):
+    global RUNNING
+
+    if not RUNNING:
+        print("Aborting")
+        exit(0)
+
+    RUNNING = False
+    print("Terminating")
+
+signal.signal(signal.SIGINT, handle_sig_done)
+
+def partition():
+    np.array()
+
 # %%
-def test_mnist():
+def main(args):
     """Test the convolutional autoencder using MNIST."""
     # %%
     import tensorflow as tf
-    import tensorflow.examples.tutorials.mnist.input_data as input_data
-    import matplotlib.pyplot as plt
+
+    DEPTH = 1
 
     # %%
     # load MNIST as before
     # mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
     # mean_img = np.mean(mnist.train.images, axis=0)
-    ae = autoencoder(input_shape=[None, FRAME_H, FRAME_W, 3],
-                     n_filters=[3, 32, 32, 32],
-                     filter_sizes=[3, 3, 3, 3])
+    param_dic = {}
+    for name in os.listdir('ae_model'): param_dic[name] = True
+
+    ae = autoencoder(input_shape=[None, FRAME_H, FRAME_W, DEPTH],
+                     n_filters=[DEPTH, 16, 16, 16, 16, 16],
+                     filter_sizes=[3, 3, 3, 3, 3, 3],
+                     strides=[2, 2, 2, 2, 2, 2],
+                     pool=[False, False, False, False, False],
+                     parameters=param_dic)
+
+
+                     #n_filters=[DEPTH, 32, 32, 32, 32, 32, 32],
+                     #filter_sizes=[3, 3, 3, 3, 3, 3, 3],
+                     #strides=[2, 2, 2, 2, 2, 2, 2],
+                     #pool=[False, False, False, False, False, False])
+
+                     # n_filters=[DEPTH, 16, 16, 16, 16],
+                     # filter_sizes=[5, 3, 3, 3],
+                     # strides=[2, 2, 2, 2],
+                     # pool=[False, False, False, False, False])
 
     # %%
-    learning_rate = 0.01
+    learning_rate = 0.0001
     optimizer = tf.train.AdamOptimizer(learning_rate).minimize(ae['cost'])
 
     # %%
@@ -237,39 +358,86 @@ def test_mnist():
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
 
+    if args.train:
+        do_training(DEPTH, ae, optimizer, sess)
+    else:
+        import sys
+        while RUNNING:
+            state = AvcRawState(sys.stdin.buffer)
+            x = state.luma / 255.0
+            x = x.reshape([-1, FRAME_H, FRAME_W, DEPTH])
+            y_ = sess.run(ae['y'], feed_dict={ae['x']: x})[0]
+            state.luma = np.clip(y_ * 255, 0, 255).astype(dtype=np.uint8)
+            state.chroma = state.luma
+            state.write(sys.stdout.buffer)
+
+
+def do_training(DEPTH, ae, optimizer, sess):
+    import matplotlib.pyplot as plt
+
     # %%
     # Fit all training data
-    batch_size = 10
-    n_epochs = 1
+    batch_size = 100
+    n_epochs = 200
     for epoch_i in range(n_epochs):
-        fp = open('/home/kirk/avc_data/route.avc.1', 'rb')
-        print(str(AvcRawState.count(fp)) + " frames")
-        for batch_i in range(AvcRawState.count(fp) // batch_size):
-            batch_xs = next_batch(fp, batch_size)
-            # train = np.array([img - mean_img for img in batch_xs])
-            train = batch_xs.reshape([-1, FRAME_H, FRAME_W, 3])
-            sess.run(optimizer, feed_dict={ae['x']: train})
-            os.write(1, bytes('.', 'utf-8'))
-        print(epoch_i, sess.run(ae['cost'], feed_dict={ae['x']: train}))
+
+        if not RUNNING:
+            break
+
+        with open('avc_data/route.avc.1', 'rb') as fp:
+            print(str(AvcRawState.count(fp)) + " frames")
+            for batch_i in range(AvcRawState.count(fp) // batch_size):
+                # for batch_i in range(2):
+                batch_xs = next_batch(fp, batch_size, shuffle=True, data='luma')
+                # train = np.array([img - mean_img for img in batch_xs])
+                train = batch_xs.reshape([-1, FRAME_H, FRAME_W, DEPTH])
+                sess.run(optimizer, feed_dict={ae['x']: train})
+                os.write(1, bytes('.', 'utf-8'))
+                # os.write(1, bytes('.'))
+            print(epoch_i, sess.run(ae['cost'], feed_dict={ae['x']: train}))
 
     # %%
     # Plot example reconstructions
+    with open('avc_data/route.avc.2', 'rb') as rd_fp:
+        with open('avc_data/decoded', 'wb') as wr_fp:
+            total = AvcRawState.count(rd_fp)
+            for i in range(total):
+
+                state = next_batch(rd_fp, 1, shuffle=False, data='full')[0]
+                x = state.luma / 255.0
+                x = x.reshape([-1, FRAME_H, FRAME_W, DEPTH])
+                y_ = sess.run(ae['y'], feed_dict={ae['x']: x})[0]
+                state.luma = np.clip(y_ * 255, 0, 255).astype(dtype=np.uint8)
+                state.chroma = state.luma
+                state.write(wr_fp)
+
+                if i % 100 == 0:
+                    print('{}%'.format(i * 100 // total))
+
+    # save the model parameters
+    if input('Store model parameters? [Y/n] ').lower() is 'y':
+        # save model parameters
+        from helpers import serialize_matrix
+        for p_name in ae['parameters']:
+            with open('ae_model/' + p_name, 'wb') as fp:
+                serialize_matrix(sess.run(ae['parameters'][p_name]), fp)
     n_examples = 10
-    fp.close()
-    fp = open('/home/kirk/avc_data/route.avc.1', 'rb')
-    test_xs = next_batch(fp, n_examples)
-    # test_xs_norm = np.array([img - mean_img for img in test_xs])
-    test_xs_norm = batch_xs.reshape([-1, FRAME_H, FRAME_W, 3])
+    fp = open('avc_data/route.avc.1', 'rb')
+    test_xs = next_batch(fp, n_examples, data='luma')
+    test_xs_norm = test_xs.reshape([-1, FRAME_H, FRAME_W, DEPTH])
     recon = sess.run(ae['y'], feed_dict={ae['x']: test_xs_norm})
     print(recon.shape)
     fig, axs = plt.subplots(2, n_examples, figsize=(10, 2))
+    img_shape = (FRAME_H, FRAME_W)
+    if DEPTH > 1:
+        img_shape = (FRAME_H, FRAME_W, DEPTH)
     for example_i in range(n_examples):
         axs[0][example_i].imshow(
-            np.reshape(test_xs[example_i, :], (FRAME_H, FRAME_W, 3)))
+            np.reshape(test_xs[example_i, :], img_shape))
         axs[1][example_i].imshow(
             np.reshape(
-                np.reshape(recon[example_i, ...], (FRAME_W * FRAME_H * 3,)),
-                (FRAME_H, FRAME_W, 3)))
+                np.reshape(recon[example_i, ...], (FRAME_W * FRAME_H * DEPTH,)),
+                img_shape))
     fig.show()
     plt.draw()
     plt.waitforbuttonpress()
@@ -277,15 +445,8 @@ def test_mnist():
 
 # %%
 if __name__ == '__main__':
-    # from PIL import Image
-    # fp = open('/home/kirk/avc_data/route.avc.1', 'rb')
-    # x = AvcRawState(fp).rgb(as_byte=False)
-    #
-    # import matplotlib.pyplot as plt
-    # fig, axs = plt.subplots(1, 1, figsize=(10, 2))
-    # axs.imshow(np.reshape(x, (FRAME_H, FRAME_W, 3)))
-    # fig.show()
-    # plt.draw()
-    # plt.waitforbuttonpress()
-
-    test_mnist()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train", help="Set to perform training", action="store_true")
+    args = parser.parse_args()
+    main(args)

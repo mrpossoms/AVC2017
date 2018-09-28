@@ -3,7 +3,7 @@
 
 int main(void)
 {
-	raw_example_t ex;
+	message_t ex;
 	printf("%lu\n", sizeof(ex));
 	return 0;
 }

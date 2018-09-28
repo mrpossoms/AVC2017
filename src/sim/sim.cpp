@@ -63,7 +63,7 @@ struct {
 
 	void turn(float d_theta)
 	{
-		const float dwell = 0.5;
+		const float dwell = 0.0;
 		steering_angle = (1.f - dwell) * d_theta + dwell * steering_angle;
 	}
 
@@ -118,7 +118,7 @@ int main (int argc, char* argv[])
 {
 	std::ifstream i("scene.json");
 
-	seen::RendererGL renderer("./data", "Sim", FRAME_W, FRAME_H, 3, 3);
+	seen::RendererGL renderer("./data", "Sim", FRAME_W >> 1, FRAME_H >> 1, 3, 3);
 	seen::Camera camera(DEG_2_RAD(62.2), renderer.width, renderer.height);
 
 	seen::ListScene sky_scene, ground_scene, hay_scene, shadow_scene;
@@ -157,11 +157,7 @@ int main (int argc, char* argv[])
 
 	seen::ShaderProgram& primary_shader = seen::ShaderProgram::compile("primary", { vsh, fsh });
 	const float light_power = 40;
-	seen::Light light = {
-		.position = { 0, 30, 0 },
-		.power = { light_power, light_power, light_power },
-		.ambience = 0.01
-	};
+	seen::Light light = { { light_power, light_power, light_power }, 0.01 };
 	mat4x4_perspective(light.projection.v, M_PI / 2, 1, 0.1, 100);
 
 
@@ -369,8 +365,7 @@ int main (int argc, char* argv[])
 			}
 		}
 
-		light.position.x = cos(t) * 10;
-		light.position.z = sin(t) * 10;
+		light.position = { cos(t) * 10, 30, sin(t) * 10 };
 		t += 0.01f;
 
 		turn_key_pressed = false;

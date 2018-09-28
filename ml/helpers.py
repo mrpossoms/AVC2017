@@ -60,6 +60,21 @@ def serialize_matrix(m, fp):
         fp.write(struct.pack('f', e))
 
 
+def deserialize_matrix(fp):
+    import struct
+
+    def read(fmt):
+        return struct.unpack(fmt, fp.read(struct.calcsize(fmt)))
+
+    # read the shape of the matrix
+    shape = [read('i')[0] for _ in range(read('b')[0])]
+
+    # read the matrix elements, and reshape the matrix
+    m = np.fromfile(fp, dtype=np.float32, count=np.prod(shape)).reshape(shape)
+
+    return m
+
+
 def filenames_labels():
     global TRAINING_SET_BASE
     classes = [0, 1, 2]
@@ -88,7 +103,6 @@ def print_stats(t_1, t):
     acc_delta = acc_t - acc_t_1
 
     slope_i = int((width - 1) * acc_t)
-
 
     if acc_delta > 0.01:
         display_bar[slope_i] = '\\'

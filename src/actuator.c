@@ -16,9 +16,11 @@ calib_t CAL = {};
 
 struct {
 	uint8_t pwm_channel_msk; // all echo
+	int downgrade_state;
 	int forward_state;
 } cli_cfg = {
 	.pwm_channel_msk = 0x6,
+	.downgrade_state = 0,
 	.forward_state = 0,
 };
 
@@ -59,6 +61,10 @@ int main(int argc, char* const argv[])
 			.set = &cli_cfg.pwm_channel_msk,
 			.type = ARG_TYP_INT,
 			.opts = { .has_value = 1 },
+		},
+		{ 'd',
+			.desc = "Reduces state to PAYLOAD_STATE",
+			.set  = &cli_cfg.downgrade_state,
 		},
 		CLI_CMD_LOG_VERBOSITY,
 		{} // terminator
@@ -133,6 +139,8 @@ int main(int argc, char* const argv[])
 
 		if (cli_cfg.forward_state)
 		{
+			if (cli_cfg.downgrade_state) { msg.header.type = PAYLOAD_STATE; }
+
 			if (write_pipeline_payload(&msg))
 			{
 				b_bad("Failed to write payload");

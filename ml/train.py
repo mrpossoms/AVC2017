@@ -8,13 +8,13 @@ from helpers import *
 from cnn_3_12 import setup_model
 # from cnn_3 import setup_model
 
-IS_TRAINING = True
+RUNNING = True
 MODEL_STORAGE_PATH = '/etc/bot/predictor/model/'
 
 os.makedirs(MODEL_STORAGE_PATH, exist_ok=True)
 
 def handle_sig_done(*args):
-    global IS_TRAINING
+    global RUNNING
 
     if not IS_TRAINING:
         print("Cancelled")
@@ -67,7 +67,7 @@ def main():
                 })
             last_accuracy = train_accuracy
 
-        if not IS_TRAINING:
+        if not RUNNING:
             break
 
     # Save the learned parameters
