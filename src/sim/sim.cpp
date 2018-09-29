@@ -365,7 +365,7 @@ int main (int argc, char* argv[])
 			}
 		}
 
-		light.position = { cos(t) * 10, 30, sin(t) * 10 };
+		light.position = { cos(t * 0) * 10, 30, sin(t * 0) * 10 };
 		t += 0.01f;
 
 		turn_key_pressed = false;

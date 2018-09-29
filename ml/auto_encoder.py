@@ -9,6 +9,7 @@ import struct
 import os
 import io
 import signal
+import sys
 # from libs.utils import corrupt
 
 FRAME_W = 160
@@ -60,9 +61,6 @@ class AvcRawState():
         self.pose   = list(struct.unpack(fmts[1], fp.read(struct.calcsize(fmts[1]))))
         self.luma   = np.frombuffer(fp.read(LUMA_PIXELS), dtype=np.uint8)
         self.chroma = np.frombuffer(fp.read(CHRO_PIXELS << 1), dtype=np.uint8)
-        #self.luma   = list(struct.unpack(fmts[2], fp.read(struct.calcsize(fmts[2]))))
-        #self.chroma = list(struct.unpack(fmts[3], fp.read(struct.calcsize(fmts[3]))))
-        # _ = fp.read(struct.calcsize(fmts[4]))
 
     def write(self, fp):
         fmts = AvcRawState.formats
@@ -113,33 +111,73 @@ class AvcRawState():
                 # g = l + B
                 # b = l + C
 
+class PoseDB:
+    def __init__(self, capacity=1000):
+        self._cap = capacity
+        self._encodings = []
+        self._poses = []
+        self._means = None
+        self._dimensionality = None
+        pass
+
+    def nearest(self, encoding):
+        nearest_dist, nearest_enc, nearest_i = np.inf, None, None
+
+        for i, enc in enumerate(self._encodings):
+            delta = encoding - enc
+            d = np.sum(delta ** 2)
+            if d < nearest_dist:
+                nearest_dist = d
+                nearest_enc = enc
+
+        return nearest_enc, nearest_dist, nearest_i
+
+    def append(self, encoding, pose, prox_merge=1, prox_replace=4, replace_prob=0.5):
+        if self._dimensionality is None:
+            self._dimensionality = encoding.size
+
+        if len(self._encodings) > self._cap:
+            enc, dist, i = self.nearest(encoding)
+
+            # if self._means is None:
+            #
+            #     self._means = [ for _ in range(self._cap)]
+
+            if prox_merge > dist < prox_replace:
+                # sys.stderr.write('[merge] dist: {}\n'.format(dist))
+                # sys.stderr.flush()
+                enc += encoding
+                enc /= 2
+
+                return enc
+            elif dist >= prox_replace:
+                if np.random.rand() < replace_prob:
+                    j = np.random.randint(0, self._cap)
+                    self._encodings[j] = enc
+                    self._poses[j] = pose
+                    # sys.stderr.write('[replace] dist: {}\n'.format(dist))
+                    # sys.stderr.flush()
+            else:
+                # sys.stderr.write('[retrieved] dist: {}\n'.format(dist))
+                # sys.stderr.flush()
+                pass
+        else:
+            self._encodings.append(encoding)
+            self._poses.append(pose)
+
+        return None
+
 
 def avc_state_frame(fp, n):
     return [AvcRawState(fp).rgb for _ in range(n)]
 
-def unpool(value, name='unpool'):
-    """N-dimensional version of the unpooling operation from
-    https://www.robots.ox.ac.uk/~vgg/rg/papers/Dosovitskiy_Learning_to_Generate_2015_CVPR_paper.pdf
-
-    :param value: A Tensor of shape [b, d0, d1, ..., dn, ch]
-    :return: A Tensor of shape [b, 2*d0, 2*d1, ..., 2*dn, ch]
-    """
-    with tf.name_scope(name) as scope:
-        sh = value.get_shape().as_list()
-        dim = len(sh[1:-1])
-        out = (tf.reshape(value, [-1] + sh[-dim:]))
-        for i in range(dim, 0, -1):
-            out = tf.concat([out, tf.zeros_like(out)], i)
-        out_size = [-1] + [s * 2 for s in sh[1:-1]] + [sh[-1]]
-        out = tf.reshape(out, out_size, name=scope)
-    return out
 
 # %%
 def autoencoder(input_shape=[None, 784],
                 n_filters=[3, 10, 10, 10],
                 filter_sizes=[3, 3, 3, 3],
                 strides=[2, 2, 2, 2],
-                pool=[False, False, False, False],
+                # pool=[False, False, False, False],
                 corruption=False,
                 parameters={}):
     """Build a deep denoising autoencoder w/ tied weights.
@@ -229,8 +267,7 @@ def autoencoder(input_shape=[None, 784],
         output = tf.nn.relu(
             tf.add(tf.nn.conv2d(
                 current_input, W, strides=[1, n_stride, n_stride, 1], padding=PADDING), b))
-        if pool[layer_i]:
-            output = tf.nn.max_pool(output, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding=PADDING)
+
         current_input = output
 
     # %%
@@ -241,7 +278,7 @@ def autoencoder(input_shape=[None, 784],
 
     encoder.reverse()
     shapes.reverse()
-    pool.reverse()
+    # pool.reverse()
     strides.reverse()
     filter_sizes.reverse()
 
@@ -251,15 +288,7 @@ def autoencoder(input_shape=[None, 784],
         W = encoder[layer_i]
         b = tf.Variable(tf.zeros([W.get_shape().as_list()[2]]))
         n_input = current_input.get_shape().as_list()[3]
-        k_sz = filter_sizes[layer_i]
-        den = math.sqrt(n_input)
-        #W = tf.Variable(tf.random_uniform([k_sz, k_sz, n_input, n_output], -1.0 / den, 1.0 / den))
-        #b = tf.Variable(tf.zeros([encoder[layer_i].get_shape().as_list()[2]]))
-        #parameters['w_cnn_dec_' + str(layer_i)] = W
-        #parameters['b_cnn_dec_' + str(layer_i)] = b
         n_stride = strides[layer_i]
-        if pool[layer_i]:
-            current_input = unpool(current_input, name="unpool" + str(layer_i))
 
         output = tf.nn.relu(tf.add(
             tf.nn.conv2d_transpose(
@@ -313,8 +342,6 @@ def handle_sig_done(*args):
 
 signal.signal(signal.SIGINT, handle_sig_done)
 
-def partition():
-    np.array()
 
 # %%
 def main(args):
@@ -335,7 +362,6 @@ def main(args):
                      n_filters=[DEPTH, 16, 16, 16, 16, 16],
                      filter_sizes=[3, 3, 3, 3, 3, 3],
                      strides=[2, 2, 2, 2, 2, 2],
-                     pool=[False, False, False, False, False],
                      parameters=param_dic)
 
 
@@ -361,15 +387,58 @@ def main(args):
     if args.train:
         do_training(DEPTH, ae, optimizer, sess)
     else:
-        import sys
-        while RUNNING:
-            state = AvcRawState(sys.stdin.buffer)
-            x = state.luma / 255.0
-            x = x.reshape([-1, FRAME_H, FRAME_W, DEPTH])
-            y_ = sess.run(ae['y'], feed_dict={ae['x']: x})[0]
-            state.luma = np.clip(y_ * 255, 0, 255).astype(dtype=np.uint8)
-            state.chroma = state.luma
-            state.write(sys.stdout.buffer)
+        do_mapping(DEPTH, ae, sess)
+
+
+def do_mapping(DEPTH, ae, sess):
+    import matplotlib.pyplot as plt
+    hl = plt.plot([], [], markersize=2, marker='.')[0]
+    plt.axis([-50, 50, -50, 50])
+    plt.ion()
+    plt.show()
+    ax = hl._axes
+    # plt.show()
+
+    db = PoseDB(capacity=300)
+    hit_cap = False
+    i = 0
+
+    while RUNNING:
+        i += 1
+        state = AvcRawState(sys.stdin.buffer)
+        x = state.luma / 255.0
+        x = x.reshape([-1, FRAME_H, FRAME_W, DEPTH])
+        enc = sess.run(ae['z'], feed_dict={ae['x']: x})[0]
+
+        merged = db.append(enc, state.pose)
+
+        if len(db._encodings) >= 1000 and not hit_cap:
+            sys.stderr.write('PoseDB: Hit cap\n')
+            sys.stderr.flush()
+            hit_cap = True
+
+        y_ = sess.run(ae['y'], feed_dict={ae['x']: x})[0]
+        state.luma = np.clip(y_ * 255, 0, 255).astype(dtype=np.uint8)
+        state.chroma = state.luma
+        state.write(sys.stdout.buffer)
+
+        # ax.clear
+
+        if i % 10 == 0:
+            plt.clf()
+            for pose in db._poses:
+                pos = pose[-4:-1]
+                plt.plot(pos[1], pos[2], markersize=1, marker='.')
+                #
+                # plt.pause(0.05)
+                # sys.stderr.write(str(pos) + '\n')
+
+            plt.pause(0.0001)
+            plt.draw()
+            # plt.relim()
+            # plt.autoscale_view()
+
+
 
 
 def do_training(DEPTH, ae, optimizer, sess):
