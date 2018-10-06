@@ -10,6 +10,8 @@ import os
 import io
 import signal
 import sys
+
+from copy import deepcopy
 # from libs.utils import corrupt
 
 FRAME_W = 160
@@ -111,61 +113,160 @@ class AvcRawState():
                 # g = l + B
                 # b = l + C
 
+class State:
+    def __init__(self, enc, pose):
+        self.enc = enc
+        self.pose = pose
+        self.lived = 0
+
+    def __mul__(self, other):
+        return State(self.enc * other, self.pose * other)
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __add__(self, other):
+        if type(other) is State:
+            return State(self.enc + other.enc, self.pose + other.pose)
+        return self
+
+    def __iadd__(self, other):
+        if type(other) is State:
+            self.enc += other.enc
+            self.pose += other.pose
+        return self
+
+    def __idiv__(self, other):
+        if type(other) is State:
+            self.enc /= other.enc
+            self.pose /= other.pose
+
+        return self
+
+    def __truediv__(self, other):
+        self.enc /= other
+        self.pose /= other
+        return self
+
+    def tick(self):
+        self.lived += 1
+
+    def zero(self):
+        self.enc *= 0
+        self.pose *= 0
+
+    def distance(self, other, full_distance=False):
+        if full_distance:
+            return np.sqrt(np.sum((self.pose - other.pose) ** 2) + np.sum((self.enc - other.enc) ** 2))
+        else:
+            return np.sqrt(np.sum((self.pose[-4:-1] - other.pose[-4:-1]) ** 2))
+
+    @staticmethod
+    def nearest(data, state, full_distance=False, older_than=0):
+        dist, nearest, nearest_i = np.inf, None, None
+
+        for i, s in enumerate(data):
+            d = s.distance(state, full_distance=full_distance)
+            if d < dist and (isinstance(s, PoseDB.MTree.Node) or s.lived >= older_than):
+                dist = d
+                nearest = s
+                nearest_i = i
+
+        return nearest, dist, nearest_i
+
+
 class PoseDB:
+    class MTree:
+        class Node(State):
+            def __init__(self, state):
+                super().__init__(deepcopy(state.enc), deepcopy(state.pose))
+                self.children = []
+                self.temp = State(state.enc * 0, state.pose * 0)
+
+            def apply_average(self):
+                self.enc = self.temp.enc / len(self.children)
+                self.pose = self.temp.pose / len(self.children)
+                self.temp.zero()
+
+            def partition(self, data, root_count, min_partition_count):
+                import random
+
+                # check to see if the data being partitioned exceeds the min_partition_count
+                # threshold. If it does, we need to build another layer of MTree.Nodes
+                if len(data) >= min_partition_count:
+                    # get 'root_count' random starting points for the means
+                    self.children = [PoseDB.MTree.Node(state) for state in random.sample(data, root_count)]
+
+                    # run k-means for some iterations
+                    itr = 3
+                    for i in range(itr):
+                        for datum in data:
+                            mean, dist, _ = State.nearest(self.children, datum, full_distance=True)
+
+                            mean.temp += datum
+                            mean.children += [datum]
+
+                        # average out all the means accumulated vectors
+                        for mean in self.children:
+                            mean.apply_average()
+
+                            # clear out child list for each node, except for the last iteration
+                            if i < (itr - 1):
+                                mean.children.clear()
+                            else:
+                                mean.partition(mean.children, root_count, min_partition_count)
+                else:
+                    self.children = data
+
+            def nearest_to(self, state, older_than):
+                nearest, dist, i = State.nearest(self.children, state, full_distance=True, older_than=older_than)
+                if isinstance(nearest, PoseDB.MTree.Node):
+                    return nearest.nearest_to(state, older_than=older_than)
+                elif isinstance(nearest, State):
+                    return nearest, dist, i
+                else:
+                    return None, None, None
+
+        def __init__(self, data=[], roots=10, min_partition_count=20):
+            self.root = PoseDB.MTree.Node(data[0])
+            self.root.partition(data, root_count=roots, min_partition_count=min_partition_count)
+
+        def nearest_to(self, state, older_than):
+            return self.root.nearest_to(state, older_than)
+
     def __init__(self, capacity=1000):
+        self.states = []
         self._cap = capacity
-        self._encodings = []
-        self._poses = []
-        self._means = None
-        self._dimensionality = None
+        self._epoch = 0
+        self._mtree = None
+        # self._
         pass
 
-    def nearest(self, encoding):
-        nearest_dist, nearest_enc, nearest_i = np.inf, None, None
+    def append(self, encoding, pose, too_close=2):
+        cap = self._cap
+        state = State(encoding, pose * np.array([2, 2, 2, 1, 1, 1]))
 
-        for i, enc in enumerate(self._encodings):
-            delta = encoding - enc
-            d = np.sum(delta ** 2)
-            if d < nearest_dist:
-                nearest_dist = d
-                nearest_enc = enc
+        if len(self.states) > 0:
+            nearest, dist, _ = self._mtree.nearest_to(state, older_than=0)
 
-        return nearest_enc, nearest_dist, nearest_i
+            if nearest is not None and dist <= too_close:
+                return False, nearest, dist
 
-    def append(self, encoding, pose, prox_merge=1, prox_replace=4, replace_prob=0.5):
-        if self._dimensionality is None:
-            self._dimensionality = encoding.size
+        if len(self.states) > cap:
+            temp = []
+            for i, state in enumerate(self.states):
+                if i % 2 == 0: temp += [state]
+            self.states = temp
 
-        if len(self._encodings) > self._cap:
-            enc, dist, i = self.nearest(encoding)
+        self.states += [state]
 
-            # if self._means is None:
-            #
-            #     self._means = [ for _ in range(self._cap)]
+        self._mtree = PoseDB.MTree(data=self.states)
 
-            if prox_merge > dist < prox_replace:
-                # sys.stderr.write('[merge] dist: {}\n'.format(dist))
-                # sys.stderr.flush()
-                enc += encoding
-                enc /= 2
+        return True, state, None
 
-                return enc
-            elif dist >= prox_replace:
-                if np.random.rand() < replace_prob:
-                    j = np.random.randint(0, self._cap)
-                    self._encodings[j] = enc
-                    self._poses[j] = pose
-                    # sys.stderr.write('[replace] dist: {}\n'.format(dist))
-                    # sys.stderr.flush()
-            else:
-                # sys.stderr.write('[retrieved] dist: {}\n'.format(dist))
-                # sys.stderr.flush()
-                pass
-        else:
-            self._encodings.append(encoding)
-            self._poses.append(pose)
-
-        return None
+    def nearest_to(self, encoding, pose, older_than):
+        state = State(encoding, pose)
+        return self._mtree.nearest_to(state, older_than=older_than)
 
 
 def avc_state_frame(fp, n):
@@ -364,17 +465,6 @@ def main(args):
                      strides=[2, 2, 2, 2, 2, 2],
                      parameters=param_dic)
 
-
-                     #n_filters=[DEPTH, 32, 32, 32, 32, 32, 32],
-                     #filter_sizes=[3, 3, 3, 3, 3, 3, 3],
-                     #strides=[2, 2, 2, 2, 2, 2, 2],
-                     #pool=[False, False, False, False, False, False])
-
-                     # n_filters=[DEPTH, 16, 16, 16, 16],
-                     # filter_sizes=[5, 3, 3, 3],
-                     # strides=[2, 2, 2, 2],
-                     # pool=[False, False, False, False, False])
-
     # %%
     learning_rate = 0.0001
     optimizer = tf.train.AdamOptimizer(learning_rate).minimize(ae['cost'])
@@ -387,58 +477,73 @@ def main(args):
     if args.train:
         do_training(DEPTH, ae, optimizer, sess)
     else:
-        do_mapping(DEPTH, ae, sess)
+        do_mapping(DEPTH, ae, sess, args)
 
 
-def do_mapping(DEPTH, ae, sess):
+def do_mapping(DEPTH, ae, sess, args):
     import matplotlib.pyplot as plt
     hl = plt.plot([], [], markersize=2, marker='.')[0]
-    plt.axis([-50, 50, -50, 50])
     plt.ion()
     plt.show()
     ax = hl._axes
     # plt.show()
 
-    db = PoseDB(capacity=300)
+    db = PoseDB(capacity=100)
     hit_cap = False
     i = 0
 
+    src_fp = sys.stdin.buffer
+
+    if args.stream_path is not None:
+        src_fp = open(args.stream_path, 'rb')
+
     while RUNNING:
         i += 1
-        state = AvcRawState(sys.stdin.buffer)
+        state = AvcRawState(src_fp)
         x = state.luma / 255.0
         x = x.reshape([-1, FRAME_H, FRAME_W, DEPTH])
         enc = sess.run(ae['z'], feed_dict={ae['x']: x})[0]
 
-        merged = db.append(enc, state.pose)
+        pose = np.array(state.pose[-6:])
+        # sys.stderr.write(str(pose) + '\n')
+        # sys.stderr.flush()
 
-        if len(db._encodings) >= 1000 and not hit_cap:
-            sys.stderr.write('PoseDB: Hit cap\n')
-            sys.stderr.flush()
-            hit_cap = True
+        # if len(db.states) < 100:
+        was_added, pose_state, distance = db.append(enc, pose)
 
         y_ = sess.run(ae['y'], feed_dict={ae['x']: x})[0]
         state.luma = np.clip(y_ * 255, 0, 255).astype(dtype=np.uint8)
         state.chroma = state.luma
-        state.write(sys.stdout.buffer)
+
+        if args.stream_path is None:
+            state.write(sys.stdout.buffer)
+
+        if args.stream_path is not None:
+            print(str(pose))
 
         # ax.clear
+        for state in db.states:
+            state.tick()
 
-        if i % 10 == 0:
+        if i % 5 == 0:
             plt.clf()
-            for pose in db._poses:
-                pos = pose[-4:-1]
-                plt.plot(pos[1], pos[2], markersize=1, marker='.')
-                #
-                # plt.pause(0.05)
-                # sys.stderr.write(str(pos) + '\n')
+            plt.axis([-50, 50, -50, 50])
+            for state in db.states:
+                pos = state.pose[-3:]
+                plt.plot(pos[0], pos[1], markersize=1, marker='.')
+
+            nearest, dist, nearest_i = db.nearest_to(enc, pose, 30)
+
+            if nearest is not None:
+                pos = nearest.pose[-3:]
+
+                if args.stream_path is not None:
+                    print(str(pos))
+
+                plt.plot(pos[0], pos[1], markerSize=2, marker="x", color="green")
 
             plt.pause(0.0001)
             plt.draw()
-            # plt.relim()
-            # plt.autoscale_view()
-
-
 
 
 def do_training(DEPTH, ae, optimizer, sess):
@@ -517,5 +622,13 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", help="Set to perform training", action="store_true")
+    parser.add_argument(
+        "--file",
+        dest="stream_path",
+        help="File containing a datastream to process",
+        action="store",
+        nargs="?",
+        type=str,
+    )
     args = parser.parse_args()
     main(args)
