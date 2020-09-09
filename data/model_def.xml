@@ -1,0 +1,94 @@
+<body name="chassis">
+	<!-- Component mesh, used for distplay -->
+	<model src="chassis.stl"/>
+
+	<!-- Mesh can also be used for its collision data -->
+	<collider type="model"/>
+
+	<!-- Physical properties of this body -->
+	<phys>
+		<mass>1</mass> <!-- Mass in Kg -->
+	</phys>
+	<position>0,0,0</position> <!-- Absolute position in Meters  -->
+	<orientation>0,0,0,1</orientation> <!-- Quaternion -->
+
+
+	<!-- Used to specify motors, solenoids, pistons etc -->
+	<actuator name="leftWheelMotor" type="motor">
+		<!-- Axis of rotation, more can be specified for more DoF-->
+		<axis>-1,0,0</axis>
+
+		<!-- center of rotation -->
+		<position>-0.125,-0.5,0</position>
+
+		<!-- This body is a child attached to the actuator -->
+		<body name="leftRearWheel">
+			<model src="wheel.stl"/>
+			<collider type="sphere">
+				<radius>0.25</radius>
+			</collider>
+
+			<phys>
+				<mass>0.25</mass>
+			</phys>
+			<position>-0.125,-0.5,0</position>
+		</body>
+	</actuator>
+
+	<actuator name="rightWheelMotor" type="motor">
+		<axis>1,0,0</axis>
+		<body name="rightRearWheel">
+			<model src="wheel.stl"/>
+			<collider type="sphere">
+				<radius>0.25</radius>
+			</collider>
+
+			<phys>
+				<mass>0.25</mass>
+			</phys>
+			<position>0.125,-0.5,0</position>
+		</body>
+	</actuator>
+
+	<actuator name="leftSteeringKnuckle" type="hinge2">
+		<!-- First and second axes -->
+		<axis>0,0,1</axis>
+		<axis>-1,0,0</axis>
+
+		<!-- Anchor point -->
+		<position>-0.125,0.5,0</position>
+
+		<body name="leftFrontWheel">
+			<model src="wheel.stl"/>
+			<collider type="sphere">
+				<radius>0.25</radius>
+			</collider>
+
+			<phys>
+				<mass>0.25</mass>
+			</phys>
+			<position>-0.125,0.5,0</position>
+		</body>
+	</actuator>
+
+	<actuator name="rigthSteeringKnuckle" type="hinge2">
+		<!-- First and second axes -->
+		<axis>0,0,1</axis>
+		<axis>1,0,0</axis>
+
+		<!-- Anchor point -->
+		<position>0.125,0.5,0</position>
+
+		<body name="leftFrontWheel">
+			<model src="wheel.stl"/>
+			<collider type="sphere">
+				<radius>0.25</radius>
+			</collider>
+
+			<phys>
+				<mass>0.25</mass>
+			</phys>
+			<position>0.125,0.5,0</position>
+		</body>
+	</actuator>
+</body>

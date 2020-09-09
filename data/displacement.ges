@@ -1,0 +1,61 @@
+#version 400 core
+#define MAX_VERTS 3
+
+uniform mat3 u_normal_matrix;
+
+layout(triangles) in;
+layout(triangle_strip, max_vertices = MAX_VERTS) out;
+
+in vec3 te_pos[MAX_VERTS];
+in vec2 te_texcoord[MAX_VERTS];
+in vec3 te_normal[MAX_VERTS];
+in vec3 te_tangent[MAX_VERTS];
+in vec3 te_patch_distance[MAX_VERTS];
+
+out vec2 g_texcoord; // texture coords
+out vec3 g_normal;
+out vec3 g_tangent;  // tangent
+out vec3 g_binormal; // binormal (for TBN basis calc)
+
+out vec3 g_patch_distance;
+out vec3 g_tri_distance;
+
+#define TRI_LERP(attr, coord) (attr[0] * (coord).x + attr[1] * (coord).y + attr[2] * (coord).z)
+#define TRI_AVG(attr) ((attr[0] + attr[1] + attr[2]) / 3.0)
+
+void main()
+{
+    // vec3 A = te_pos[2] - te_pos[0];
+    // vec3 B = te_pos[1] - te_pos[0];
+    // g_normal = u_normal_matrix * normalize(cross(A, B));
+	// g_tangent = u_normal_matrix * normalize(A);
+	// g_binormal = cross(g_normal, g_tangent);
+
+	vec3 distances[3];
+	distances[0] = vec3(1.0, 0, 0);
+	distances[1] = vec3(0, 1.0, 0);
+	distances[2] = vec3(0, 0, 1.0);
+
+	for(int i = 0; i < MAX_VERTS; ++i)
+	{
+		vec3 g_tri_distance = distances[i];
+
+		// vec3 A = te_pos[(i + 2) % 3] - te_pos[i];
+		// vec3 B = te_pos[(i + 1) % 3] - te_pos[i];
+		// g_normal = u_normal_matrix * normalize(cross(A, B));
+		// g_tangent = u_normal_matrix * normalize(A);
+
+		g_binormal = cross(g_normal, g_tangent);
+		g_normal = TRI_LERP(te_normal, g_tri_distance);
+		g_normal = u_normal_matrix * normalize(g_normal);
+		g_tangent = TRI_LERP(te_tangent, g_tri_distance);
+		g_tangent = u_normal_matrix * normalize(g_tangent);
+		g_binormal = cross(g_normal, g_tangent);
+
+		g_patch_distance = te_patch_distance[i];
+		g_texcoord = te_texcoord[i];
+	    gl_Position = gl_in[i].gl_Position; EmitVertex();
+	}
+
+    EndPrimitive();
+}
