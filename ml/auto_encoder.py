@@ -218,8 +218,9 @@ class PoseDB:
                 else:
                     self.children = data
 
-            def nearest_to(self, state, older_than):
+            def nearest_leaf(self, state, older_than):
                 nearest, dist, i = State.nearest(self.children, state, full_distance=True, older_than=older_than)
+
                 if isinstance(nearest, PoseDB.MTree.Node):
                     return nearest.nearest_to(state, older_than=older_than)
                 elif isinstance(nearest, State):
@@ -227,9 +228,26 @@ class PoseDB:
                 else:
                     return None, None, None
 
+                return nearest, dist, i
+
+            def nearest_node(self, state):
+                if isinstance(self.children[0], State):
+                    return self
+
+                nearest, dist, i = State.nearest(self.children, state, full_distance=True, older_than=0)
+
+                return nearest.nearest_node(state)
+
+            def nearest_to(self, state, older_than):
+                return self.nearest_leaf(state, older_than=older_than)
+
         def __init__(self, data=[], roots=10, min_partition_count=20):
             self.root = PoseDB.MTree.Node(data[0])
             self.root.partition(data, root_count=roots, min_partition_count=min_partition_count)
+
+        def append(self, state):
+            node = self.root.nearest_node(state)
+            node.children.append(state)
 
         def nearest_to(self, state, older_than):
             return self.root.nearest_to(state, older_than)
@@ -239,8 +257,25 @@ class PoseDB:
         self._cap = capacity
         self._epoch = 0
         self._mtree = None
+        self._min = None
+        self._max = None
         # self._
         pass
+
+    @property
+    def range(self):
+        return self._min, self._max
+
+    @range.setter
+    def range(self, value):
+        new_min, new_max = value
+
+        if self._min is None or not np.array_equal(self._min, new_min) or not np.array_equal(self._max, new_max):
+            self._mtree = PoseDB.MTree(data=self.states)
+        elif self._mtree is not None:
+            self._mtree.append(self.states[-1])
+
+        self._min, self._max = value
 
     def append(self, encoding, pose, too_close=2):
         cap = self._cap
@@ -257,10 +292,14 @@ class PoseDB:
             for i, state in enumerate(self.states):
                 if i % 2 == 0: temp += [state]
             self.states = temp
+            self._mtree = PoseDB.MTree(data=self.states)
 
         self.states += [state]
 
-        self._mtree = PoseDB.MTree(data=self.states)
+        if self._min is None:
+            self.range = pose, pose
+        else:
+            self.range = np.minimum(self._min, pose), np.maximum(self._max, pose)
 
         return True, state, None
 
@@ -509,7 +548,7 @@ def do_mapping(DEPTH, ae, sess, args):
         # sys.stderr.flush()
 
         # if len(db.states) < 100:
-        was_added, pose_state, distance = db.append(enc, pose)
+        was_added, pose_state, distance = db.append(enc, pose, too_close=3)
 
         y_ = sess.run(ae['y'], feed_dict={ae['x']: x})[0]
         state.luma = np.clip(y_ * 255, 0, 255).astype(dtype=np.uint8)
@@ -532,7 +571,7 @@ def do_mapping(DEPTH, ae, sess, args):
                 pos = state.pose[-3:]
                 plt.plot(pos[0], pos[1], markersize=1, marker='.')
 
-            nearest, dist, nearest_i = db.nearest_to(enc, pose, 30)
+            nearest, dist, nearest_i = db.nearest_to(enc, pose, 90)
 
             if nearest is not None:
                 pos = nearest.pose[-3:]
